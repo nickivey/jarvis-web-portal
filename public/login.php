@@ -115,7 +115,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
         <?php endif; ?>
       </div>
 
-      <div class="nav-links"><a href="register.php">Create an account</a> | <a href="forgot_password.php">Forgot password?</a></div>
+      <div class="nav-links"><a href="register.php">Create an account</a> | <a href="forgot_password.php">Forgot password?</a> | <a href="resend_confirmation.php">Resend confirmation email</a></div>
     </div>
   </div>
       <script src="navbar.js"></script>
