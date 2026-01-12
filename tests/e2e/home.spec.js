@@ -3,9 +3,12 @@ const { test, expect } = require('@playwright/test');
 test('Home permissions & simple voice flow smoke test', async ({ page, context }) => {
   // Grant permissions so the page won't be blocked by prompts
   await context.grantPermissions(['geolocation','microphone','notifications']);
-  // Capture browser console and page errors for debugging
-  page.on('console', msg => console.log('BROWSER_CONSOLE:', msg.text()));
-  page.on('pageerror', err => console.log('BROWSER_ERROR:', err.message));
+  // Capture browser console and page errors for debugging with location info
+  page.on('console', msg => {
+    const loc = msg.location ? msg.location() : {};
+    console.log('BROWSER_CONSOLE:', msg.type(), msg.text(), loc);
+  });
+  page.on('pageerror', err => console.log('BROWSER_ERROR:', err && err.stack ? err.stack : err.message));
   // Navigate to login and sign in
   await page.goto('/login.php');
   await page.fill('input[name="email"]', 'e2e_bot@example.com');
