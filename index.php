@@ -185,7 +185,12 @@ if ($path === '/api/command') {
   $text = trim((string)($in['text'] ?? ''));
   $inputType = trim((string)($in['type'] ?? 'text')); // text or voice
   $clientMeta = isset($in['meta']) && is_array($in['meta']) ? $in['meta'] : [];
-  if ($text === '') jarvis_respond(400, ['error'=>'text required']);
+  $voiceId = $clientMeta['voice_input_id'] ?? null;
+  if ($text === '' && !$voiceId) jarvis_respond(400, ['error'=>'text required']);
+  if ($voiceId) {
+    // Record an audit that a voice command was submitted and tie to the voice input id
+    jarvis_audit($userId, 'COMMAND_VOICE_SUBMIT', 'voice', array_merge($clientMeta, ['voice_input_id'=>$voiceId, 'question'=>$text]));
+  }
 
 // ----------------------------
 // Voice inputs: save audio blobs + transcript for deep dictation analysis

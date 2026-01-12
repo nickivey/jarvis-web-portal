@@ -747,13 +747,24 @@ Content-Type: application/json
                     const link = document.createElement('a'); link.href = '/api/voice/' + resp.id + '/download'; link.target='_blank'; link.textContent = 'Download'; link.style.marginLeft='8px';
                     const note = document.createElement('div'); note.className='muted'; note.style.marginTop='6px'; note.textContent = 'Uploaded • id: ' + resp.id; note.appendChild(link);
                     if (container) container.appendChild(note);
-                    // Make this uploaded audio available to be sent via the Send button
+                    // Make this uploaded audio available to be sent via the Send button (but auto-send below)
                     window._pendingVoiceToSend = { id: resp.id, transcript: _lastTranscript, contextId: _voiceContextId };
-                    try{ if (sendBtn) { sendBtn.dataset.pendingVoice = resp.id; sendBtn.textContent = 'Send (audio)'; } }catch(e){}
+                    try{ if (sendBtn) { delete sendBtn.dataset.pendingVoice; sendBtn.textContent = 'Send'; } }catch(e){}
+
                     // If there's a pending voice command (voice-only mode), send it now with voice_input_id
                     if (_pendingVoiceCmd && _pendingVoiceCmd.text) {
                       try{ await sendCommand(_pendingVoiceCmd.text, 'voice', { voice_input_id: resp.id, voice_context_id: _pendingVoiceCmd.contextId }); }catch(e){ console.error('sendCommand after upload failed', e); }
                       _pendingVoiceCmd = null;
+                      try{ if (token) fetch('/api/audit', { method:'POST', headers: { 'Content-Type':'application/json', 'Authorization': 'Bearer '+token }, body: JSON.stringify({ action: 'VOICE_AUTO_SENT', entity: 'voice', metadata: { id: resp.id } }) }); }catch(e){}
+                    } else {
+                      // Auto-send uploaded audio as a command (for manual voice-cmd flow)
+                      try{
+                        const sendText = (window._pendingVoiceToSend && window._pendingVoiceToSend.transcript) ? window._pendingVoiceToSend.transcript : '';
+                        await sendCommand(sendText || '', 'voice', { voice_input_id: resp.id, voice_context_id: window._pendingVoiceToSend ? window._pendingVoiceToSend.contextId : null });
+                        try{ if (token) fetch('/api/audit', { method:'POST', headers: { 'Content-Type':'application/json', 'Authorization': 'Bearer '+token }, body: JSON.stringify({ action: 'VOICE_AUTO_SENT', entity: 'voice', metadata: { id: resp.id } }) }); }catch(e){}
+                        // Clear pending
+                        window._pendingVoiceToSend = null;
+                      }catch(e){ console.error('auto-send failed', e); }
                     }
                     try{ if (token) fetch('/api/audit', { method:'POST', headers: { 'Content-Type':'application/json', 'Authorization': 'Bearer '+token }, body: JSON.stringify({ action: 'VOICE_UPLOAD_SUCCESS', entity: 'voice', metadata: { id: resp.id, size: blob.size } }) }); }catch(e){}
                   } else {
