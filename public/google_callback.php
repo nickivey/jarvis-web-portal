@@ -12,9 +12,9 @@ unset($_SESSION['google_oauth_state']);
 $code = $_GET['code'] ?? null;
 if (!$code) { header('Location: login.php?error=no_code'); exit; }
 
-$clientId = getenv('GOOGLE_CLIENT_ID') ?: '';
-$clientSecret = getenv('GOOGLE_CLIENT_SECRET') ?: '';
-$redirect = getenv('GOOGLE_REDIRECT_URI') ?: (jarvis_site_url() ? jarvis_site_url() . '/public/google_callback.php' : '');
+$clientId = jarvis_setting_get('GOOGLE_CLIENT_ID') ?: '';
+$clientSecret = jarvis_setting_get('GOOGLE_CLIENT_SECRET') ?: '';
+$redirect = jarvis_setting_get('GOOGLE_REDIRECT_URI') ?: (jarvis_site_url() ? jarvis_site_url() . '/public/google_callback.php' : '');
 if (!$clientId || !$clientSecret || !$redirect) {
   jarvis_audit(null, 'OAUTH_CONNECT_FAIL', 'google', ['reason'=>'not_configured']);
   header('Location: login.php?error=google_not_configured'); exit;

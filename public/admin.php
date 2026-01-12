@@ -120,6 +120,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   }
 }
 
+// Ensure GOOGLE_REDIRECT_URI defaults to the current site URL if not configured
+if (!jarvis_setting_get('GOOGLE_REDIRECT_URI')) {
+  $defaultRedirect = jarvis_site_url() ? jarvis_site_url() . '/public/google_callback.php' : '';
+  if ($defaultRedirect) {
+    jarvis_setting_set('GOOGLE_REDIRECT_URI', $defaultRedirect);
+    $notice = 'GOOGLE_REDIRECT_URI set to current site URL: ' . $defaultRedirect;
+  }
+}
+
 $settings = jarvis_setting_list();
 
 // Voice Data Timeline
@@ -247,6 +256,7 @@ $users = jarvis_list_users(50,0, (string)($_GET['q'] ?? ''));
 
     <section>
       <h2>Existing Settings</h2>
+      <p class="muted">Update keys here; changes take effect immediately for the running application (no restart required).</p>
       <?php if (empty($settings)): ?>
         <p>No settings yet.</p>
       <?php else: ?>
@@ -256,7 +266,22 @@ $users = jarvis_list_users(50,0, (string)($_GET['q'] ?? ''));
           <?php foreach ($settings as $s): ?>
             <tr>
               <td><?= htmlspecialchars($s['key']) ?></td>
-              <td><form method="post" style="display:inline-block;"><input type="hidden" name="action" value="update"><input type="hidden" name="key" value="<?= htmlspecialchars($s['key']) ?>"><input name="value" value="<?= htmlspecialchars($s['value']) ?>" style="width:360px;"></form></td>
+              <td>
+                <form method="post" style="display:inline-block;">
+                  <input type="hidden" name="action" value="update">
+                  <input type="hidden" name="key" value="<?= htmlspecialchars($s['key']) ?>">
+                  <input name="value" value="<?= htmlspecialchars($s['value']) ?>" style="width:320px;">
+                  <button type="submit" style="margin-left:8px;">Update</button>
+                </form>
+                <?php if ($s['key'] === 'GOOGLE_REDIRECT_URI'): ?>
+                  <form method="post" style="display:inline;margin-left:8px;">
+                    <input type="hidden" name="action" value="update">
+                    <input type="hidden" name="key" value="GOOGLE_REDIRECT_URI">
+                    <input type="hidden" name="value" value="<?= htmlspecialchars(jarvis_site_url() ? jarvis_site_url() . '/public/google_callback.php' : '') ?>">
+                    <button type="submit">Set to current site</button>
+                  </form>
+                <?php endif; ?>
+              </td>
               <td><?= htmlspecialchars($s['created_at'] ?? '') ?></td>
               <td><?= htmlspecialchars($s['updated_at'] ?? '') ?></td>
               <td>
