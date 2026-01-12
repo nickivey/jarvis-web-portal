@@ -475,12 +475,13 @@ tr.new{animation:rowFlash .9s ease forwards}
 
 /* Animated Weather Icons */
 .weather-icon-animated {
-  width: 70px;
-  height: 70px;
+  width: 36px;
+  height: 36px;
   position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
+  transform: scale(0.6);
 }
 
 /* Sun */
@@ -2030,7 +2031,7 @@ tr.new{animation:rowFlash .9s ease forwards}
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 20px 24px;
+  padding: 12px 16px;
   background: linear-gradient(90deg, rgba(255, 200, 100, 0.05) 0%, transparent 50%, rgba(100, 200, 255, 0.05) 100%);
   border-bottom: 1px solid rgba(100, 200, 255, 0.1);
   position: relative;
@@ -2039,12 +2040,12 @@ tr.new{animation:rowFlash .9s ease forwards}
 .weather-header-left {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 10px;
 }
 .weather-icon-wrapper {
-  width: 60px;
-  height: 60px;
-  border-radius: 16px;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
   background: linear-gradient(135deg, rgba(255, 200, 100, 0.15), rgba(100, 200, 255, 0.15));
   display: flex;
   align-items: center;
@@ -2052,11 +2053,11 @@ tr.new{animation:rowFlash .9s ease forwards}
   position: relative;
 }
 .weather-icon-placeholder {
-  font-size: 2rem;
+  font-size: 1.3rem;
 }
 .weather-title-block h3 {
   margin: 0;
-  font-size: 1.3rem;
+  font-size: 1rem;
   font-weight: 600;
   background: linear-gradient(135deg, #fff 0%, #ffd700 50%, #87ceeb 100%);
   -webkit-background-clip: text;
@@ -2064,24 +2065,24 @@ tr.new{animation:rowFlash .9s ease forwards}
   background-clip: text;
 }
 .weather-subtitle {
-  margin: 4px 0 0;
-  font-size: 0.85rem;
+  margin: 2px 0 0;
+  font-size: 0.7rem;
   color: var(--muted);
 }
 .weather-status-badge {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 14px;
+  gap: 6px;
+  padding: 4px 10px;
   background: rgba(100, 200, 100, 0.1);
   border: 1px solid rgba(100, 200, 100, 0.3);
-  border-radius: 20px;
-  font-size: 0.8rem;
+  border-radius: 14px;
+  font-size: 0.65rem;
   color: #4ade80;
 }
 .weather-status-badge .status-dot {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
   background: #4ade80;
   border-radius: 50%;
   animation: statusPulse 2s ease-in-out infinite;
@@ -2089,7 +2090,7 @@ tr.new{animation:rowFlash .9s ease forwards}
 
 /* Weather Content */
 .weather-content {
-  padding: 24px;
+  padding: 14px 16px;
   position: relative;
   z-index: 1;
 }
@@ -2098,8 +2099,8 @@ tr.new{animation:rowFlash .9s ease forwards}
 .weather-hero {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 24px;
-  margin-bottom: 24px;
+  gap: 16px;
+  margin-bottom: 14px;
 }
 .weather-hero-content {
   display: flex;
@@ -2107,19 +2108,19 @@ tr.new{animation:rowFlash .9s ease forwards}
   justify-content: center;
 }
 .weather-current-label {
-  font-size: 0.7rem;
-  letter-spacing: 2px;
+  font-size: 0.6rem;
+  letter-spacing: 1.5px;
   color: var(--muted);
-  margin-bottom: 8px;
+  margin-bottom: 4px;
   text-transform: uppercase;
 }
 .weather-temp-display {
   display: flex;
   align-items: flex-start;
-  margin-bottom: 8px;
+  margin-bottom: 4px;
 }
 .temp-value {
-  font-size: 5rem;
+  font-size: 3rem;
   font-weight: 200;
   line-height: 1;
   background: linear-gradient(180deg, #fff 0%, rgba(255, 255, 255, 0.7) 100%);
@@ -2128,20 +2129,20 @@ tr.new{animation:rowFlash .9s ease forwards}
   background-clip: text;
 }
 .temp-degree {
-  font-size: 2rem;
+  font-size: 1.2rem;
   font-weight: 300;
   color: var(--muted);
-  margin-top: 10px;
+  margin-top: 6px;
 }
 .weather-condition-text {
-  font-size: 1.2rem;
+  font-size: 0.9rem;
   font-weight: 500;
   color: var(--txt);
   text-transform: capitalize;
-  margin-bottom: 8px;
+  margin-bottom: 4px;
 }
 .weather-location-text {
-  font-size: 0.9rem;
+  font-size: 0.75rem;
   color: var(--muted);
 }
 
@@ -2149,16 +2150,16 @@ tr.new{animation:rowFlash .9s ease forwards}
 .weather-meta-panel {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 12px;
+  gap: 8px;
 }
 .weather-meta-panel .meta-item {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 14px;
+  gap: 8px;
+  padding: 8px 10px;
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid rgba(255, 255, 255, 0.05);
-  border-radius: 12px;
+  border-radius: 8px;
   transition: all 0.3s ease;
 }
 .weather-meta-panel .meta-item:hover {
@@ -2166,20 +2167,20 @@ tr.new{animation:rowFlash .9s ease forwards}
   border-color: rgba(100, 200, 255, 0.2);
 }
 .weather-meta-panel .meta-icon {
-  font-size: 1.3rem;
+  font-size: 0.9rem;
 }
 .weather-meta-panel .meta-content {
   display: flex;
   flex-direction: column;
 }
 .weather-meta-panel .meta-label {
-  font-size: 0.7rem;
+  font-size: 0.55rem;
   color: var(--muted);
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.3px;
 }
 .weather-meta-panel .meta-value {
-  font-size: 1rem;
+  font-size: 0.8rem;
   font-weight: 600;
   color: var(--txt);
 }
@@ -2187,31 +2188,31 @@ tr.new{animation:rowFlash .9s ease forwards}
 /* Weather Forecast Section */
 .weather-forecast-section {
   border-top: 1px solid rgba(100, 200, 255, 0.1);
-  padding-top: 20px;
+  padding-top: 12px;
 }
 .forecast-header {
-  margin-bottom: 16px;
+  margin-bottom: 10px;
 }
 .forecast-header h4 {
   margin: 0;
-  font-size: 1rem;
+  font-size: 0.8rem;
   font-weight: 600;
   color: var(--txt);
 }
 .forecast-grid {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
-  gap: 8px;
+  gap: 4px;
 }
 .forecast-card {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
-  padding: 12px 8px;
+  gap: 4px;
+  padding: 8px 4px;
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid rgba(255, 255, 255, 0.05);
-  border-radius: 12px;
+  border-radius: 8px;
   transition: all 0.3s ease;
 }
 .forecast-card:hover {
@@ -2220,27 +2221,27 @@ tr.new{animation:rowFlash .9s ease forwards}
   transform: translateY(-2px);
 }
 .forecast-day-name {
-  font-size: 0.75rem;
+  font-size: 0.55rem;
   font-weight: 600;
   color: var(--muted);
   text-transform: uppercase;
 }
 .forecast-icon {
-  font-size: 1.5rem;
+  font-size: 1rem;
 }
 .forecast-temps {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
+  gap: 1px;
 }
 .forecast-high {
-  font-size: 0.9rem;
+  font-size: 0.7rem;
   font-weight: 600;
   color: var(--txt);
 }
 .forecast-low {
-  font-size: 0.8rem;
+  font-size: 0.6rem;
   color: var(--muted);
 }
 
