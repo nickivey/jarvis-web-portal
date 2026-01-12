@@ -120,7 +120,7 @@ $phone = (string)($dbUser['phone_e164'] ?? '');
   <link rel="stylesheet" href="style.css" />
   <!-- Using embedded third-party maps (Google Maps iframe) for location previews -->
 </head>
-<body>
+<body class="overlay-active">
   <div class="navbar">
     <div class="brand">
       <img src="images/logo.svg" alt="JARVIS logo" />
@@ -160,7 +160,7 @@ $phone = (string)($dbUser['phone_e164'] ?? '');
     <?php if($success):?><div class="success"><p><?php echo htmlspecialchars($success); ?></p></div><?php endif;?>
     <?php if($error):?><div class="error"><p><?php echo htmlspecialchars($error); ?></p></div><?php endif;?>
 
-    <div class="grid">
+    <div class="grid" id="homeMainGrid">
       <!-- 1 -->
       <div class="card">
         <h3>Connection Status</h3>
@@ -344,7 +344,7 @@ $phone = (string)($dbUser['phone_e164'] ?? '');
     </div>
   </div>
 
-  <div class="container">
+  <div class="container" id="homeSecondary">
     <div class="card">
       <h3>Upcoming Calendar Events</h3>
       <?php if (empty($calendarEvents)): ?>

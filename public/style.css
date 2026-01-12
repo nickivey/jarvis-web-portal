@@ -41,6 +41,10 @@ body{
 .overlay-card .chatbox{flex:1; height:auto; min-height:0}
 .overlay-card .chatlog{height:auto; min-height:0}
 
+/* Hide other tiles and the secondary container when overlay is active */
+body.overlay-active #homeMainGrid .card:not(.overlay-card){display:none}
+body.overlay-active #homeSecondary{display:none}
+
 /* Ambient HUD grid layer */
 body::before{
   content:"";
