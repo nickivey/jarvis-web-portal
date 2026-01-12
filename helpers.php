@@ -245,34 +245,55 @@ function jarvis_import_google_calendar(int $userId): array {
 
 
 function jarvis_fetch_weather(float $lat, float $lon): ?array {
-  // Prefer DB setting then env, with an optional failsafe default env key OPENWEATHER_API_KEY_DEFAULT
-  $apiKey = jarvis_setting_get('OPENWEATHER_API_KEY') ?: getenv('OPENWEATHER_API_KEY') ?: getenv('OPENWEATHER_API_KEY_DEFAULT');
-  // If no API key configured, return a safe demo payload (non-fatal)
-  if (!$apiKey) {
-    return [
-      'temp_c' => null,
-      'desc' => 'OPENWEATHER_API_KEY not configured (using demo fallback)',
-      'icon' => null,
-      'raw' => null,
-      'demo' => true,
-    ];
-  }
-
-  $url = sprintf('https://api.openweathermap.org/data/2.5/weather?lat=%s&lon=%s&units=metric&appid=%s', urlencode((string)$lat), urlencode((string)$lon), urlencode($apiKey));
+  // Use Open-Meteo API (free, no API key required)
+  // Docs: https://open-meteo.com/en/docs
+  $url = sprintf(
+    'https://api.open-meteo.com/v1/forecast?latitude=%s&longitude=%s&current=temperature_2m,weather_code,wind_speed_10m,relative_humidity_2m&timezone=auto',
+    urlencode((string)$lat),
+    urlencode((string)$lon)
+  );
+  
   $ch = curl_init($url);
-  curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_TIMEOUT=>8]);
+  curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 8]);
   $resp = curl_exec($ch);
   $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
   curl_close($ch);
+  
   if ($resp === false || $code < 200 || $code >= 300) return null;
   $data = json_decode($resp, true);
-  if (!is_array($data)) return null;
-  $out = [];
-  $out['temp_c'] = isset($data['main']['temp']) ? (float)$data['main']['temp'] : null;
-  $out['desc'] = isset($data['weather'][0]['description']) ? (string)$data['weather'][0]['description'] : null;
-  $out['icon'] = isset($data['weather'][0]['icon']) ? (string)$data['weather'][0]['icon'] : null;
-  $out['raw'] = $data;
-  return $out;
+  if (!is_array($data) || !isset($data['current'])) return null;
+  
+  $current = $data['current'];
+  $weatherCode = (int)($current['weather_code'] ?? 0);
+  
+  // Map WMO weather codes to descriptions
+  // https://open-meteo.com/en/docs (see WMO Weather interpretation codes)
+  $weatherDescriptions = [
+    0 => 'Clear sky',
+    1 => 'Mainly clear', 2 => 'Partly cloudy', 3 => 'Overcast',
+    45 => 'Foggy', 48 => 'Depositing rime fog',
+    51 => 'Light drizzle', 53 => 'Moderate drizzle', 55 => 'Dense drizzle',
+    56 => 'Light freezing drizzle', 57 => 'Dense freezing drizzle',
+    61 => 'Slight rain', 63 => 'Moderate rain', 65 => 'Heavy rain',
+    66 => 'Light freezing rain', 67 => 'Heavy freezing rain',
+    71 => 'Slight snow', 73 => 'Moderate snow', 75 => 'Heavy snow',
+    77 => 'Snow grains',
+    80 => 'Slight rain showers', 81 => 'Moderate rain showers', 82 => 'Violent rain showers',
+    85 => 'Slight snow showers', 86 => 'Heavy snow showers',
+    95 => 'Thunderstorm', 96 => 'Thunderstorm with slight hail', 99 => 'Thunderstorm with heavy hail',
+  ];
+  
+  $desc = $weatherDescriptions[$weatherCode] ?? 'Unknown';
+  
+  return [
+    'temp_c' => isset($current['temperature_2m']) ? (float)$current['temperature_2m'] : null,
+    'desc' => $desc,
+    'icon' => null, // Open-Meteo doesn't provide icons, but we can add emoji mapping if needed
+    'humidity' => isset($current['relative_humidity_2m']) ? (int)$current['relative_humidity_2m'] : null,
+    'wind_speed' => isset($current['wind_speed_10m']) ? (float)$current['wind_speed_10m'] : null,
+    'weather_code' => $weatherCode,
+    'raw' => $data,
+  ];
 }
 
 /**

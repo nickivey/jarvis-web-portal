@@ -229,10 +229,13 @@ $phone = (string)($dbUser['phone_e164'] ?? '');
         <div id="weatherSummary" style="font-size:18px; line-height:1.4">
           <?php if ($lastWeather): ?>
             <div style="display:flex;align-items:center;gap:12px;margin-top:8px">
-              <div style="font-size:32px"><?php echo ($lastWeather['temp_c'] !== null) ? htmlspecialchars($lastWeather['temp_c'].'°') : '--'; ?></div>
+              <div style="font-size:32px"><?php echo ($lastWeather['temp_c'] !== null) ? htmlspecialchars(round($lastWeather['temp_c']).'°') : '--'; ?></div>
               <div>
                 <div style="font-weight:700"><?php echo htmlspecialchars($lastWeather['desc'] ?? ''); ?></div>
-                <div class="muted">Local weather</div>
+                <div class="muted">
+                  <?php if (isset($lastWeather['humidity'])): ?>Humidity: <?php echo (int)$lastWeather['humidity']; ?>%<?php endif; ?>
+                  <?php if (isset($lastWeather['wind_speed'])): ?> • Wind: <?php echo round($lastWeather['wind_speed']); ?> km/h<?php endif; ?>
+                </div>
               </div>
             </div>
           <?php else: ?>
