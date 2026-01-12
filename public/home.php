@@ -181,7 +181,10 @@ $phone = (string)($dbUser['phone_e164'] ?? '');
         <?php if (empty($recentLocations)): ?>
           <p class="muted">No location data yet. Enable location logging in Preferences and allow location access in your browser.</p>
         <?php else: ?>
-          <div id="map" style="height:240px;border:1px solid #ddd;margin-bottom:8px"></div>
+          <div class="location-panel">
+            <div id="map" style="height:240px;border:1px solid #ddd;margin-bottom:8px;flex:1"></div>
+            <div id="miniMap" class="location-map" aria-hidden="true" title="Mini location map"></div>
+          </div>
           <div id="weatherSummary">
             <?php if ($lastWeather): ?>
               <p><strong><?php echo htmlspecialchars($lastWeather['desc'] ?? ''); ?></strong> — <?php echo ($lastWeather['temp_c'] !== null) ? htmlspecialchars($lastWeather['temp_c'].'°C') : ''; ?></p>
@@ -213,7 +216,27 @@ $phone = (string)($dbUser['phone_e164'] ?? '');
       <div class="card">
         <h3>JARVIS Chat</h3>
         <div class="chatbox">
-          <div class="chatlog">
+          <form method="post" class="chatinput" id="chatForm">
+            <div style="display:flex;flex-direction:column;gap:8px;">
+              <textarea name="message" id="messageInput" placeholder="Type a message to JARVIS..." style="flex:1;min-height:56px"></textarea>
+              <div style="display:flex;gap:8px;align-items:center;justify-content:space-between;margin-top:6px">
+                <div style="display:flex;gap:8px;align-items:center">
+                  <button type="button" id="micBtn" class="btn" title="Start/Stop voice input">🎤</button>
+                  <button type="button" id="voiceCmdBtn" class="btn" title="Voice-only command">🎙️ Voice Cmd</button>
+                </div>
+                <div style="display:flex;gap:8px;align-items:center">
+                  <button type="submit" name="send_chat" value="1" id="sendBtn" class="btn">Send</button>
+                </div>
+              </div>
+              <div style="margin-top:8px;display:flex;gap:12px;align-items:center;justify-content:flex-start">
+                <label style="font-size:13px"><input type="checkbox" id="enableTTS" checked /> Speak responses</label>
+                <label style="font-size:13px"><input type="checkbox" id="enableNotif" checked /> Show notifications</label>
+                <label style="font-size:13px"><input type="checkbox" id="voiceOnlyMode" /> Voice-only mode</label>
+              </div>
+            </div>
+          </form>
+
+          <div id="jarvisChatLog" class="chatlog">
             <?php if(!$recent): ?>
               <p class="muted">No messages yet. Send your first message below.</p>
             <?php else: ?>
@@ -227,21 +250,6 @@ $phone = (string)($dbUser['phone_e164'] ?? '');
               <?php endforeach; ?>
             <?php endif; ?>
           </div>
-          <form method="post" class="chatinput" id="chatForm">
-            <div style="display:flex;gap:8px;align-items:flex-end;">
-              <textarea name="message" id="messageInput" placeholder="Type a message to Slack..." style="flex:1"></textarea>
-              <div style="display:flex;flex-direction:column;gap:8px;">
-                <button type="button" id="micBtn" class="btn" title="Start/Stop voice input">🎤</button>
-                <button type="button" id="voiceCmdBtn" class="btn" title="Voice-only command">🎙️ Voice Cmd</button>
-                <button type="submit" name="send_chat" value="1" id="sendBtn" class="btn">Send</button>
-              </div>
-            </div>
-            <div style="margin-top:8px;display:flex;gap:12px;align-items:center;">
-              <label style="font-size:13px"><input type="checkbox" id="enableTTS" checked /> Speak responses</label>
-              <label style="font-size:13px"><input type="checkbox" id="enableNotif" checked /> Show notifications</label>
-              <label style="font-size:13px"><input type="checkbox" id="voiceOnlyMode" /> Voice-only mode</label>
-            </div>
-          </form>
         </div>
       </div>
 
@@ -399,7 +407,7 @@ Content-Type: application/json
       // Notify listeners that auth token is set
       if (token) window.dispatchEvent(new CustomEvent('jarvis.token.set'));
       window.jarvisBus && window.jarvisEmit && window.jarvisEmit('auth.token.set');
-      const chatLog = document.querySelector('.chatlog');
+      const chatLog = document.getElementById('jarvisChatLog');
       const msgInput = document.getElementById('messageInput');
       const micBtn = document.getElementById('micBtn');
       const enableTTS = document.getElementById('enableTTS');
@@ -408,6 +416,20 @@ Content-Type: application/json
       let recognizing = false;
       let recognition = null;
       let lastInputType = 'text';
+
+      // Helper to append a chat message to the output log
+      function appendMessage(text, who='jarvis'){
+        if (!chatLog) return;
+        const wrapper = document.createElement('div'); wrapper.className = 'msg ' + (who==='me' ? 'me' : 'jarvis');
+        const bubble = document.createElement('div'); bubble.className = 'bubble';
+        const content = document.createElement('div'); content.textContent = text;
+        const meta = document.createElement('div'); meta.className = 'meta';
+        const now = new Date(); meta.textContent = now.toISOString().replace('T',' ').replace('Z',' UTC');
+        bubble.appendChild(content); bubble.appendChild(meta); wrapper.appendChild(bubble);
+        chatLog.appendChild(wrapper);
+        // scroll to bottom
+        chatLog.parentNode.scrollTop = chatLog.parentNode.scrollHeight;
+      }
 
       // Request Notification permission up front (user gesture recommended)
       async function ensureNotificationPermission(){
