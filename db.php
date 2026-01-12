@@ -588,6 +588,42 @@ function jarvis_voice_input_by_id(int $id): ?array {
   return $row ?: null;
 }
 
+// Save a video input record (video file should already be persisted on disk)
+function jarvis_save_video_input(int $userId, string $filename, ?string $thumbFilename=null, ?string $transcript=null, ?int $durationMs=null, ?array $meta=null): int {
+  $pdo = jarvis_pdo();
+  if (!$pdo) throw new RuntimeException('DB not configured');
+  $metaJson = $meta ? json_encode($meta) : null;
+  $stmt = $pdo->prepare('INSERT INTO video_inputs (user_id, filename, thumb_filename, transcript, duration_ms, metadata_json, created_at) VALUES (:u,:f,:th,:t,:d,:m,NOW())');
+  $stmt->execute([':u'=>$userId, ':f'=>$filename, ':th'=>$thumbFilename, ':t'=>$transcript, ':d'=>$durationMs, ':m'=>$metaJson]);
+  return (int)$pdo->lastInsertId();
+}
+
+function jarvis_video_input_by_id(int $id): ?array {
+  $pdo = jarvis_pdo(); if (!$pdo) return null;
+  $stmt = $pdo->prepare('SELECT id,user_id,filename,thumb_filename,transcript,duration_ms,metadata_json,created_at FROM video_inputs WHERE id=:id LIMIT 1');
+  $stmt->execute([':id'=>$id]);
+  $row = $stmt->fetch();
+  return $row ?: null;
+}
+
+function jarvis_recent_video_inputs(int $userId, int $limit=20): array {
+  $pdo = jarvis_pdo(); if (!$pdo) return [];
+  $limit = max(1, min(200, (int)$limit));
+  $stmt = $pdo->prepare('SELECT id, filename, thumb_filename, transcript, duration_ms, metadata_json, created_at FROM video_inputs WHERE user_id=:u ORDER BY id DESC LIMIT :l');
+  $stmt->bindValue(':u', $userId, PDO::PARAM_INT);
+  $stmt->bindValue(':l', $limit, PDO::PARAM_INT);
+  $stmt->execute();
+  return $stmt->fetchAll() ?: [];
+}
+
+function jarvis_list_all_video_inputs(int $limit=50): array {
+  $pdo = jarvis_pdo(); if (!$pdo) return [];
+  $stmt = $pdo->prepare('SELECT v.*, u.username, u.email FROM video_inputs v LEFT JOIN users u ON v.user_id = u.id ORDER BY v.created_at DESC LIMIT :l');
+  $stmt->bindValue(':l', (int)$limit, PDO::PARAM_INT);
+  $stmt->execute();
+  return $stmt->fetchAll() ?: [];
+}
+
 function jarvis_list_all_voice_inputs(int $limit=50): array {
   $pdo = jarvis_pdo(); if (!$pdo) return [];
   $stmt = $pdo->prepare('SELECT v.*, u.username, u.email FROM voice_inputs v LEFT JOIN users u ON v.user_id = u.id ORDER BY v.created_at DESC LIMIT :l');

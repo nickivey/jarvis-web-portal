@@ -301,3 +301,17 @@ CREATE TABLE IF NOT EXISTS home_devices (
   CONSTRAINT fk_hd_user FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- Video inputs (selfie video recordings from mobile devices)
+CREATE TABLE IF NOT EXISTS video_inputs (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  user_id BIGINT UNSIGNED NOT NULL,
+  filename VARCHAR(255) NOT NULL,
+  thumb_filename VARCHAR(255) NULL,
+  transcript TEXT NULL,
+  duration_ms INT NULL,
+  metadata_json JSON NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY(id),
+  KEY ix_video_user(user_id),
+  CONSTRAINT fk_video_user FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

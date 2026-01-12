@@ -267,6 +267,85 @@ if (preg_match('#^/api/voice/([0-9]+)/download$#', $path, $m)) {
 }
 
 // ----------------------------
+// Video inputs (selfie video recording from mobile devices)
+// ----------------------------
+if ($path === '/api/video') {
+  if ($method === 'POST') {
+    [$userId, $u] = require_jwt_user();
+    if (!jarvis_rate_limit($userId, '/api/video', 10)) jarvis_respond(429, ['error'=>'rate limited']);
+    
+    $uploadedFile = $_FILES['file'] ?? null;
+    if (!$uploadedFile || ($uploadedFile['error'] ?? 1) !== 0) jarvis_respond(400, ['error'=>'no file uploaded']);
+    
+    // Ensure storage dir exists
+    $baseDir = __DIR__ . '/storage/video/' . (int)$userId;
+    if (!is_dir($baseDir)) @mkdir($baseDir, 0770, true);
+    $ext = pathinfo($uploadedFile['name'] ?? 'blob', PATHINFO_EXTENSION) ?: 'webm';
+    $fname = sprintf('%s_%s.%s', (int)$userId, bin2hex(random_bytes(6)), $ext);
+    $dest = $baseDir . '/' . $fname;
+    if (!move_uploaded_file($uploadedFile['tmp_name'], $dest)) jarvis_respond(500, ['error'=>'failed to save file']);
+    
+    $transcript = isset($_POST['transcript']) ? trim((string)$_POST['transcript']) : null;
+    $duration = isset($_POST['duration']) ? (int)$_POST['duration'] : null;
+    $meta = [];
+    if (isset($_POST['meta'])) $meta = json_decode((string)$_POST['meta'], true) ?: [];
+    
+    // Try to generate a thumbnail from video (first frame)
+    $thumbFilename = null;
+    // Skip thumbnail generation for now, can be added later with FFmpeg
+    
+    $filePathForDb = 'storage/video/' . (int)$userId . '/' . $fname;
+    $vid = jarvis_save_video_input($userId, $filePathForDb, $thumbFilename, $transcript, $duration, $meta);
+    jarvis_audit($userId, 'VIDEO_INPUT', 'video', ['video_id'=>$vid,'filename'=>$filePathForDb,'duration_ms'=>$duration,'transcript'=>substr($transcript?:'',0,512)]);
+    jarvis_pnut_log($userId, 'video', ['video_id'=>$vid,'filename'=>$filePathForDb,'duration_ms'=>$duration,'transcript'=>$transcript,'meta'=>$meta]);
+    jarvis_respond(200, ['ok'=>true,'id'=>$vid,'filename'=>$filePathForDb]);
+  }
+  if ($method === 'GET') {
+    [$userId, $u] = require_jwt_user();
+    $limit = isset($_GET['limit']) ? min(200, (int)$_GET['limit']) : 20;
+    $items = jarvis_recent_video_inputs($userId, $limit);
+    jarvis_respond(200, ['ok'=>true,'count'=>count($items),'videos'=>$items]);
+  }
+  jarvis_respond(405, ['error'=>'Method not allowed']);
+}
+
+// Download a recorded video (authenticated via JWT or Session)
+if (preg_match('#^/api/video/([0-9]+)/download$#', $path, $m)) {
+  $userId = 0;
+  $isAdmin = false;
+  $token = jarvis_bearer_token();
+  if ($token) {
+    $payload = jarvis_jwt_verify($token);
+    if ($payload && !empty($payload['sub'])) {
+      $userId = (int)$payload['sub'];
+      $u = jarvis_user_by_id($userId);
+      if ($u && ($u['role']??'')==='admin') $isAdmin = true;
+    }
+  } else {
+    if (session_status() === PHP_SESSION_NONE) session_start();
+    if (isset($_SESSION['user_id'])) {
+      $userId = (int)$_SESSION['user_id'];
+      $u = jarvis_user_by_id($userId);
+      if ($u && ($u['role']??'')==='admin') $isAdmin = true;
+    }
+  }
+
+  if ($userId <= 0) jarvis_respond(401, ['error'=>'Unauthorized']);
+
+  $vid = (int)$m[1];
+  $v = jarvis_video_input_by_id($vid);
+  if (!$v) jarvis_respond(404, ['error'=>'not found']);
+  if ((int)$v['user_id'] !== (int)$userId && !$isAdmin) jarvis_respond(403, ['error'=>'forbidden']);
+  $f = __DIR__ . '/' . $v['filename'];
+  if (!is_file($f)) jarvis_respond(404, ['error'=>'file not found']);
+  $mime = mime_content_type($f) ?: 'video/webm';
+  header('Content-Type: ' . $mime);
+  header('Content-Disposition: attachment; filename="' . basename($f) . '"');
+  readfile($f);
+  exit;
+}
+
+// ----------------------------
 // Command
 // ----------------------------
 

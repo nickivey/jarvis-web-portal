@@ -13,6 +13,7 @@ if (!$u) { session_destroy(); header('Location: login.php'); exit; }
 // Get photo stats
 $pdo = jarvis_pdo();
 $stats = ['total' => 0, 'with_gps' => 0, 'this_month' => 0];
+$videoStats = ['total' => 0, 'this_month' => 0];
 if ($pdo) {
   try {
     $stmt = $pdo->prepare('SELECT COUNT(*) as total FROM photos WHERE user_id = :u');
@@ -26,6 +27,17 @@ if ($pdo) {
     $stmt = $pdo->prepare('SELECT COUNT(*) FROM photos WHERE user_id = :u AND created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)');
     $stmt->execute([':u' => $uid]);
     $stats['this_month'] = (int)$stmt->fetchColumn();
+    
+    // Video stats
+    try {
+      $stmt = $pdo->prepare('SELECT COUNT(*) FROM video_inputs WHERE user_id = :u');
+      $stmt->execute([':u' => $uid]);
+      $videoStats['total'] = (int)$stmt->fetchColumn();
+      
+      $stmt = $pdo->prepare('SELECT COUNT(*) FROM video_inputs WHERE user_id = :u AND created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)');
+      $stmt->execute([':u' => $uid]);
+      $videoStats['this_month'] = (int)$stmt->fetchColumn();
+    } catch (Exception $e) {}
   } catch (Exception $e) {}
 }
 ?>
@@ -33,7 +45,7 @@ if ($pdo) {
 <html>
 <head>
   <meta charset="utf-8">
-  <title>Photo Gallery — JARVIS</title>
+  <title>Photos & Videos — JARVIS</title>
   <link rel="stylesheet" href="/style.css">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
   <style>
@@ -424,6 +436,184 @@ if ($pdo) {
       margin-top: 20px;
     }
     
+    /* Video Cards */
+    .video-card {
+      position: relative;
+      aspect-ratio: 16/9;
+      border-radius: 12px;
+      overflow: hidden;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      background: rgba(255, 255, 255, 0.02);
+    }
+    .video-card:hover {
+      transform: scale(1.03);
+      z-index: 2;
+      box-shadow: 0 12px 35px rgba(0, 0, 0, 0.4);
+    }
+    .video-card video, .video-card .video-thumb {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    .video-card .video-thumb {
+      background: linear-gradient(135deg, #1a1a2e, #16213e);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 3rem;
+    }
+    .video-card-overlay {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      padding: 10px;
+      background: linear-gradient(transparent, rgba(0, 0, 0, 0.8));
+    }
+    .video-card-name {
+      font-size: 0.8rem;
+      color: #fff;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .video-card-duration {
+      font-size: 0.7rem;
+      color: rgba(255, 255, 255, 0.6);
+    }
+    .video-card .play-icon {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 50px;
+      height: 50px;
+      background: rgba(0, 0, 0, 0.6);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.5rem;
+      transition: transform 0.2s ease, background 0.2s ease;
+    }
+    .video-card:hover .play-icon {
+      transform: translate(-50%, -50%) scale(1.1);
+      background: rgba(200, 100, 255, 0.7);
+    }
+    
+    /* Media Tabs */
+    .media-type-tabs {
+      display: flex;
+      gap: 4px;
+      background: rgba(0, 0, 0, 0.3);
+      padding: 4px;
+      border-radius: 10px;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    .media-type-tab {
+      padding: 10px 20px;
+      border-radius: 8px;
+      background: transparent;
+      border: none;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 0.95rem;
+      font-weight: 500;
+      transition: all 0.2s ease;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .media-type-tab.active {
+      background: linear-gradient(135deg, rgba(200, 100, 255, 0.25), rgba(255, 100, 200, 0.15));
+      color: #d8b4fe;
+    }
+    .media-type-tab:hover:not(.active) {
+      background: rgba(255, 255, 255, 0.05);
+      color: #fff;
+    }
+    .media-type-tab .tab-count {
+      background: rgba(255, 255, 255, 0.1);
+      padding: 2px 8px;
+      border-radius: 12px;
+      font-size: 0.75rem;
+    }
+    .media-type-tab.active .tab-count {
+      background: rgba(200, 100, 255, 0.3);
+    }
+    
+    /* Video Modal */
+    .video-modal {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(10, 10, 15, 0.95);
+      backdrop-filter: blur(12px);
+      z-index: 9999;
+      padding: 24px;
+    }
+    .video-modal-content {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      max-width: 90vw;
+      max-height: 90vh;
+    }
+    .video-modal-close {
+      position: absolute;
+      top: -48px;
+      right: 0;
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      color: #fff;
+      font-size: 1.5rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s ease;
+    }
+    .video-modal-close:hover {
+      background: rgba(255, 255, 255, 0.2);
+      transform: scale(1.1);
+    }
+    .video-modal-player {
+      max-width: 100%;
+      max-height: 70vh;
+      border-radius: 16px;
+      box-shadow: 0 30px 90px rgba(0, 0, 0, 0.6);
+    }
+    .video-modal-info {
+      margin-top: 20px;
+      text-align: center;
+    }
+    .video-modal-caption {
+      font-size: 1.1rem;
+      color: #fff;
+      margin-bottom: 8px;
+    }
+    .video-modal-meta {
+      display: flex;
+      justify-content: center;
+      gap: 20px;
+      font-size: 0.9rem;
+      color: var(--muted);
+    }
+    
+    /* Video Grid Layout */
+    .video-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 16px;
+    }
+    
     /* Loading */
     .loading-grid {
       display: grid;
@@ -450,44 +640,60 @@ if ($pdo) {
   <!-- Header -->
   <div class="gallery-header">
     <div class="gallery-title-section">
-      <h1>📸 Photo Gallery</h1>
-      <p>Your uploaded photos from iOS Shortcuts and other sources</p>
+      <h1>📸 Photos & Videos</h1>
+      <p>Your media library from iOS uploads and recordings</p>
     </div>
     <div class="gallery-stats">
       <div class="stat-card">
         <div class="stat-value"><?php echo $stats['total']; ?></div>
-        <div class="stat-label">Total Photos</div>
+        <div class="stat-label">Photos</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value"><?php echo $videoStats['total']; ?></div>
+        <div class="stat-label">Videos</div>
       </div>
       <div class="stat-card">
         <div class="stat-value"><?php echo $stats['with_gps']; ?></div>
         <div class="stat-label">With Location</div>
       </div>
       <div class="stat-card">
-        <div class="stat-value"><?php echo $stats['this_month']; ?></div>
+        <div class="stat-value"><?php echo $stats['this_month'] + $videoStats['this_month']; ?></div>
         <div class="stat-label">This Month</div>
       </div>
     </div>
   </div>
   
-  <!-- Controls -->
-  <div class="gallery-controls">
-    <div class="view-tabs">
-      <button class="view-tab active" data-view="grid">🖼️ Grid</button>
-      <button class="view-tab" data-view="timeline">📅 Timeline</button>
-      <button class="view-tab" data-view="map">🗺️ Map</button>
-    </div>
-    <div class="filter-controls">
-      <button class="filter-btn active" id="filterAll">All</button>
-      <button class="filter-btn" id="filterGps">📍 With GPS</button>
-      <a href="/ios_upload_setup.php" class="btn secondary">📱 iOS Upload Setup</a>
-    </div>
+  <!-- Media Type Tabs -->
+  <div class="media-type-tabs" style="margin-bottom: 20px;">
+    <button class="media-type-tab active" id="tabPhotos" data-type="photos">
+      📷 Photos <span class="tab-count"><?php echo $stats['total']; ?></span>
+    </button>
+    <button class="media-type-tab" id="tabVideos" data-type="videos">
+      🎬 Videos <span class="tab-count"><?php echo $videoStats['total']; ?></span>
+    </button>
   </div>
   
-  <!-- Main Layout -->
-  <div class="gallery-layout">
-    <!-- Photo Grid -->
-    <div class="photo-grid-container">
-      <div id="photoGrid" class="photo-grid">
+  <!-- Photos Section -->
+  <div id="photosSection">
+    <!-- Controls -->
+    <div class="gallery-controls">
+      <div class="view-tabs">
+        <button class="view-tab active" data-view="grid">🖼️ Grid</button>
+        <button class="view-tab" data-view="timeline">📅 Timeline</button>
+        <button class="view-tab" data-view="map">🗺️ Map</button>
+      </div>
+      <div class="filter-controls">
+        <button class="filter-btn active" id="filterAll">All</button>
+        <button class="filter-btn" id="filterGps">📍 With GPS</button>
+        <a href="/ios_upload_setup.php" class="btn secondary">📱 iOS Upload Setup</a>
+      </div>
+    </div>
+    
+    <!-- Main Layout -->
+    <div class="gallery-layout">
+      <!-- Photo Grid -->
+      <div class="photo-grid-container">
+        <div id="photoGrid" class="photo-grid">
         <div class="loading-grid" id="loadingGrid">
           <div class="loading-card"></div>
           <div class="loading-card"></div>
@@ -529,6 +735,26 @@ if ($pdo) {
         <h4>📱 Upload from iPhone</h4>
         <p>Set up automatic photo uploads using iOS Shortcuts</p>
         <a href="/ios_upload_setup.php" class="btn">Get Started</a>
+      </div>
+    </div> <!-- End gallery-sidebar -->
+  </div> <!-- End gallery-layout -->
+  </div> <!-- End photosSection -->
+
+  <!-- Videos Section -->
+  <div id="videosSection" style="display: none;">
+    <div class="photo-grid-container">
+      <div id="videoGrid" class="video-grid">
+        <div class="loading-grid" id="videoLoadingGrid">
+          <div class="loading-card" style="aspect-ratio:16/9"></div>
+          <div class="loading-card" style="aspect-ratio:16/9"></div>
+          <div class="loading-card" style="aspect-ratio:16/9"></div>
+        </div>
+      </div>
+      <div id="videoEmptyMsg" class="gallery-empty" style="display:none">
+        <div class="gallery-empty-icon">🎬</div>
+        <h3>No videos yet</h3>
+        <p>Record videos from the home page using the video button</p>
+        <a href="/home.php" class="btn">Go to Home</a>
       </div>
     </div>
   </div>
@@ -700,6 +926,113 @@ document.querySelectorAll('.view-tab').forEach(tab => {
     tab.classList.add('active');
     // Could implement different views here
   });
+});
+
+// ============= VIDEO FUNCTIONALITY =============
+let allVideos = [];
+
+// Load videos
+async function loadVideos() {
+  try {
+    const resp = await fetch('/api/video?limit=100', { 
+      headers: { 'Authorization': 'Bearer ' + (window.jarvisJwt || '') } 
+    });
+    const j = await resp.json();
+    
+    document.getElementById('videoLoadingGrid')?.remove();
+    
+    if (!j || !j.videos || !j.videos.length) {
+      document.getElementById('videoEmptyMsg').style.display = 'block';
+      return;
+    }
+    
+    allVideos = j.videos;
+    renderVideos(allVideos);
+    
+  } catch (e) {
+    console.error(e);
+    document.getElementById('videoLoadingGrid')?.remove();
+    document.getElementById('videoEmptyMsg').style.display = 'block';
+  }
+}
+
+function formatDuration(ms) {
+  if (!ms) return '';
+  const secs = Math.floor(ms / 1000);
+  const mins = Math.floor(secs / 60);
+  const s = secs % 60;
+  return `${mins}:${s.toString().padStart(2, '0')}`;
+}
+
+function renderVideos(videos) {
+  const grid = document.getElementById('videoGrid');
+  grid.innerHTML = '';
+  
+  videos.forEach(v => {
+    const card = document.createElement('div');
+    card.className = 'video-card';
+    const duration = formatDuration(v.duration_ms);
+    card.innerHTML = `
+      <div class="video-thumb">🎬</div>
+      <div class="play-icon">▶</div>
+      <div class="video-card-overlay">
+        <div class="video-card-name">${v.filename || 'Video'}</div>
+        <div class="video-card-duration">${duration || new Date(v.created_at).toLocaleDateString()}</div>
+      </div>
+    `;
+    card.addEventListener('click', () => openVideoModal(v));
+    grid.appendChild(card);
+  });
+}
+
+function openVideoModal(video) {
+  let modal = document.getElementById('videoViewModal');
+  if (modal) modal.remove();
+  
+  modal = document.createElement('div');
+  modal.id = 'videoViewModal';
+  modal.className = 'video-modal';
+  modal.innerHTML = `
+    <div class="video-modal-content">
+      <button class="video-modal-close">&times;</button>
+      <video class="video-modal-player" controls autoplay>
+        <source src="/api/video/${video.id}/download" type="video/webm">
+        <source src="/api/video/${video.id}/download" type="video/mp4">
+        Your browser does not support video playback.
+      </video>
+      <div class="video-modal-info">
+        <div class="video-modal-caption">${video.filename || 'Video'}</div>
+        <div class="video-modal-meta">
+          ${video.duration_ms ? `<span>⏱️ ${formatDuration(video.duration_ms)}</span>` : ''}
+          <span>📤 ${new Date(video.created_at).toLocaleString()}</span>
+        </div>
+      </div>
+      <div class="photo-modal-actions" style="margin-top:20px">
+        <a href="/api/video/${video.id}/download" download class="btn secondary">⬇️ Download</a>
+      </div>
+    </div>
+  `;
+  
+  modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
+  modal.querySelector('.video-modal-close').addEventListener('click', () => modal.remove());
+  document.body.appendChild(modal);
+}
+
+// Media type tab handlers
+document.getElementById('tabPhotos')?.addEventListener('click', () => {
+  document.querySelectorAll('.media-type-tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('tabPhotos').classList.add('active');
+  document.getElementById('photosSection').style.display = 'block';
+  document.getElementById('videosSection').style.display = 'none';
+});
+
+document.getElementById('tabVideos')?.addEventListener('click', () => {
+  document.querySelectorAll('.media-type-tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('tabVideos').classList.add('active');
+  document.getElementById('photosSection').style.display = 'none';
+  document.getElementById('videosSection').style.display = 'block';
+  // Load videos if not already loaded
+  if (!allVideos.length) loadVideos();
 });
 
 // Initialize

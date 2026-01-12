@@ -181,18 +181,42 @@ $phone = (string)($dbUser['phone_e164'] ?? '');
                 <div style="display:flex;gap:8px;align-items:center">
                   <button type="button" id="micBtn" class="btn" title="Start/Stop voice input">🎤</button>
                   <button type="button" id="voiceCmdBtn" class="btn" title="Voice-only command">🎙️ Voice Cmd</button>
+                  <button type="button" id="videoBtn" class="btn video-btn" title="Record selfie video message">📹 Video</button>
                 </div>
                 <div style="display:flex;gap:8px;align-items:center">
                   <button type="submit" name="send_chat" value="1" id="sendBtn" class="btn">Send</button>
                 </div>
               </div>
-              <div style="margin-top:8px;display:flex;gap:12px;align-items:center;justify-content:flex-start">
+              <div style="margin-top:8px;display:flex;gap:12px;align-items:center;justify-content:flex-start;flex-wrap:wrap">
                 <label style="font-size:13px"><input type="checkbox" id="enableTTS" checked /> Speak responses</label>
                 <label style="font-size:13px"><input type="checkbox" id="enableNotif" checked /> Show notifications</label>
                 <label style="font-size:13px"><input type="checkbox" id="voiceOnlyMode" /> Voice-only mode</label>
               </div>
             </div>
           </form>
+          
+          <!-- Video Recording Modal -->
+          <div id="videoRecordingModal" class="video-recording-modal" style="display:none">
+            <div class="video-modal-content">
+              <div class="video-modal-header">
+                <h3>📹 Record Video Message</h3>
+                <button type="button" id="closeVideoModal" class="video-modal-close">&times;</button>
+              </div>
+              <div class="video-preview-container">
+                <video id="videoPreview" autoplay muted playsinline></video>
+                <div class="video-recording-indicator" id="videoRecIndicator" style="display:none">
+                  <span class="rec-dot"></span> REC
+                </div>
+                <div class="video-timer" id="videoTimer">00:00</div>
+              </div>
+              <div class="video-controls">
+                <button type="button" id="startVideoRecBtn" class="btn video-rec-btn">🔴 Start Recording</button>
+                <button type="button" id="stopVideoRecBtn" class="btn video-stop-btn" style="display:none">⏹️ Stop</button>
+                <button type="button" id="switchCameraBtn" class="btn video-switch-btn" title="Switch Camera">🔄</button>
+              </div>
+              <div class="video-status" id="videoStatus"></div>
+            </div>
+          </div>
 
           <div id="jarvisChatLog" class="chatlog">
             <?php if(!$recent): ?>
@@ -1952,6 +1976,304 @@ Content-Type: application/json
 
     })();
   </script>
+  
+  <!-- Video Recording Module -->
+  <script>
+  (function(){
+    const videoBtn = document.getElementById('videoBtn');
+    const videoModal = document.getElementById('videoRecordingModal');
+    const closeVideoModal = document.getElementById('closeVideoModal');
+    const videoPreview = document.getElementById('videoPreview');
+    const startVideoRecBtn = document.getElementById('startVideoRecBtn');
+    const stopVideoRecBtn = document.getElementById('stopVideoRecBtn');
+    const switchCameraBtn = document.getElementById('switchCameraBtn');
+    const videoRecIndicator = document.getElementById('videoRecIndicator');
+    const videoTimer = document.getElementById('videoTimer');
+    const videoStatus = document.getElementById('videoStatus');
+    
+    let videoStream = null;
+    let videoRecorder = null;
+    let videoChunks = [];
+    let recordingStartTime = null;
+    let timerInterval = null;
+    let facingMode = 'user'; // 'user' for front camera, 'environment' for back
+    
+    // Check if we're on a mobile device
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    
+    // Show/hide video button based on device capability
+    if (videoBtn && navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+      videoBtn.style.display = 'inline-flex';
+      // Add mobile-specific class
+      if (isMobile) {
+        videoBtn.classList.add('mobile-video-btn');
+      }
+    }
+    
+    async function startVideoPreview() {
+      try {
+        if (videoStream) {
+          videoStream.getTracks().forEach(t => t.stop());
+        }
+        
+        const constraints = {
+          video: { 
+            facingMode: facingMode,
+            width: { ideal: 1280 },
+            height: { ideal: 720 }
+          },
+          audio: true
+        };
+        
+        videoStream = await navigator.mediaDevices.getUserMedia(constraints);
+        videoPreview.srcObject = videoStream;
+        await videoPreview.play();
+        videoStatus.textContent = 'Camera ready. Tap "Start Recording" to begin.';
+        return true;
+      } catch(e) {
+        console.error('Camera access error:', e);
+        videoStatus.textContent = 'Could not access camera: ' + e.message;
+        return false;
+      }
+    }
+    
+    function stopVideoPreview() {
+      if (videoStream) {
+        videoStream.getTracks().forEach(t => t.stop());
+        videoStream = null;
+      }
+      if (videoPreview) {
+        videoPreview.srcObject = null;
+      }
+    }
+    
+    function formatTime(seconds) {
+      const mins = Math.floor(seconds / 60);
+      const secs = Math.floor(seconds % 60);
+      return String(mins).padStart(2, '0') + ':' + String(secs).padStart(2, '0');
+    }
+    
+    function startTimer() {
+      recordingStartTime = Date.now();
+      timerInterval = setInterval(() => {
+        const elapsed = (Date.now() - recordingStartTime) / 1000;
+        videoTimer.textContent = formatTime(elapsed);
+      }, 100);
+    }
+    
+    function stopTimer() {
+      if (timerInterval) {
+        clearInterval(timerInterval);
+        timerInterval = null;
+      }
+    }
+    
+    async function startRecording() {
+      if (!videoStream) {
+        const ok = await startVideoPreview();
+        if (!ok) return;
+      }
+      
+      videoChunks = [];
+      
+      try {
+        // Try to get a supported MIME type
+        const mimeTypes = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm', 'video/mp4'];
+        let selectedMime = '';
+        for (const mime of mimeTypes) {
+          if (MediaRecorder.isTypeSupported(mime)) {
+            selectedMime = mime;
+            break;
+          }
+        }
+        
+        const options = selectedMime ? { mimeType: selectedMime } : {};
+        videoRecorder = new MediaRecorder(videoStream, options);
+        
+        videoRecorder.ondataavailable = (evt) => {
+          if (evt.data && evt.data.size > 0) {
+            videoChunks.push(evt.data);
+          }
+        };
+        
+        videoRecorder.onstop = async () => {
+          stopTimer();
+          videoRecIndicator.style.display = 'none';
+          startVideoRecBtn.style.display = 'inline-flex';
+          stopVideoRecBtn.style.display = 'none';
+          
+          if (videoChunks.length === 0) {
+            videoStatus.textContent = 'No video data recorded.';
+            return;
+          }
+          
+          const mimeType = videoChunks[0].type || 'video/webm';
+          const blob = new Blob(videoChunks, { type: mimeType });
+          const duration = recordingStartTime ? Math.floor((Date.now() - recordingStartTime)) : 0;
+          
+          videoStatus.textContent = 'Uploading video...';
+          
+          try {
+            const resp = await uploadVideoBlob(blob, duration);
+            if (resp && resp.ok && resp.id) {
+              videoStatus.innerHTML = '✅ Video uploaded! ID: ' + resp.id + ' <a href="/api/video/' + resp.id + '/download" target="_blank">Download</a>';
+              
+              // Add video message to chat
+              appendVideoMessage(blob, 'me', resp.id);
+              
+              // Audit
+              try {
+                if (window.jarvisJwt) {
+                  fetch('/api/audit', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + window.jarvisJwt },
+                    body: JSON.stringify({ action: 'VIDEO_UPLOAD_SUCCESS', entity: 'video', metadata: { id: resp.id, size: blob.size, duration_ms: duration } })
+                  });
+                }
+              } catch(e){}
+              
+              // Close modal after success
+              setTimeout(() => {
+                closeModal();
+              }, 2000);
+            } else {
+              videoStatus.textContent = '❌ Upload failed. Please try again.';
+            }
+          } catch(e) {
+            console.error('Video upload error:', e);
+            videoStatus.textContent = '❌ Upload error: ' + e.message;
+          }
+        };
+        
+        videoRecorder.start(1000); // Collect data every second
+        startTimer();
+        videoRecIndicator.style.display = 'flex';
+        startVideoRecBtn.style.display = 'none';
+        stopVideoRecBtn.style.display = 'inline-flex';
+        videoStatus.textContent = 'Recording...';
+        
+      } catch(e) {
+        console.error('Recording error:', e);
+        videoStatus.textContent = 'Recording error: ' + e.message;
+      }
+    }
+    
+    function stopRecording() {
+      if (videoRecorder && videoRecorder.state !== 'inactive') {
+        videoRecorder.stop();
+      }
+    }
+    
+    async function uploadVideoBlob(blob, durationMs) {
+      const fd = new FormData();
+      const ext = blob.type.includes('mp4') ? 'mp4' : 'webm';
+      fd.append('file', blob, 'video_input.' + ext);
+      fd.append('duration', String(durationMs));
+      
+      const meta = {
+        source: isMobile ? 'mobile-web' : 'web',
+        input_type: 'video',
+        facing_mode: facingMode,
+        device: navigator.userAgent
+      };
+      if (window.jarvisLastLoc) meta.location = window.jarvisLastLoc;
+      fd.append('meta', JSON.stringify(meta));
+      
+      const opts = { method: 'POST', body: fd, headers: {} };
+      if (window.jarvisJwt) opts.headers['Authorization'] = 'Bearer ' + window.jarvisJwt;
+      
+      const resp = await fetch('/api/video', opts);
+      return resp.json();
+    }
+    
+    function appendVideoMessage(blob, sender, videoId) {
+      const log = document.getElementById('jarvisChatLog');
+      if (!log) return;
+      
+      const msgDiv = document.createElement('div');
+      msgDiv.className = 'msg ' + sender;
+      
+      const bubble = document.createElement('div');
+      bubble.className = 'bubble video-bubble';
+      
+      const video = document.createElement('video');
+      video.controls = true;
+      video.style.maxWidth = '100%';
+      video.style.borderRadius = '8px';
+      video.src = URL.createObjectURL(blob);
+      
+      const meta = document.createElement('div');
+      meta.className = 'meta';
+      meta.innerHTML = new Date().toLocaleString() + ' • video • <a href="/api/video/' + videoId + '/download" target="_blank">Download</a>';
+      
+      bubble.appendChild(video);
+      bubble.appendChild(meta);
+      msgDiv.appendChild(bubble);
+      log.appendChild(msgDiv);
+      log.scrollTop = log.scrollHeight;
+    }
+    
+    async function switchCamera() {
+      facingMode = facingMode === 'user' ? 'environment' : 'user';
+      if (videoStream) {
+        await startVideoPreview();
+      }
+      videoStatus.textContent = facingMode === 'user' ? 'Front camera' : 'Back camera';
+    }
+    
+    function openModal() {
+      videoModal.style.display = 'flex';
+      startVideoPreview();
+    }
+    
+    function closeModal() {
+      stopRecording();
+      stopTimer();
+      stopVideoPreview();
+      videoModal.style.display = 'none';
+      videoTimer.textContent = '00:00';
+      videoStatus.textContent = '';
+      videoRecIndicator.style.display = 'none';
+      startVideoRecBtn.style.display = 'inline-flex';
+      stopVideoRecBtn.style.display = 'none';
+    }
+    
+    // Event listeners
+    if (videoBtn) {
+      videoBtn.addEventListener('click', openModal);
+    }
+    if (closeVideoModal) {
+      closeVideoModal.addEventListener('click', closeModal);
+    }
+    if (startVideoRecBtn) {
+      startVideoRecBtn.addEventListener('click', startRecording);
+    }
+    if (stopVideoRecBtn) {
+      stopVideoRecBtn.addEventListener('click', stopRecording);
+    }
+    if (switchCameraBtn) {
+      switchCameraBtn.addEventListener('click', switchCamera);
+    }
+    
+    // Close modal on escape key
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && videoModal && videoModal.style.display !== 'none') {
+        closeModal();
+      }
+    });
+    
+    // Close modal on backdrop click
+    if (videoModal) {
+      videoModal.addEventListener('click', (e) => {
+        if (e.target === videoModal) {
+          closeModal();
+        }
+      });
+    }
+    
+  })();
+  </script>
+  
   <script>
   (function(){
     // Permission + Notification handling

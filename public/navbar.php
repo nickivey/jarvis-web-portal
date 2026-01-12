@@ -12,7 +12,7 @@
   <button class="nav-toggle" id="navToggle" aria-label="Open menu">☰</button>
   <nav>
     <a href="home.php" class="<?php echo $isHome ? 'active' : ''; ?>">Home</a>
-    <a href="photos.php" class="<?php echo ($curr==='photos.php') ? 'active' : ''; ?>">Photos</a>
+    <a href="photos.php" class="<?php echo ($curr==='photos.php') ? 'active' : ''; ?>">Photos & Videos</a>
     <a href="channel.php" class="<?php echo ($curr==='channel.php') ? 'active' : ''; ?>">Channels</a>
     <a href="preferences.php" class="<?php echo ($curr==='preferences.php') ? 'active' : ''; ?>">Preferences</a>
     <a href="admin.php" class="<?php echo ($curr==='admin.php') ? 'active' : ''; ?>">Admin</a>
