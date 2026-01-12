@@ -297,6 +297,23 @@ $phone = (string)($dbUser['phone_e164'] ?? '');
                 </div>
               </div>
             </div>
+            <?php if (!empty($lastWeather['forecast'])): ?>
+              <div class="weather-forecast">
+                <div class="forecast-title">7-Day Forecast</div>
+                <div class="forecast-days">
+                  <?php foreach ($lastWeather['forecast'] as $day): ?>
+                    <div class="forecast-day">
+                      <div class="forecast-day-name"><?php echo htmlspecialchars($day['day']); ?></div>
+                      <div class="forecast-day-icon"><?php echo $day['icon']; ?></div>
+                      <div class="forecast-day-temps">
+                        <span class="forecast-high"><?php echo round($day['high_c']); ?>°</span>
+                        <span class="forecast-low"><?php echo round($day['low_c']); ?>°</span>
+                      </div>
+                    </div>
+                  <?php endforeach; ?>
+                </div>
+              </div>
+            <?php endif; ?>
           <?php else: ?>
             <p class="muted">Weather data will appear here once location is detected.</p>
           <?php endif; ?>

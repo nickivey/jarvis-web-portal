@@ -315,6 +315,30 @@ function jarvis_fetch_weather(float $lat, float $lon): ?array {
     $lowTemp = (float)$data['daily']['temperature_2m_min'][0];
   }
   
+  // Build 7-day forecast array
+  $forecast = [];
+  if (isset($data['daily']['time']) && is_array($data['daily']['time'])) {
+    $days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    for ($i = 0; $i < count($data['daily']['time']) && $i < 7; $i++) {
+      $date = $data['daily']['time'][$i];
+      $dayCode = (int)($data['daily']['weather_code'][$i] ?? 0);
+      $dayInfo = $weatherData[$dayCode] ?? ['desc' => 'Unknown', 'icon_day' => '🌡️', 'icon_night' => '🌡️', 'anim_day' => 'cloudy', 'anim_night' => 'cloudy'];
+      $dayTs = strtotime($date);
+      $dayName = $i === 0 ? 'Today' : ($i === 1 ? 'Tomorrow' : $days[date('w', $dayTs)]);
+      
+      $forecast[] = [
+        'date' => $date,
+        'day' => $dayName,
+        'high_c' => isset($data['daily']['temperature_2m_max'][$i]) ? (float)$data['daily']['temperature_2m_max'][$i] : null,
+        'low_c' => isset($data['daily']['temperature_2m_min'][$i]) ? (float)$data['daily']['temperature_2m_min'][$i] : null,
+        'weather_code' => $dayCode,
+        'desc' => $dayInfo['desc'],
+        'icon' => $dayInfo['icon_day'],
+        'icon_anim' => $dayInfo['anim_day'],
+      ];
+    }
+  }
+  
   return [
     'temp_c' => isset($current['temperature_2m']) ? (float)$current['temperature_2m'] : null,
     'high_c' => $highTemp,
@@ -326,6 +350,7 @@ function jarvis_fetch_weather(float $lat, float $lon): ?array {
     'humidity' => isset($current['relative_humidity_2m']) ? (int)$current['relative_humidity_2m'] : null,
     'wind_speed' => isset($current['wind_speed_10m']) ? (float)$current['wind_speed_10m'] : null,
     'weather_code' => $weatherCode,
+    'forecast' => $forecast,
     'raw' => $data,
   ];
 }
