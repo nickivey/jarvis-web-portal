@@ -22,8 +22,11 @@ export DB_PASS="password"
 export JWT_SECRET="change_me_to_a_long_random_string"
 export JWT_ISSUER="jarvis"
 
-# Optional SMS (Twilio)
-export TWILIO_SID="AC..."
+# Optional SMS (Twilio)# You can set Twilio API keys in the DB (preferred) or via env vars. Use `scripts/set-secret.php` to write to DB:
+#   php scripts/set-secret.php TWILIO_SID "AC..."
+#   php scripts/set-secret.php TWILIO_AUTH_TOKEN "..."
+#   php scripts/set-secret.php TWILIO_FROM_NUMBER "+15551234567"
+# The app will prefer DB settings but falls back to env vars if DB keys are not present.export TWILIO_SID="AC..."
 export TWILIO_AUTH_TOKEN="..."
 export TWILIO_FROM_NUMBER="+15551234567"
 

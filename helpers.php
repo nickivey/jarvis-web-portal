@@ -14,17 +14,55 @@ function jarvis_send_confirmation_email(string $toEmail, string $username, strin
   if (!$base) return false;
   $link = $base . '/public/confirm.php?user=' . rawurlencode($username) . '&token=' . rawurlencode($token);
   $subject = 'Confirm your JARVIS account';
-  $body = "Hi {$username},\n\nConfirm your account:\n{$link}\n\n- JARVIS";
-  $headers = 'From: ' . jarvis_mail_from();
-  return @mail($toEmail, $subject, $body, $headers);
+  $bodyText = "Hi {$username},\n\nConfirm your account:\n{$link}\n\n- JARVIS";
+  $bodyHtml = "<p>Hi " . htmlspecialchars($username) . ",</p><p>Confirm your account: <a href=\"{$link}\">Confirm email</a></p><p>- JARVIS</p>";
+  // Prefer SendGrid if configured
+  return jarvis_send_email($toEmail, $subject, $bodyText, $bodyHtml);
+}
+
+/**
+ * Send email via SendGrid if SENDGRID_API_KEY is configured (in DB or env), otherwise fall back to mail().
+ */
+function jarvis_send_email(string $toEmail, string $subject, string $bodyText, ?string $bodyHtml = null): bool {
+  $apiKey = jarvis_setting_get('SENDGRID_API_KEY') ?: getenv('SENDGRID_API_KEY') ?: '';
+  $from = jarvis_mail_from();
+  if ($apiKey) {
+    $payload = [
+      'personalizations' => [[ 'to' => [[ 'email' => $toEmail ]] ]],
+      'from' => ['email' => $from],
+      'subject' => $subject,
+      'content' => [[ 'type' => 'text/plain', 'value' => $bodyText ]]
+    ];
+    if ($bodyHtml) {
+      $payload['content'][] = ['type' => 'text/html', 'value' => $bodyHtml];
+    }
+    $ch = curl_init('https://api.sendgrid.com/v3/mail/send');
+    curl_setopt_array($ch, [
+      CURLOPT_RETURNTRANSFER => true,
+      CURLOPT_POST => true,
+      CURLOPT_POSTFIELDS => json_encode($payload),
+      CURLOPT_HTTPHEADER => [
+        'Authorization: Bearer ' . $apiKey,
+        'Content-Type: application/json'
+      ],
+    ]);
+    $resp = curl_exec($ch);
+    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    return $resp !== false && $code >= 200 && $code < 300;
+  }
+  $headers = 'From: ' . $from . "\r\n" . 'Content-Type: text/plain; charset=utf-8';
+  return @mail($toEmail, $subject, $bodyText, $headers);
 }
 
 function jarvis_send_sms(?string $toPhone, string $text): bool {
   if (!$toPhone) return false;
-  $sid   = getenv('TWILIO_SID');
-  $token = getenv('TWILIO_AUTH_TOKEN');
-  $from  = getenv('TWILIO_FROM_NUMBER');
+  // Prefer DB settings, fall back to env
+  $sid   = jarvis_setting_get('TWILIO_SID') ?: getenv('TWILIO_SID');
+  $token = jarvis_setting_get('TWILIO_AUTH_TOKEN') ?: getenv('TWILIO_AUTH_TOKEN');
+  $from  = jarvis_setting_get('TWILIO_FROM_NUMBER') ?: getenv('TWILIO_FROM_NUMBER');
   if (!$sid || !$token || !$from) return false;
+
   $url = "https://api.twilio.com/2010-04-01/Accounts/{$sid}/Messages.json";
   $payload = http_build_query(['From'=>$from,'To'=>$toPhone,'Body'=>$text]);
   $ch = curl_init($url);
@@ -33,11 +71,21 @@ function jarvis_send_sms(?string $toPhone, string $text): bool {
     CURLOPT_POST=>true,
     CURLOPT_POSTFIELDS=>$payload,
     CURLOPT_USERPWD=>$sid . ':' . $token,
+    CURLOPT_TIMEOUT=>10,
   ]);
   $resp = curl_exec($ch);
   $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+  if ($resp === false) {
+    error_log('Twilio curl error: ' . curl_error($ch));
+    curl_close($ch);
+    return false;
+  }
   curl_close($ch);
-  return $resp !== false && $code >= 200 && $code < 300;
+  if ($code < 200 || $code >= 300) {
+    error_log('Twilio API error: HTTP ' . $code . ' resp: ' . substr($resp,0,512));
+    return false;
+  }
+  return true;
 }
 
 function jarvis_json_input(): array {
