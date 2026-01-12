@@ -3,3 +3,8 @@
 .env.*.local
 vendor/
 node_modules/
+
+# Ignore generated backups, storage blobs, and local test artifacts
+/backups/
+/storage/
+/scripts/*.sample
