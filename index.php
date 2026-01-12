@@ -204,8 +204,8 @@ if ($path === '/api/messages') {
   if ($message === '') jarvis_respond(400, ['error' => 'message is required']);
   if ($channel === '') jarvis_respond(400, ['error' => 'channel is required']);
 
-  $token = getenv('SLACK_BOT_TOKEN');
-  if (!$token) jarvis_respond(500, ['error' => 'SLACK_BOT_TOKEN not configured']);
+  $token = jarvis_setting_get('SLACK_BOT_TOKEN') ?: jarvis_setting_get('SLACK_APP_TOKEN') ?: getenv('SLACK_BOT_TOKEN') ?: getenv('SLACK_APP_TOKEN');
+  if (!$token) jarvis_respond(500, ['error' => 'SLACK is not configured (missing SLACK_APP_TOKEN / SLACK_BOT_TOKEN)']);
   $resp = slack_post_message_api($token, $channel, $message);
 
   jarvis_log_slack_message($userId, $channel, $message, $resp);

@@ -30,6 +30,7 @@ $rows = $stmt->fetchAll() ?: [];
       <span class="dot" aria-hidden="true"></span>
       <span>JARVIS</span>
     </div>
+    <button class="nav-toggle" id="navToggle" aria-label="Open menu">☰</button>
     <nav>
       <a href="home.php">Home</a>
       <a href="preferences.php">Preferences</a>

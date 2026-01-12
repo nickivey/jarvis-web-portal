@@ -59,6 +59,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
       <span class="dot" aria-hidden="true"></span>
       <span>JARVIS</span>
     </div>
+    <button class="nav-toggle" id="navToggle" aria-label="Open menu">☰</button>
     <nav>
       <a href="login.php">Login</a>
       <a href="register.php">Register</a>

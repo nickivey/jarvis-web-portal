@@ -115,7 +115,25 @@ The app will fetch weather for the most recent location and show a short summary
 ### Slack messaging
 
 * `POST /api/messages` (Bearer JWT) JSON: `{ "message": "hi", "channel": "C..." }`
+Slack configuration can be set in the database (preferred) or via environment variables. The settings you can set in the DB are:
 
+- `SLACK_APP_TOKEN` (xapp-*) — app-level token for Socket Mode / app-level operations
+- `SLACK_BOT_TOKEN` (xoxb-*) — bot token for posting as the app
+- `SLACK_CHANNEL_ID` — default channel id
+- `SLACK_APP_ID`, `SLACK_CLIENT_ID`, `SLACK_CLIENT_SECRET`, `SLACK_SIGNING_SECRET` — OAuth / signing settings
+
+Use the CLI to seed secrets into the DB (recommended):
+
+```bash
+php scripts/set-secret.php SLACK_APP_TOKEN "xapp-..."
+php scripts/set-secret.php SLACK_APP_ID "A0A..."
+php scripts/set-secret.php SLACK_CLIENT_ID "..."
+php scripts/set-secret.php SLACK_CLIENT_SECRET "..."
+php scripts/set-secret.php SLACK_SIGNING_SECRET "..."
+php scripts/set-secret.php SLACK_CHANNEL_ID "C..."
+```
+
+These settings are visible and editable in the Admin UI (`/admin.php`) for convenience.
 ### Location
 
 * `POST /api/location` (Bearer JWT) JSON: `{ "lat": 40.0, "lon": -74.0, "accuracy": 20 }`

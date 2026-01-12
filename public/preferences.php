@@ -65,8 +65,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       <img src="images/logo.svg" alt="JARVIS logo" />
       <span class="dot" aria-hidden="true"></span>
       <span>JARVIS</span>
-    </div>
-    <nav>
+    </div>    <button class="nav-toggle" id="navToggle" aria-label="Open menu">☰</button>    <nav>
       <a href="home.php">Home</a>
       <a href="preferences.php" class="active">Preferences</a>
       <a href="audit.php">Audit Log</a>

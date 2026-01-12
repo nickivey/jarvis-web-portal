@@ -32,6 +32,7 @@ $focusLon = isset($_GET['lon']) ? (float)$_GET['lon'] : null;
 <body>
   <div class="navbar">
     <div class="brand">JARVIS</div>
+    <button class="nav-toggle" id="navToggle" aria-label="Open menu">☰</button>
     <nav>
       <a href="home.php">Home</a>
       <a href="logout.php">Logout</a>
