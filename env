@@ -21,3 +21,11 @@ INSTAGRAM_CLIENT_ID=""
 INSTAGRAM_CLIENT_SECRET=""
 # If omitted, Jarvis uses SITE_URL + /public/instagram_callback.php
 # INSTAGRAM_REDIRECT_URI="https://yourdomain.com/public/instagram_callback.php"
+
+# Google OAuth2 (for Sign in with Google / Google APIs)
+# Create OAuth client at https://console.cloud.google.com/apis/credentials
+# Set authorized redirect URI to SITE_URL + /public/google_callback.php or set GOOGLE_REDIRECT_URI explicitly
+GOOGLE_CLIENT_ID=""
+GOOGLE_CLIENT_SECRET=""
+# Optional: override if you use a different redirect
+# GOOGLE_REDIRECT_URI="https://yourdomain.com/public/google_callback.php"

@@ -11,6 +11,8 @@ if (!$user) { session_destroy(); header('Location: login.php'); exit; }
 
 $prefs = jarvis_preferences($userId);
 $igToken = jarvis_oauth_get($userId, 'instagram');
+$googleToken = jarvis_oauth_get($userId, 'google');
+$devices = jarvis_list_devices($userId);
 $success = '';
 $error = '';
 
@@ -18,6 +20,8 @@ if (isset($_GET['ok'])) {
   $success = match ((string)$_GET['ok']) {
     'instagram_connected' => 'Instagram connected successfully.',
     'instagram_disconnected' => 'Instagram disconnected.',
+    'google_connected' => 'Google connected successfully.',
+    'google_disconnected' => 'Google disconnected.',
     default => $success,
   };
 }
@@ -26,6 +30,7 @@ if (isset($_GET['err'])) {
     'instagram_env_missing' => 'Instagram client env vars are missing. Set INSTAGRAM_CLIENT_ID and INSTAGRAM_CLIENT_SECRET.',
     'instagram_state' => 'Instagram login failed: invalid state.',
     'instagram_exchange' => 'Instagram login failed during token exchange.',
+    'invalid_id_token' => 'Google sign-in failed: invalid ID token.',
     default => $error,
   };
 }
@@ -125,6 +130,42 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
               <a class="btn" href="disconnect_instagram.php">Disconnect Instagram</a>
             <?php endif; ?>
           </div>
+        </div>
+
+        <div class="mini" style="margin-top:12px">
+          <h4>Google (Sign in / Connect)</h4>
+          <p class="muted">Sign in with Google or connect your Google account for calendar and API access.</p>
+          <p>Status: <b><?php echo $googleToken ? 'Connected' : 'Not connected'; ?></b>
+            <?php if ($googleToken && !empty($googleToken['expires_at'])): ?>
+              <span class="muted">(expires <?php echo htmlspecialchars((string)$googleToken['expires_at']); ?> UTC)</span>
+            <?php endif; ?>
+          </p>
+          <div style="display:flex;gap:10px;flex-wrap:wrap">
+            <?php if (!$googleToken): ?>
+              <a class="btn" href="connect_google.php">Connect / Sign in with Google</a>
+            <?php else: ?>
+              <a class="btn" href="disconnect_google.php">Disconnect Google</a>
+            <?php endif; ?>
+          </div>
+        </div>
+
+        <div class="mini" style="margin-top:12px">
+          <h4>Registered Devices</h4>
+          <p class="muted">Register mobile devices (iOS/Android) via the mobile app to receive push notifications and share location.</p>
+          <?php if (!$devices): ?>
+            <p class="muted">No devices registered.</p>
+          <?php else: ?>
+            <ul>
+              <?php foreach($devices as $d): ?>
+                <li>
+                  <b><?php echo htmlspecialchars($d['platform']); ?></b> • <?php echo htmlspecialchars($d['device_uuid']); ?>
+                  <?php if (!empty($d['last_seen_at'])): ?><span class="muted"> • last seen <?php echo htmlspecialchars($d['last_seen_at']); ?> UTC</span><?php endif; ?>
+                  <?php if (!empty($d['last_location_lat'])): ?><div class="muted">Location: <?php echo htmlspecialchars($d['last_location_lat']); ?>, <?php echo htmlspecialchars($d['last_location_lon']); ?> (<?php echo htmlspecialchars((string)$d['last_location_at']); ?> UTC)</div><?php endif; ?>
+                  <div style="margin-top:6px"><a class="btn" href="disconnect_device.php?id=<?php echo (int)$d['id']; ?>">Disconnect</a></div>
+                </li>
+              <?php endforeach; ?>
+            </ul>
+          <?php endif; ?>
         </div>
         <ul style="margin-top:14px">
           <li><b>Slack</b>: set <code>SLACK_BOT_TOKEN</code> and <code>SLACK_CHANNEL_ID</code>.</li>

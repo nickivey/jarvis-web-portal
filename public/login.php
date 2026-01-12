@@ -59,6 +59,13 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
         <input type="password" name="password" required />
         <button class="btn" type="submit">Enter JARVIS</button>
       </form>
+
+      <div style="margin-top:12px;text-align:center;">
+        <a href="connect_google.php" style="display:inline-block;padding:8px 12px;border-radius:6px;border:1px solid #ddd;background:#fff;color:#222;text-decoration:none;font-weight:600;">
+          Sign in with Google
+        </a>
+      </div>
+
       <div class="nav-links"><a href="register.php">Create an account</a></div>
     </div>
   </div>

@@ -247,4 +247,56 @@ if ($path === '/api/location') {
   jarvis_respond(200, $resp);
 }
 
+// ----------------------------
+// Devices (mobile app / push tokens)
+// ----------------------------
+
+if ($path === '/api/devices') {
+  if ($method === 'POST') {
+    [$userId, $u] = require_jwt_user();
+    $in = jarvis_json_input();
+    $deviceUuid = trim((string)($in['device_uuid'] ?? ''));
+    $platform = trim((string)($in['platform'] ?? ''));
+    $pushToken = trim((string)($in['push_token'] ?? '')) ?: null;
+    $pushProvider = trim((string)($in['push_provider'] ?? '')) ?: null;
+    $meta = isset($in['metadata']) && is_array($in['metadata']) ? $in['metadata'] : null;
+    if ($deviceUuid === '' || $platform === '') jarvis_respond(400, ['error'=>'device_uuid and platform required']);
+    $deviceId = jarvis_register_device($userId, $deviceUuid, $platform, $pushToken, $pushProvider, $meta);
+    jarvis_audit($userId, 'DEVICE_REGISTERED', 'device', ['device_id'=>$deviceId,'platform'=>$platform]);
+    jarvis_respond(201, ['device_id'=>$deviceId]);
+  }
+
+  if ($method === 'GET') {
+    [$userId, $u] = require_jwt_user();
+    $devices = jarvis_list_devices($userId);
+    jarvis_respond(200, ['devices'=>$devices]);
+  }
+
+  jarvis_respond(405, ['error'=>'Method not allowed']);
+}
+
+if (preg_match('#^/api/devices/(\d+)/location$#', $path, $m)) {
+  if ($method !== 'POST') jarvis_respond(405, ['error' => 'Method not allowed']);
+  [$userId, $u] = require_jwt_user();
+  $deviceId = (int)$m[1];
+  $in = jarvis_json_input();
+  $lat = (float)($in['lat'] ?? 0);
+  $lon = (float)($in['lon'] ?? 0);
+  $acc = isset($in['accuracy']) ? (float)$in['accuracy'] : null;
+  if (!$lat || !$lon) jarvis_respond(400, ['error'=>'lat/lon required']);
+  jarvis_update_device_location($userId, $deviceId, $lat, $lon, $acc);
+  jarvis_audit($userId, 'DEVICE_LOCATION_UPDATE', 'device', ['device_id'=>$deviceId,'lat'=>$lat,'lon'=>$lon,'accuracy'=>$acc]);
+  jarvis_respond(200, ['ok'=>true]);
+}
+
+if (preg_match('#^/api/devices/(\d+)$#', $path, $m)) {
+  $deviceId = (int)$m[1];
+  if ($method === 'DELETE') {
+    [$userId, $u] = require_jwt_user();
+    jarvis_unregister_device($userId, $deviceId);
+    jarvis_audit($userId, 'DEVICE_UNREGISTERED', 'device', ['device_id'=>$deviceId]);
+    jarvis_respond(200, ['ok'=>true]);
+  }
+}
+
 jarvis_respond(404, ['error' => 'Not found']);

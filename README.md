@@ -81,3 +81,35 @@ Notes:
 ## MySQL schema
 
 Run `sql/schema.sql` in your MySQL DB before first use.
+
+## Google Sign-in
+
+- Create an **OAuth 2.0 Client ID (Web application)** in the Google Cloud Console: https://console.cloud.google.com/apis/credentials
+- Add an **Authorized redirect URI**: `SITE_URL/public/google_callback.php` (or set `GOOGLE_REDIRECT_URI` in `env`)
+- Set env variables `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` (see `env` file)
+- Visit `/public/login.php` and click **Sign in with Google** — Jarvis will create a user if the email doesn't exist, mark the email as verified, and store OAuth tokens in `oauth_tokens`.
+- You can also link or unlink your Google account from `/public/preferences.php` after signing in; tokens will be stored in `oauth_tokens` and disconnect removes them.
+
+## Voice input & output
+
+- The portal now supports **voice input** (browser Speech Recognition) and **voice output** (TTS).
+- On `/public/home.php` there's a microphone button in the JARVIS Chat panel. Click to start/stop voice input; recognized speech populates the message box.
+- The app requests **Notification** permission (for browser notifications) and **Microphone** permission when you use voice input.
+- JARVIS command responses (via `POST /api/command`) are spoken aloud automatically when "Speak responses" is enabled.
+
+Server-side TTS
+
+- A simple server-side endpoint at `/public/tts.php` proxies a TTS service and returns an MP3 audio stream. For production, consider installing a robust PHP TTS library or using a cloud TTS provider.
+- Example libraries (optional): `stichoza/google-tts-php` (Google Translate TTS wrapper) or official cloud SDKs (Google Cloud Text-to-Speech, Amazon Polly). After installing, update `public/tts.php` to use the library for higher quality and auth support.
+
+## Device registration (for iOS / mobile apps)
+
+- Mobile apps should register themselves with the web API after the user signs in. Endpoints:
+  - `POST /api/devices` (Bearer JWT) JSON: `{ "device_uuid": "<uuid>", "platform": "ios", "push_token": "<apns_token>", "push_provider": "apns", "metadata": { } }` → `{ device_id }
+  - `GET /api/devices` (Bearer JWT) → `{ devices: [...] }`
+  - `POST /api/devices/:id/location` (Bearer JWT) JSON: `{ "lat": 40.0, "lon": -71.0, "accuracy": 12 }` → `{ ok:true }`
+  - `DELETE /api/devices/:id` (Bearer JWT) → `{ ok:true }`
+
+- The server stores device tokens in `devices` and records device locations in `location_logs` (with `source='device'`). Mobile apps may periodically send `location` updates and register their push token to receive notifications tied to the user's profile.
+
+- The web UI at `/public/preferences.php` now lists registered devices and allows disconnecting them.

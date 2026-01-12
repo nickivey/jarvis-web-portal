@@ -80,6 +80,22 @@ function jarvis_user_by_id(int $id): ?array {
   return $row ?: null;
 }
 
+function jarvis_user_by_email(string $email): ?array {
+  $pdo = jarvis_pdo();
+  if (!$pdo) return null;
+  $stmt = $pdo->prepare('SELECT * FROM users WHERE email = :e LIMIT 1');
+  $stmt->execute([':e' => $email]);
+  $row = $stmt->fetch();
+  return $row ?: null;
+}
+
+function jarvis_mark_email_verified(int $userId): void {
+  $pdo = jarvis_pdo();
+  if (!$pdo) return;
+  $pdo->prepare('UPDATE users SET email_verified_at = :ts, email_verify_token = NULL WHERE id = :id')
+      ->execute([':ts' => jarvis_now_sql(), ':id' => $userId]);
+}
+
 function jarvis_create_user(string $username, string $email, ?string $phoneE164, string $passwordHash, string $verifyToken): int {
   $pdo = jarvis_pdo();
   if (!$pdo) throw new RuntimeException('DB not configured');
@@ -255,6 +271,44 @@ function jarvis_oauth_delete(int $userId, string $provider): void {
   $pdo = jarvis_pdo();
   if (!$pdo) return;
   $pdo->prepare('DELETE FROM oauth_tokens WHERE user_id=:u AND provider=:p')->execute([':u'=>$userId, ':p'=>$provider]);
+}
+
+function jarvis_register_device(int $userId, string $deviceUuid, string $platform, ?string $pushToken=null, ?string $pushProvider=null, ?array $meta=null): int {
+  $pdo = jarvis_pdo();
+  if (!$pdo) throw new RuntimeException('DB not configured');
+  $metaJson = $meta ? json_encode($meta) : null;
+  $now = jarvis_now_sql();
+  $pdo->prepare('INSERT INTO devices (user_id, device_uuid, platform, push_provider, push_token, metadata_json, last_seen_at) VALUES (:u,:du,:p,:pp,:pt,:m,:ls) ON DUPLICATE KEY UPDATE platform=VALUES(platform), push_provider=VALUES(push_provider), push_token=VALUES(push_token), metadata_json=VALUES(metadata_json), last_seen_at=VALUES(last_seen_at)')
+      ->execute([':u'=>$userId, ':du'=>$deviceUuid, ':p'=>$platform, ':pp'=>$pushProvider, ':pt'=>$pushToken, ':m'=>$metaJson, ':ls'=>$now]);
+  $stmt = $pdo->prepare('SELECT id FROM devices WHERE user_id=:u AND device_uuid=:du LIMIT 1');
+  $stmt->execute([':u'=>$userId, ':du'=>$deviceUuid]);
+  $row = $stmt->fetch();
+  return (int)($row['id'] ?? 0);
+}
+
+function jarvis_unregister_device(int $userId, int $deviceId): void {
+  $pdo = jarvis_pdo();
+  if (!$pdo) return;
+  $pdo->prepare('DELETE FROM devices WHERE id=:id AND user_id=:u')->execute([':id'=>$deviceId, ':u'=>$userId]);
+}
+
+function jarvis_update_device_location(int $userId, int $deviceId, float $lat, float $lon, ?float $accuracy=null): void {
+  $pdo = jarvis_pdo();
+  if (!$pdo) return;
+  $now = jarvis_now_sql();
+  $pdo->prepare('UPDATE devices SET last_location_lat=:lat, last_location_lon=:lon, last_location_at=:ts, last_seen_at=:ts WHERE id=:id AND user_id=:u')
+      ->execute([':lat'=>$lat, ':lon'=>$lon, ':ts'=>$now, ':id'=>$deviceId, ':u'=>$userId]);
+  // Also record in location_logs for history
+  $pdo->prepare('INSERT INTO location_logs (user_id,lat,lon,accuracy_m,source) VALUES (:u,:la,:lo,:a,:s)')
+      ->execute([':u'=>$userId, ':la'=>$lat, ':lo'=>$lon, ':a'=>$accuracy, ':s'=>'device']);
+}
+
+function jarvis_list_devices(int $userId): array {
+  $pdo = jarvis_pdo();
+  if (!$pdo) return [];
+  $stmt = $pdo->prepare('SELECT id,device_uuid,platform,push_provider,push_token,last_location_lat,last_location_lon,last_location_at,last_seen_at,metadata_json,created_at FROM devices WHERE user_id=:u ORDER BY id DESC');
+  $stmt->execute([':u'=>$userId]);
+  return $stmt->fetchAll() ?: [];
 }
 
 function jarvis_log_slack_message(?int $userId, ?string $channelId, string $message, ?array $response=null): void {

@@ -48,6 +48,27 @@ CREATE TABLE IF NOT EXISTS oauth_tokens (
   CONSTRAINT fk_oauth_user FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- Devices table: used by mobile apps (iOS/Android) to register device tokens and report locations
+CREATE TABLE IF NOT EXISTS devices (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  user_id BIGINT UNSIGNED NOT NULL,
+  device_uuid VARCHAR(128) NOT NULL,
+  platform VARCHAR(32) NOT NULL,
+  push_provider VARCHAR(32) NULL,
+  push_token TEXT NULL,
+  last_location_lat DOUBLE NULL,
+  last_location_lon DOUBLE NULL,
+  last_location_at DATETIME NULL,
+  last_seen_at DATETIME NULL,
+  metadata_json JSON NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY(id),
+  UNIQUE KEY uq_device_user_uuid (user_id, device_uuid),
+  KEY ix_devices_user(user_id),
+  CONSTRAINT fk_device_user FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 CREATE TABLE IF NOT EXISTS messages (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   user_id BIGINT UNSIGNED NULL,

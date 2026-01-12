@@ -235,10 +235,19 @@ $phone = (string)($dbUser['phone_e164'] ?? '');
               <?php endforeach; ?>
             <?php endif; ?>
           </div>
-          <form method="post" class="chatinput">
+          <form method="post" class="chatinput" id="chatForm">
             <input name="channel" placeholder="Channel ID (optional)" value="<?php echo htmlspecialchars($defaultChannel); ?>" />
-            <textarea name="message" placeholder="Type a message to Slack..."></textarea>
-            <button type="submit" name="send_chat" value="1">Send</button>
+            <div style="display:flex;gap:8px;align-items:flex-end;">
+              <textarea name="message" id="messageInput" placeholder="Type a message to Slack..." style="flex:1"></textarea>
+              <div style="display:flex;flex-direction:column;gap:8px;">
+                <button type="button" id="micBtn" class="btn" title="Start/Stop voice input">🎤</button>
+                <button type="submit" name="send_chat" value="1" id="sendBtn" class="btn">Send</button>
+              </div>
+            </div>
+            <div style="margin-top:8px;display:flex;gap:12px;align-items:center;">
+              <label style="font-size:13px"><input type="checkbox" id="enableTTS" checked /> Speak responses</label>
+              <label style="font-size:13px"><input type="checkbox" id="enableNotif" checked /> Show notifications</label>
+            </div>
           </form>
         </div>
       </div>
@@ -349,6 +358,156 @@ Content-Type: application/json
           }
         } catch (e) {}
       }, ()=>{}, { enableHighAccuracy: true, maximumAge: 10*60*1000, timeout: 8000 });
+    })();
+
+    // ----------------------------
+    // Voice input / output + Notifications
+    // ----------------------------
+    (function(){
+      const token = <?php echo $webJwt ? json_encode($webJwt) : 'null'; ?>;
+      const chatLog = document.querySelector('.chatlog');
+      const msgInput = document.getElementById('messageInput');
+      const micBtn = document.getElementById('micBtn');
+      const enableTTS = document.getElementById('enableTTS');
+      const enableNotif = document.getElementById('enableNotif');
+      let recognizing = false;
+      let recognition = null;
+
+      // Request Notification permission up front (user gesture recommended)
+      async function ensureNotificationPermission(){
+        if (!('Notification' in window)) return false;
+        if (Notification.permission === 'granted') return true;
+        try {
+          const p = await Notification.requestPermission();
+          return p === 'granted';
+        } catch(e){ return false; }
+      }
+
+      // Try to initialize Web Speech Recognition if available
+      function initRecognition(){
+        const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition || null;
+        if (!SpeechRec) return null;
+        const r = new SpeechRec();
+        r.lang = navigator.language || 'en-US';
+        r.interimResults = false;
+        r.maxAlternatives = 1;
+        r.onresult = (evt) => {
+          const text = evt.results[0][0].transcript || '';
+          msgInput.value = text;
+        };
+        r.onend = () => { recognizing = false; micBtn.classList.remove('active'); };
+        r.onerror = () => { recognizing = false; micBtn.classList.remove('active'); };
+        return r;
+      }
+
+      micBtn.addEventListener('click', async ()=>{
+        if (recognizing) {
+          if (recognition) recognition.stop();
+          recognizing = false; micBtn.classList.remove('active');
+          return;
+        }
+        // ask for microphone by starting recognition/getUserMedia
+        if (!recognition) {
+          recognition = initRecognition();
+        }
+        if (!recognition) {
+          // Fallback: prompt for getUserMedia permission so user can record externally
+          try { await navigator.mediaDevices.getUserMedia({audio:true}); }
+          catch(e){ alert('Microphone not available or permission denied.'); return; }
+        }
+        try {
+          if (recognition) recognition.start();
+          recognizing = true; micBtn.classList.add('active');
+        } catch(e) { recognizing=false; micBtn.classList.remove('active'); }
+      });
+
+      // Append message to chat log
+      function appendMessage(text, who='jarvis'){
+        const wrapper = document.createElement('div');
+        wrapper.className = who === 'me' ? 'msg me' : 'msg jarvis';
+        const bubble = document.createElement('div'); bubble.className='bubble';
+        const content = document.createElement('div'); content.textContent = text;
+        const meta = document.createElement('div'); meta.className='meta';
+        const now = new Date(); meta.textContent = now.toISOString().replace('T',' ').replace('Z',' UTC');
+        bubble.appendChild(content); bubble.appendChild(meta); wrapper.appendChild(bubble);
+        if (chatLog) chatLog.appendChild(wrapper);
+        // scroll
+        if (chatLog) chatLog.parentNode.scrollTop = chatLog.parentNode.scrollHeight;
+      }
+
+      // Speak text using server-side TTS endpoint or fallback to Web SpeechSynthesis
+      async function speakText(text){
+        if (!enableTTS.checked || !text) return;
+        // Try server-side TTS first
+        try {
+          const url = '/public/tts.php?text=' + encodeURIComponent(text);
+          const audio = new Audio(url);
+          await audio.play().catch(async (e)=>{
+            // Fallback to speechSynthesis
+            if ('speechSynthesis' in window) {
+              const ut = new SpeechSynthesisUtterance(text);
+              ut.lang = navigator.language || 'en-US';
+              speechSynthesis.speak(ut);
+            }
+          });
+          return;
+        } catch(e){
+          if ('speechSynthesis' in window) {
+            const ut = new SpeechSynthesisUtterance(text);
+            ut.lang = navigator.language || 'en-US';
+            speechSynthesis.speak(ut);
+          }
+        }
+      }
+
+      // Show browser notification if allowed
+      function showNotification(text){
+        if (!enableNotif.checked || !('Notification' in window) || Notification.permission !== 'granted') return;
+        try { new Notification('JARVIS', { body: text }); } catch(e){}
+      }
+
+      // Intercept chat form submit and use /api/command (Jarvis), fallback to /api/messages for Slack
+      const chatForm = document.getElementById('chatForm');
+      if (chatForm) chatForm.addEventListener('submit', async (ev) => {
+        ev.preventDefault();
+        const msg = (msgInput.value || '').trim();
+        const chan = chatForm.querySelector('input[name="channel"]').value || '';
+        if (!msg) return;
+        appendMessage(msg, 'me');
+        msgInput.value = '';
+
+        // Call /api/command
+        try {
+          const r = await fetch('/api/command', {
+            method: 'POST', headers: { 'Content-Type':'application/json', 'Authorization': token ? 'Bearer '+token : '' }, body: JSON.stringify({ text: msg })
+          });
+          const data = await r.json().catch(()=>null);
+          if (data && typeof data.jarvis_response === 'string' && data.jarvis_response.trim() !== ''){
+            appendMessage(data.jarvis_response, 'jarvis');
+            speakText(data.jarvis_response);
+            showNotification(data.jarvis_response);
+            return;
+          }
+        } catch(e){}
+
+        // Fallback: send to Slack via /api/messages if JWT available
+        try {
+          const r2 = await fetch('/api/messages', {
+            method: 'POST', headers: { 'Content-Type':'application/json', 'Authorization': token ? 'Bearer '+token : '' }, body: JSON.stringify({ message: msg, channel: chan })
+          });
+          const data2 = await r2.json().catch(()=>null);
+          if (data2 && data2.ok) {
+            appendMessage('Sent to Slack ' + (chan || 'default channel'), 'jarvis');
+            if (enableNotif.checked && Notification.permission === 'granted') showNotification('Slack message sent: '+msg);
+          } else {
+            appendMessage('Failed to send to Slack', 'jarvis');
+          }
+        } catch(e){ appendMessage('Failed to send message', 'jarvis'); }
+      });
+
+      // On load, request notification permission quietly
+      (async ()=>{ if ('Notification' in window) await ensureNotificationPermission(); })();
+
     })();
   </script>
 </body></html>
