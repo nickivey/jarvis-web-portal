@@ -379,7 +379,7 @@ Content-Type: application/json
       const lastWeather = <?php echo json_encode($lastWeather); ?>;
 
       // Map management and location refreshing
-      let _mainMap = null, _miniMap = null;
+      let _mainMap = null, _miniMap = null; window._sending = window._sending || false;
 
       // Smart Home Device Management
       async function refreshHomeDevices(){
@@ -1120,32 +1120,40 @@ Content-Type: application/json
 
       const chatForm = document.getElementById('chatForm');
       async function handleSendAction(){
-        try{ try{ if (typeof window !== 'undefined') window._handleSendActionInvoked = true; }catch(e){}
+        if (window._sending) return;
+        window._sending = true;
+        try {
+          try{ if (typeof window !== 'undefined') window._handleSendActionInvoked = true; }catch(e){}
+
           if (sendBtn && sendBtn.dataset && sendBtn.dataset.pendingVoice) {
             const pendingId = sendBtn.dataset.pendingVoice;
             // Ensure the uploaded voice file actually exists before sending; if HEAD fails, clear pending and fall through so regular text send works
             let headOk = false;
             try{
-              const r = await fetch('/api/voice/'+pendingId+'/download', { method: 'HEAD', headers: sendBtn && token ? { 'Authorization': 'Bearer ' + token } : {} });
+              const r = await fetch('/api/voice/'+pendingId+'/download', { method: 'HEAD', headers: sendBtn && (window.jarvisJwt||token) ? { 'Authorization': 'Bearer ' + (window.jarvisJwt||token) } : {} });
               headOk = !!(r && r.ok);
             }catch(e){ headOk = false; }
             if (!headOk) {
               try { delete sendBtn.dataset.pendingVoice; sendBtn.textContent = 'Send'; window._pendingVoiceToSend = null; } catch(e){}
               // fall through to regular text send behavior
             } else {
-              try{ if (token) fetch('/api/audit', { method:'POST', headers:{ 'Content-Type':'application/json','Authorization':'Bearer '+token }, body: JSON.stringify({ action: 'VOICE_SUBMIT', entity: 'voice', metadata: { id: pendingId } }) }); }catch(e){}
+              try{ if (window.jarvisJwt||token) fetch('/api/audit', { method:'POST', headers:{ 'Content-Type':'application/json','Authorization':'Bearer '+(window.jarvisJwt||token) }, body: JSON.stringify({ action: 'VOICE_SUBMIT', entity: 'voice', metadata: { id: pendingId } }) }); }catch(e){}
               await sendCommand('', 'voice', { voice_input_id: pendingId });
               try{ delete sendBtn.dataset.pendingVoice; sendBtn.textContent = 'Send'; window._pendingVoiceToSend = null; }catch(e){}
               return;
             }
           }
-        }catch(e){ console.error('handleSendAction voice check failed', e); }
 
-        const msg = (msgInput.value || '').trim();
-        if (!msg) return;
-        appendMessage(msg, 'me');
-        msgInput.value = '';
-        await sendCommand(msg, lastInputType);
+          const msg = (msgInput.value || '').trim();
+          if (!msg) return;
+          appendMessage(msg, 'me');
+          msgInput.value = '';
+          await sendCommand(msg, lastInputType);
+        } catch (e) {
+          console.error('handleSendAction failed', e);
+        } finally {
+          window._sending = false;
+        }
       }
 
       if (chatForm) chatForm.addEventListener('submit', async (ev) => {
@@ -1157,7 +1165,16 @@ Content-Type: application/json
       // Ensure clicking the Send button triggers the same submit handler reliably (handles some headless/browser race conditions)
       try {
         const sendBtnEl = document.getElementById('sendBtn');
-        if (sendBtnEl) sendBtnEl.addEventListener('click', async (ev)=>{ try{ if (typeof window !== 'undefined') window._sendBtnClicked = true; }catch(e){} ev.preventDefault && ev.preventDefault(); await handleSendAction(); });
+        if (sendBtnEl && !sendBtnEl.dataset.sendListenerAttached) {
+          const sendHandler = async (ev)=>{
+            try{ if (typeof window !== 'undefined') window._sendBtnClicked = true; }catch(e){}
+            ev && ev.preventDefault && ev.preventDefault();
+            await handleSendAction();
+          };
+          sendBtnEl.addEventListener('click', sendHandler);
+          sendBtnEl.addEventListener('pointerup', sendHandler);
+          sendBtnEl.dataset.sendListenerAttached = '1';
+        }
       } catch(e) { console.error('attach sendBtn click failed', e); }
 
       // Support Enter-to-send: Enter sends, Shift+Enter inserts a newline, Ctrl/Cmd/Alt+Enter ignored (user-intent modifiers)
@@ -1176,10 +1193,15 @@ Content-Type: application/json
       }catch(e){ console.error('Enter-to-send handler failed', e); }
 
       const sendBtnEl = document.getElementById('sendBtn');
-      if (sendBtnEl) sendBtnEl.addEventListener('click', async (ev) => {
-        ev.preventDefault(); ev.stopPropagation();
-        await handleSendAction();
-      });
+      if (sendBtnEl && !sendBtnEl.dataset.sendListenerAttached) {
+        const sendHandler = async (ev)=>{
+          ev && ev.preventDefault && ev.preventDefault(); ev && ev.stopPropagation && ev.stopPropagation();
+          await handleSendAction();
+        };
+        sendBtnEl.addEventListener('click', sendHandler);
+        sendBtnEl.addEventListener('pointerup', sendHandler);
+        sendBtnEl.dataset.sendListenerAttached = '1';
+      }
 
       // On load, do not prompt for notifications automatically; just sync checkbox state
       if ('Notification' in window && enableNotif) { enableNotif.checked = (Notification.permission === 'granted'); }
