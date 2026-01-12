@@ -157,6 +157,72 @@ function jarvis_fetch_google_jwks(): ?array {
   return $cache;
 }
 
+// Default Google Calendar API key (hardcoded fallback as requested)
+if (!defined('DEFAULT_GOOGLE_CALENDAR_API_KEY')) define('DEFAULT_GOOGLE_CALENDAR_API_KEY', 'AIzaSyDaoFH7o7pPu9VXG6XC8wuopaMF1SZlgGY');
+
+function jarvis_google_calendar_key(): ?string {
+  $k = jarvis_setting_get('GOOGLE_CALENDAR_API_KEY') ?: getenv('GOOGLE_CALENDAR_API_KEY');
+  if ($k) return $k;
+  return DEFAULT_GOOGLE_CALENDAR_API_KEY;
+}
+
+/**
+ * Import events from the user's primary Google Calendar (requires oauth tokens in oauth_tokens table)
+ * - Fetches events for the next 30 days and stores them in `user_calendar_events` table
+ * - Creates a notification for events starting within the next 24 hours
+ */
+function jarvis_import_google_calendar(int $userId): array {
+  $tok = jarvis_oauth_get($userId, 'google');
+  if (!$tok || empty($tok['access_token'])) return ['ok'=>false,'error'=>'no_google_token'];
+  $access = $tok['access_token'];
+  $now = new DateTime('now', new DateTimeZone('UTC'));
+  $timeMin = $now->format(DateTime::ATOM);
+  $timeMax = $now->add(new DateInterval('P30D'))->format(DateTime::ATOM);
+  $url = 'https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=' . urlencode($timeMin) . '&timeMax=' . urlencode($timeMax) . '&singleEvents=true&orderBy=startTime&maxResults=250';
+  $ch = curl_init($url);
+  curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_HTTPHEADER=>["Authorization: Bearer {$access}"], CURLOPT_TIMEOUT=>10]);
+  $resp = curl_exec($ch);
+  $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+  curl_close($ch);
+  if ($resp === false || $code < 200 || $code >= 300) return ['ok'=>false,'error'=>'google_api_error','http'=>$code];
+  $data = json_decode($resp, true);
+  if (!is_array($data) || empty($data['items'])) return ['ok'=>true,'imported'=>0];
+  $imported = 0; $notified = 0;
+  foreach ($data['items'] as $ev) {
+    $eid = (string)($ev['id'] ?? uniqid('ev_'));
+    $summary = isset($ev['summary']) ? (string)$ev['summary'] : null;
+    $description = isset($ev['description']) ? (string)$ev['description'] : null;
+    $location = isset($ev['location']) ? (string)$ev['location'] : null;
+    // start / end can be dateTime or date
+    $startRaw = $ev['start']['dateTime'] ?? ($ev['start']['date'] ? $ev['start']['date'] . 'T00:00:00Z' : null);
+    $endRaw = $ev['end']['dateTime'] ?? ($ev['end']['date'] ? $ev['end']['date'] . 'T00:00:00Z' : null);
+    $startDt = $startRaw ? (new DateTime($startRaw)) : null;
+    $endDt = $endRaw ? (new DateTime($endRaw)) : null;
+    $startSql = $startDt ? $startDt->format('Y-m-d H:i:s') : null;
+    $endSql = $endDt ? $endDt->format('Y-m-d H:i:s') : null;
+    $id = jarvis_store_calendar_event($userId, $eid, $summary, $description, $startSql, $endSql, $location, $ev);
+    if ($id) $imported++;
+    // notify if within next 24 hours
+    if ($startDt) {
+      $now = new DateTime('now', new DateTimeZone('UTC'));
+      $diff = $startDt->getTimestamp() - $now->getTimestamp();
+      if ($diff > 0 && $diff <= 24*60*60) {
+        $note = "Upcoming event: " . ($summary ?: '(no title)') . " at " . $startDt->format('Y-m-d H:i');
+        jarvis_notify($userId, 'reminder', 'Upcoming calendar event', $note, ['event_id'=>$eid,'calendar_event_db_id'=>$id]);
+        jarvis_audit($userId, 'CALENDAR_EVENT_REMINDER', 'calendar', ['event_id'=>$eid,'db_id'=>$id,'starts_at'=>$startSql]);
+        // email and SMS
+        $user = jarvis_user_by_id($userId);
+        if (!empty($user['email'])) jarvis_send_confirmation_email($user['email'], $user['username'] ?? ($user['email'] ?? 'user'), 'Event reminder: ' . ($summary ?: 'Event'));
+        if (!empty($user['phone_e164'])) jarvis_send_sms($user['phone_e164'], $note);
+        $notified++;
+      }
+    }
+  }
+  jarvis_audit($userId, 'CALENDAR_IMPORT', 'calendar', ['imported'=>$imported,'notified'=>$notified]);
+  return ['ok'=>true,'imported'=>$imported,'notified'=>$notified];
+}
+
+
 function jarvis_fetch_weather(float $lat, float $lon): ?array {
   // Prefer DB setting then env
   $apiKey = jarvis_setting_get('OPENWEATHER_API_KEY') ?: getenv('OPENWEATHER_API_KEY');

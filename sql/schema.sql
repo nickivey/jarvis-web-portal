@@ -152,6 +152,24 @@ CREATE TABLE IF NOT EXISTS location_logs (
   CONSTRAINT fk_loc_user FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- Per-user imported Google Calendar events
+CREATE TABLE IF NOT EXISTS user_calendar_events (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  user_id BIGINT UNSIGNED NOT NULL,
+  event_id VARCHAR(255) NOT NULL,
+  summary VARCHAR(255) NULL,
+  description TEXT NULL,
+  start_dt DATETIME NULL,
+  end_dt DATETIME NULL,
+  location VARCHAR(255) NULL,
+  raw_json JSON NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY(id),
+  UNIQUE KEY ux_user_event(user_id,event_id),
+  KEY ix_cal_user(user_id),
+  CONSTRAINT fk_cal_user FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 -- Application settings / secrets (key-value store)
 CREATE TABLE IF NOT EXISTS settings (
   `key` VARCHAR(128) NOT NULL,

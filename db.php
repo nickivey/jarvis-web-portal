@@ -439,3 +439,31 @@ function jarvis_get_location_by_id(int $id): ?array {
   $row = $stmt->fetch();
   return $row ? $row : null;
 }
+
+// Calendar events storage
+function jarvis_store_calendar_event(int $userId, string $eventId, ?string $summary, ?string $description, ?string $startDt, ?string $endDt, ?string $location, ?array $raw): int {
+  $pdo = jarvis_pdo();
+  if (!$pdo) return 0;
+  $stmt = $pdo->prepare('INSERT INTO user_calendar_events (user_id,event_id,summary,description,start_dt,end_dt,location,raw_json) VALUES (:u,:eid,:s,:d,:sd,:ed,:loc,:raw) ON DUPLICATE KEY UPDATE summary=VALUES(summary), description=VALUES(description), start_dt=VALUES(start_dt), end_dt=VALUES(end_dt), location=VALUES(location), raw_json=VALUES(raw_json)');
+  $stmt->execute([':u'=>$userId, ':eid'=>$eventId, ':s'=>$summary, ':d'=>$description, ':sd'=>$startDt, ':ed'=>$endDt, ':loc'=>$location, ':raw'=>$raw ? json_encode($raw) : null]);
+  // return the inserted/updated row id (best effort)
+  $id = (int)$pdo->lastInsertId();
+  if ($id === 0) {
+    // fetch existing id
+    $q = $pdo->prepare('SELECT id FROM user_calendar_events WHERE user_id=:u AND event_id=:eid LIMIT 1');
+    $q->execute([':u'=>$userId, ':eid'=>$eventId]);
+    $row = $q->fetch();
+    $id = (int)($row['id'] ?? 0);
+  }
+  return $id;
+}
+
+function jarvis_list_calendar_events(int $userId, int $limit=20): array {
+  $pdo = jarvis_pdo();
+  if (!$pdo) return [];
+  $stmt = $pdo->prepare('SELECT id,event_id,summary,description,start_dt,end_dt,location,raw_json,created_at FROM user_calendar_events WHERE user_id=:u ORDER BY start_dt DESC LIMIT :l');
+  $stmt->bindValue(':u',$userId,PDO::PARAM_INT);
+  $stmt->bindValue(':l',$limit,PDO::PARAM_INT);
+  $stmt->execute();
+  return $stmt->fetchAll() ?: [];
+}

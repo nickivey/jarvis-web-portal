@@ -128,11 +128,11 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
         goto after_send_chat;
       }
 
-      $token = getenv('SLACK_BOT_TOKEN');
-      $fallbackChan = getenv('SLACK_CHANNEL_ID') ?: '';
+      $token = jarvis_setting_get('SLACK_BOT_TOKEN') ?: jarvis_setting_get('SLACK_APP_TOKEN') ?: getenv('SLACK_BOT_TOKEN') ?: getenv('SLACK_APP_TOKEN');
+      $fallbackChan = jarvis_setting_get('SLACK_CHANNEL_ID') ?: getenv('SLACK_CHANNEL_ID') ?: '';
       $useChan = $chan ?: $fallbackChan;
       if (!$token) {
-        $error = 'SLACK_BOT_TOKEN not configured.';
+        $error = 'Slack is not configured. Ask an admin to set SLACK_APP_TOKEN or SLACK_BOT_TOKEN.';
       } elseif ($useChan === '') {
         $error = 'Set a channel or SLACK_CHANNEL_ID.';
       } else {
@@ -157,7 +157,10 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
 
 after_send_chat:
 
+// recent chat messages
 $recent = jarvis_fetch_messages($userId, 50);
+// recent calendar events (show a few)
+$calendarEvents = jarvis_list_calendar_events($userId, 6);
 
 $commands = jarvis_recent_commands($userId, 20);
 $auditItems = jarvis_latest_audit($userId, 12);
@@ -186,6 +189,7 @@ $phone = (string)($dbUser['phone_e164'] ?? '');
       <span class="dot" aria-hidden="true"></span>
       <span>JARVIS</span>
     </div>
+    <button class="nav-toggle" id="navToggle" aria-label="Open menu">☰</button>
     <nav>
       <a href="home.php">Home</a>
       <a href="preferences.php">Preferences</a>
@@ -214,7 +218,7 @@ $phone = (string)($dbUser['phone_e164'] ?? '');
       <!-- 1 -->
       <div class="card">
         <h3>Connection Status</h3>
-        <p class="muted">Slack: <?php echo getenv('SLACK_BOT_TOKEN') ? 'Configured' : 'Not configured'; ?></p>
+        <p class="muted">Slack: <?php echo jarvis_setting_get('SLACK_BOT_TOKEN') || jarvis_setting_get('SLACK_APP_TOKEN') || getenv('SLACK_BOT_TOKEN') || getenv('SLACK_APP_TOKEN') ? 'Configured' : 'Not configured'; ?></p>
         <p class="muted">Instagram (Basic Display): <?php echo $igToken ? 'Connected' : 'Not connected'; ?></p>
         <p class="muted">MySQL: <?php echo jarvis_pdo() ? 'Connected' : 'Not configured / unavailable'; ?></p>
         <p class="muted">REST Base: <span class="badge">/api</span></p>
@@ -374,6 +378,23 @@ Content-Type: application/json
           </div>
         </div>
       </div>
+    </div>
+  </div>
+
+  <div class="container">
+    <div class="card">
+      <h3>Upcoming Calendar Events</h3>
+      <?php if (empty($calendarEvents)): ?>
+        <p class="muted">No upcoming events. Connect Google Calendar in Preferences.</p>
+      <?php else: ?>
+        <ul>
+          <?php foreach($calendarEvents as $ce): ?>
+            <li><strong><?php echo htmlspecialchars($ce['summary'] ?? '(no title)'); ?></strong>
+              <div class="muted"><?php echo htmlspecialchars((string)($ce['start_dt'] ?? '')); ?> — <?php echo htmlspecialchars((string)($ce['location'] ?? '')); ?></div>
+            </li>
+          <?php endforeach; ?>
+        </ul>
+      <?php endif; ?>
     </div>
   </div>
 

@@ -46,11 +46,24 @@ body::before{
   display:flex;
   justify-content:space-between;
   align-items:center;
-  padding:14px 18px;
+  padding:10px 14px;
   background:linear-gradient(90deg, rgba(2,7,18,.88), rgba(7,18,42,.70));
-  border-bottom:1px solid rgba(30,120,255,.25);
+  border-bottom:1px solid rgba(30,120,255,.18);
   backdrop-filter: blur(10px);
 }
+
+/* Mobile nav toggle */
+.nav-toggle{display:none;background:transparent;border:1px solid rgba(255,255,255,.04);color:var(--txt);padding:6px 8px;border-radius:8px;font-size:18px}
+.navbar .nav-toggle{margin-left:12px}
+@media(max-width:780px){
+  .navbar{padding:8px 12px}
+  .navbar nav{display:none}
+  .navbar.nav-open nav{display:block;position:absolute;left:0;right:0;top:56px;padding:12px;background:linear-gradient(180deg, rgba(7,18,42,.95), rgba(5,16,42,.95));border-bottom:1px solid rgba(30,120,255,.12)}
+  .nav-toggle{display:inline-block}
+  .grid{grid-template-columns:1fr}
+  .hero h1{font-size:32px}
+}
+
 .navbar .brand{
   display:flex; gap:10px; align-items:center;
   font-weight:800; letter-spacing:.08em;
