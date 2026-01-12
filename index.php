@@ -311,6 +311,65 @@ if (preg_match('#^/api/voice/([0-9]+)/download$#', $path, $m)) {
     jarvis_respond(200, ['jarvis_response'=>$response]);
   }
 
+  // Time / Date
+  if (strpos($lower, 'time') !== false || strpos($lower, 'date') !== false || strpos($lower, 'day is it') !== false) {
+    if (strpos($lower, 'time') !== false) $response = "It is currently " . date('g:i A');
+    else $response = "It is " . date('l, F jS, Y');
+    jarvis_log_command($userId, 'system', $text, $response, $clientMeta);
+    jarvis_audit($userId, 'COMMAND_TIME', 'command', $auditMeta(['answer'=>$response]));
+    jarvis_respond(200, ['jarvis_response'=>$response]);
+  }
+
+  // Home Automation Voice Control
+  if (preg_match('/(turn|switch) (on|off) (.+)/', $lower, $m)) {
+    $action = $m[2]; // on/off
+    $target = trim($m[3]); // "the lights", "office lights"
+    // simplistic match against device names
+    $pdo = jarvis_pdo();
+    $stmt = $pdo->prepare("SELECT * FROM home_devices WHERE user_id=:u");
+    $stmt->execute([':u'=>$userId]);
+    $allDevs = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    $matched = null;
+    foreach($allDevs as $d) {
+        if (strpos(strtolower($target), strtolower($d['name'])) !== false) {
+            $matched = $d; break;
+        }
+        // if user said "lights" and device is "Office Lights", match if it's the only light? 
+        // For now, simple substring match is enough or exact match
+        if (strpos(strtolower($d['name']), strtolower($target)) !== false) {
+             $matched = $d; break;
+        }
+    }
+    
+    if ($matched) {
+        $pdo->prepare("UPDATE home_devices SET status=:s WHERE id=:id")->execute([':s'=>$action, ':id'=>$matched['id']]);
+        $response = "Turning " . htmlspecialchars($matched['name']) . " " . $action . ".";
+        jarvis_log_command($userId, 'home_control', $text, $response, array_merge($clientMeta, ['device_id'=>$matched['id']]));
+        jarvis_audit($userId, 'HOME_DEVICE_TOGGLE', 'home_device', ['device_id'=>$matched['id'], 'new_status'=>$action, 'trigger'=>'voice']);
+        // Refresh client UI
+        jarvis_respond(200, ['jarvis_response'=>$response]);
+    } else {
+        $response = "I could not find a device named '$target'.";
+        jarvis_log_command($userId, 'home_control', $text, $response, $clientMeta);
+        jarvis_respond(200, ['jarvis_response'=>$response]);
+    }
+  }
+  
+  // Calendar Check
+  if (strpos($lower, 'calendar') !== false || strpos($lower, 'schedule') !== false || strpos($lower, 'appointments') !== false) {
+      $events = jarvis_list_calendar_events($userId, 3);
+      if (empty($events)) {
+          $response = "Your calendar is clear for the immediate future.";
+      } else {
+          $response = "You have " . count($events) . " upcoming events. ";
+          $first = $events[0];
+          $response .= "Next is " . ($first['summary']??'event') . " at " . ($first['start_time']??'unknown time') . ".";
+      }
+      jarvis_log_command($userId, 'calendar', $text, $response, array_merge($clientMeta, ['events_count'=>count($events)]));
+      jarvis_audit($userId, 'COMMAND_CALENDAR', 'command', $auditMeta(['answer'=>$response]));
+      jarvis_respond(200, ['jarvis_response'=>$response]);
+  }
+
   // General conversational responses
   $hello = ['hello', 'hi', 'hey', 'greetings', 'hello jarvis', 'hi jarvis', 'hey jarvis'];
   if (in_array($lower, $hello)) {
@@ -480,6 +539,15 @@ if ($path === '/api/locations') {
   jarvis_respond(200, ['ok'=>true, 'locations'=>$locations]);
 }
 
+// Calendar events endpoint (GET upcoming)
+if ($path === '/api/calendar') {
+  if ($method !== 'GET') jarvis_respond(405, ['error' => 'Method not allowed']);
+  [$userId, $u] = require_jwt_user();
+  $limit = isset($_GET['limit']) ? min(50, max(1, (int)$_GET['limit'])) : 20;
+  $events = jarvis_list_calendar_events($userId, $limit);
+  jarvis_respond(200, ['ok'=>true, 'events'=>$events]);
+}
+
 // ----------------------------
 // Devices (mobile app / push tokens)
 // ----------------------------
@@ -531,6 +599,50 @@ if (preg_match('#^/api/devices/(\d+)$#', $path, $m)) {
     jarvis_audit($userId, 'DEVICE_UNREGISTERED', 'device', ['device_id'=>$deviceId]);
     jarvis_respond(200, ['ok'=>true]);
   }
+}
+
+// ----------------------------
+// Home Automation (IoT Devices)
+// ----------------------------
+
+if ($path === '/api/home/devices') {
+  [$userId, $u] = require_jwt_user();
+  $pdo = jarvis_pdo();
+  if ($method === 'GET') {
+    $stmt = $pdo->prepare("SELECT * FROM home_devices WHERE user_id=:u ORDER BY name ASC");
+    $stmt->execute([':u'=>$userId]);
+    $list = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    jarvis_respond(200, ['ok'=>true, 'devices'=>$list]);
+  }
+  if ($method === 'POST') {
+    // Create new device
+    $in = jarvis_json_input();
+    $name = trim($in['name'] ?? '');
+    $type = trim($in['type'] ?? 'switch');
+    if (!$name) jarvis_respond(400,['error'=>'name required']);
+    $stmt = $pdo->prepare("INSERT INTO home_devices (user_id, name, type) VALUES (:u, :n, :t)");
+    $stmt->execute([':u'=>$userId, ':n'=>$name, ':t'=>$type]);
+    jarvis_respond(201, ['ok'=>true, 'id'=>$pdo->lastInsertId()]);
+  }
+  jarvis_respond(405, ['error'=>'Method not allowed']);
+}
+
+if (preg_match('#^/api/home/devices/(\d+)/toggle$#', $path, $m)) {
+  if ($method !== 'POST') jarvis_respond(405,['error'=>'Method not allowed']);
+  [$userId, $u] = require_jwt_user();
+  $did = (int)$m[1];
+  $pdo = jarvis_pdo();
+  // Fetch current
+  $stmt = $pdo->prepare("SELECT id, status FROM home_devices WHERE id=:id AND user_id=:u");
+  $stmt->execute([':id'=>$did, ':u'=>$userId]);
+  $dev = $stmt->fetch(PDO::FETCH_ASSOC);
+  if (!$dev) jarvis_respond(404,['error'=>'device not found']);
+  
+  $newStatus = ($dev['status'] === 'on') ? 'off' : 'on';
+  $pdo->prepare("UPDATE home_devices SET status=:s WHERE id=:id")->execute([':s'=>$newStatus, ':id'=>$did]);
+  
+  jarvis_audit($userId, 'HOME_DEVICE_TOGGLE', 'home_device', ['device_id'=>$did, 'new_status'=>$newStatus, 'old_status'=>$dev['status']]);
+  jarvis_respond(200, ['ok'=>true, 'device_id'=>$did, 'status'=>$newStatus]);
 }
 
 jarvis_respond(404, ['error' => 'Not found']);

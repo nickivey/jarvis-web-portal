@@ -269,6 +269,7 @@ function jarvis_update_preferences(int $userId, array $fields): void {
     'last_instagram_check_at',
     'last_instagram_story_check_at',
     'last_weather_check_at',
+    'last_calendar_check_at',
   ];
   $sets=[]; $params=[':u'=>$userId];
   foreach ($fields as $k=>$v) {
@@ -543,7 +544,8 @@ function jarvis_store_calendar_event(int $userId, string $eventId, ?string $summ
 function jarvis_list_calendar_events(int $userId, int $limit=20): array {
   $pdo = jarvis_pdo();
   if (!$pdo) return [];
-  $stmt = $pdo->prepare('SELECT id,event_id,summary,description,start_dt,end_dt,location,raw_json,created_at FROM user_calendar_events WHERE user_id=:u ORDER BY start_dt DESC LIMIT :l');
+  // Show upcoming events (future only), sorted soonest to latest
+  $stmt = $pdo->prepare('SELECT id,event_id,summary,description,start_dt,end_dt,location,raw_json,created_at FROM user_calendar_events WHERE user_id=:u AND start_dt >= NOW() ORDER BY start_dt ASC LIMIT :l');
   $stmt->bindValue(':u',$userId,PDO::PARAM_INT);
   $stmt->bindValue(':l',$limit,PDO::PARAM_INT);
   $stmt->execute();

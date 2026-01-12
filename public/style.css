@@ -60,8 +60,23 @@ body::before{
   display:flex; gap:10px; align-items:center;
   font-weight:800; letter-spacing:.08em;
 }
-.brand img{width:28px;height:28px;display:block;filter:drop-shadow(0 0 14px rgba(0,212,255,.35))}
-.dot{width:10px;height:10px;border-radius:999px;background:var(--blue2);box-shadow:0 0 18px rgba(0,212,255,.85)}
+@keyframes pulse-ring {0%{box-shadow:0 0 0 0 rgba(0,212,255,0.7)}70%{box-shadow:0 0 0 10px rgba(0,212,255,0)}100%{box-shadow:0 0 0 0 rgba(0,212,255,0)}}
+@keyframes spin-slow {from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+
+.brand img{
+  width:28px;height:28px;display:block;
+  filter:drop-shadow(0 0 14px rgba(0,212,255,.35));
+  transition: transform 0.3s ease;
+}
+.brand:hover img { transform: scale(1.1) rotate(5deg); }
+
+.dot{
+  width:10px;height:10px;border-radius:999px;background:var(--blue2);
+  box-shadow:0 0 18px rgba(0,212,255,.85);
+  animation: pulse-ring 2s infinite;
+}
+.dot.listening { background: #ff4444; box-shadow: 0 0 18px rgba(255,68,68,0.85); animation: pulse-ring 1s infinite; }
+
 .navbar a{
   color:var(--txt);
   text-decoration:none;

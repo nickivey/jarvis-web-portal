@@ -16,6 +16,11 @@ if (!$prefs) {
 }
 $igToken = jarvis_oauth_get($userId, 'instagram');
 $googleToken = jarvis_oauth_get($userId, 'google');
+// Refresh calendar events on preferences page if connected
+if ($googleToken && !empty($googleToken['access_token']) && isset($_GET['refresh_calendar'])) {
+  try { jarvis_import_google_calendar($userId); } catch (Throwable $e) {}
+  $success = 'Calendar refresh triggered.';
+}
 $devices = jarvis_list_devices($userId);
 $success = '';
 $error = '';

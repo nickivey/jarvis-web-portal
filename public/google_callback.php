@@ -68,7 +68,15 @@ $name = (string)($infoObj['name'] ?? '');
 if (isset($_SESSION['user_id'])) {
   $currentId = (int)$_SESSION['user_id'];
   $expiresAt = $expiresIn ? gmdate('Y-m-d H:i:s', time() + $expiresIn) : null;
-  jarvis_oauth_set($currentId, 'google', $accessToken, $refreshToken, $expiresAt, 'openid email profile');
+  jarvis_oauth_set($currentId, 'google', $accessToken, $refreshToken, $expiresAt, 'openid email profile https://www.googleapis.com/auth/calendar.readonly');
+  
+  // Immediately try to verify calendar access by importing basic events
+  try {
+      if (function_exists('jarvis_import_google_calendar')) {
+          jarvis_import_google_calendar($currentId);
+      }
+  } catch (Throwable $e) {}
+
   jarvis_audit($currentId, 'OAUTH_CONNECTED', 'google', ['sub'=>$sub,'email'=>$email,'linked_by'=>'user']);
   header('Location: preferences.php?ok=google_connected'); exit;
 }

@@ -291,6 +291,14 @@ Content-Type: application/json
       </div>
 
       <!-- 5 -->
+      <div class="card" id="homeAutoCard">
+        <h3>Smart Home</h3>
+        <p class="muted" style="margin-bottom:10px">Control your connected devices.</p>
+        <div id="homeDevicesList" style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <p class="muted">Loading...</p>
+        </div>
+      </div>
+
       <div class="card">
         <h3>Shortcuts</h3>
         <p class="muted">Add “Hey Siri, JARVIS message” to send text hands-free.</p>
@@ -365,6 +373,41 @@ Content-Type: application/json
 
       // Map management and location refreshing
       let _mainMap = null, _miniMap = null;
+
+      // Smart Home Device Management
+      async function refreshHomeDevices(){
+        if (!window.jarvisApi) return;
+        try {
+          const list = document.getElementById('homeDevicesList');
+          const data = await window.jarvisApi.get('/api/home/devices', { ttl:0 });
+          if (data && data.devices && list) {
+            list.innerHTML = '';
+            if (data.devices.length === 0) {
+               list.innerHTML = '<p class="muted" style="grid-column:1/-1">No devices found.</p>';
+            } else {
+               data.devices.forEach(d=>{
+                 const btn = document.createElement('button');
+                 const isOn = (d.status === 'on');
+                 btn.className = 'btn ' + (isOn ? 'active' : 'secondary');
+                 btn.style.textAlign='left';
+                 btn.innerHTML = `<span>${d.name||'Device'}</span> <span style="font-size:11px;opacity:0.7">${ isOn ? 'ON' : 'OFF' }</span>`;
+                 if (isOn) btn.style.background = 'var(--blue)';
+                 btn.addEventListener('click', async ()=>{
+                   btn.disabled = true;
+                   try {
+                     const r = await window.jarvisApi.post('/api/home/devices/'+d.id+'/toggle', {});
+                     refreshHomeDevices();
+                   } catch(e){ btn.disabled=false; }
+                 });
+                 list.appendChild(btn);
+               });
+            }
+          }
+        } catch(e){}
+      }
+      // Poll devices occasionally
+      setInterval(refreshHomeDevices, 15000);
+      window.jarvisOn('auth.token.set', refreshHomeDevices);
 
       // Helper to update weather UI components
       window.jarvisUpdateWeather = function(data){
@@ -486,6 +529,34 @@ Content-Type: application/json
       // Pre-fill weather info if server-side fetched
       if (lastWeather && document.getElementById('jarvisWeather')) {
         document.getElementById('jarvisWeather').textContent = lastWeather.desc + ' • ' + (lastWeather.temp_c !== null ? lastWeather.temp_c + '°C' : '');
+      }
+
+      // Show connect calendar prompt if not connected
+      const googleToken = <?php echo json_encode(jarvis_oauth_get($userId, 'google')); ?>;
+      const calCard = document.querySelector('#weatherCard');
+      if (!googleToken || !googleToken.access_token) {
+        const connectHtml = document.createElement('div');
+        connectHtml.className = 'terminal';
+        connectHtml.style.marginTop = '10px';
+        connectHtml.innerHTML = `<div class="term-title">Google Calendar</div><div class="term-body"><p class="muted">Google Calendar is not connected. <a href="connect_google.php">Connect Calendar</a> to show events and receive reminders here.</p></div>`;
+        if (calCard) calCard.appendChild(connectHtml);
+      } else {
+        // If connected, fetch upcoming events and show at top of Home
+        (async function(){
+          try{
+            const resp = await (window.jarvisApi ? window.jarvisApi.get('/api/calendar?limit=6',{ttl:0,force:true}) : null);
+            if (resp && resp.ok && Array.isArray(resp.events) && resp.events.length) {
+              const eventsHtml = document.createElement('div');
+              eventsHtml.className = 'terminal';
+              eventsHtml.style.marginTop = '10px';
+              let inner = '<div class="term-title">Upcoming Events</div><div class="term-body"><ul style="margin:0;padding-left:18px">';
+              resp.events.forEach(e=>{ inner += `<li><strong>${e.summary||'(no title)'}</strong><div class="muted">${e.start_dt||''} ${e.location?(' • '+e.location):''}</div></li>` });
+              inner += '</ul></div>';
+              eventsHtml.innerHTML = inner;
+              if (calCard) calCard.appendChild(eventsHtml);
+            }
+          }catch(e){}
+        })();
       }
     })();
   </script>
