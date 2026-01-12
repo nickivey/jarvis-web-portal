@@ -116,6 +116,11 @@ body::before{
 }
 /* Desktop: 600px and up shows desktop links */
 @media(min-width:600px){
+  .navbar nav {
+     max-height: inherit !important; 
+     opacity: inherit !important; 
+    overflow: hidden;
+}
   .navbar nav{display:flex;gap:10px;align-items:center}
   .navbar .brand{min-width:220px}
   .navbar{padding:12px 24px}

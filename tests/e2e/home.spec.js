@@ -70,6 +70,40 @@ test('Home permissions & simple voice flow smoke test', async ({ page, context }
   const wj = await wresp.json();
   expect(wj && typeof wj.jarvis_response === 'string' && wj.jarvis_response.length > 0).toBeTruthy();
 
+  // --- Commands listing: GET /api/commands should return our recent commands
+  const listResp = await page.request.get('/api/commands', { headers: { 'Authorization': 'Bearer ' + tokenVal } });
+  const lj = await listResp.json();
+  expect(lj && Array.isArray(lj.commands)).toBeTruthy();
+  // Ensure at least one command contains whoami or weather
+  const found = lj.commands.some(c => (c.command_text||'').includes('whoami') || (c.command_text||'').includes('weather') || (c.jarvis_response||'').includes('You are'));
+  expect(found).toBeTruthy();
+
+  // --- Channels: post a local message containing a #tag and simple @mention (self) and verify listing
+  await page.request.post('/api/messages', { data: { channel: 'local:rhats', message: 'E2E test message #projX @e2e_bot', provider: 'local' }, headers: { 'Authorization': 'Bearer ' + tokenVal } });
+  const ch = await page.request.get('/api/messages?channel=local:rhats&limit=5', { headers: { 'Authorization': 'Bearer ' + tokenVal } });
+  const cj = await ch.json();
+  expect(cj && Array.isArray(cj.messages)).toBeTruthy();
+  const foundTag = cj.messages.some(m => (m.meta && Array.isArray(m.meta.tags) && m.meta.tags.includes('projX')) || (m.message_text || '').includes('#projX'));
+  expect(foundTag).toBeTruthy();
+
+  // Ensure mention produced a notification for the user (self-mention is allowed)
+  const notifResp = await page.request.get('/api/notifications?limit=10', { headers: { 'Authorization': 'Bearer ' + tokenVal } });
+  const notj = await notifResp.json();
+  expect(notj && Array.isArray(notj.notifications)).toBeTruthy();
+  const mentioned = notj.notifications.some(n => (n.type === 'mention' || (n.title||'').toLowerCase().includes('mentioned')));
+  expect(mentioned).toBeTruthy();
+
+  // Delete the channel message using API (owner) and verify it's removed
+  const toDelete = cj.messages.find(m => (m.message_text||'').includes('E2E test message'));
+  if (toDelete) {
+    const del = await page.request.delete('/api/messages/' + toDelete.id, { headers: { 'Authorization': 'Bearer ' + tokenVal } });
+    expect(del.status()).toBe(200);
+    const ch2 = await page.request.get('/api/messages?channel=local:rhats&limit=5', { headers: { 'Authorization': 'Bearer ' + tokenVal } });
+    const cj2 = await ch2.json();
+    const foundAfter = cj2.messages.some(m => m.id === toDelete.id);
+    expect(foundAfter).toBeFalsy();
+  }
+
 
   // Simulate an audio blob upload (as if recorded) and confirm it's saved via /api/voice
   await page.evaluate(async ()=>{
@@ -85,4 +119,51 @@ test('Home permissions & simple voice flow smoke test', async ({ page, context }
   const vjson = await voiceResp.json();
   await expect(vjson.ok).toBeTruthy();
   await expect(vjson.voice.some(v => (v.transcript||'').includes('auto test transcript'))).toBeTruthy();
+
+  // --- Photos upload test: simulate an image upload via Shortcuts / form-data
+  await page.evaluate(async ()=>{
+    if (!window.jarvisJwt) return;
+    const blob = new Blob(['dummy image content'], { type: 'image/jpeg' });
+    const fd = new FormData(); fd.append('file', blob, 'test.jpg'); fd.append('meta', JSON.stringify({ source: 'e2e-test' }));
+    const r = await fetch('/api/photos', { method: 'POST', body: fd, headers: { 'Authorization': 'Bearer ' + window.jarvisJwt } });
+    const j = await r.json();
+    window._last_photo = j;
+    return j;
+  });
+
+  const photoResp = await page.request.get('/api/photos?limit=5', { headers: { 'Authorization': 'Bearer ' + (await page.evaluate(()=>window.jarvisJwt)) } });
+  const pj = await photoResp.json();
+  expect(pj && pj.photos && Array.isArray(pj.photos)).toBeTruthy();
+  const found = pj.photos.some(p => (p.metadata && p.metadata.source === 'e2e-test') || (p.original_filename || '').includes('test.jpg'));
+  expect(found).toBeTruthy();
+
+  // Ensure we can download the newly uploaded photo
+  const last = pj.photos[0];
+  const dl = await page.request.get('/api/photos/' + last.id + '/download', { headers: { 'Authorization': 'Bearer ' + (await page.evaluate(()=>window.jarvisJwt)) } });
+  expect(dl && dl.status()).toBe(200);
+
+  // --- Device token flow: create a device upload token and upload with it
+  const tokenVal = await page.evaluate(()=>window.jarvisJwt);
+  const createTokenResp = await page.request.post('/api/device_tokens', { headers: { 'Authorization': 'Bearer ' + tokenVal }, data: { label: 'e2e-device', ttl_seconds: 300 } });
+  const ctj = await createTokenResp.json();
+  expect(ctj && ctj.token && ctj.token.token).toBeTruthy();
+  const deviceToken = ctj.token.token;
+
+  // upload using device token via browser fetch (to allow multipart FormData)
+  await page.evaluate(async (devTok) => {
+    const blob = new Blob(['device token upload'], { type: 'image/jpeg' });
+    const fd = new FormData();
+    fd.append('file', blob, 'device_test.jpg');
+    fd.append('meta', JSON.stringify({ source: 'e2e-device' }));
+    const r = await fetch('/api/photos', { method: 'POST', body: fd, headers: { 'Authorization': 'Bearer ' + devTok } });
+    const j = await r.json();
+    window._device_upload = j;
+    return j;
+  }, deviceToken);
+
+  const photosAfter = await page.request.get('/api/photos?limit=10', { headers: { 'Authorization': 'Bearer ' + tokenVal } });
+  const pj2 = await photosAfter.json();
+  expect(pj2 && Array.isArray(pj2.photos)).toBeTruthy();
+  const foundDevice = pj2.photos.some(p => (p.metadata && p.metadata.source === 'e2e-device') || (p.original_filename || '').includes('device_test.jpg'));
+  expect(foundDevice).toBeTruthy();
 });

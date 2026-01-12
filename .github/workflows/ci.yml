@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      # no extra services required
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: gd, mbstring, pdo_mysql
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Node deps
+        run: npm ci
+
+      - name: Start PHP built-in server
+        run: |
+          php -S 127.0.0.1:8000 -t . > /tmp/jarvis_server.log 2>&1 &
+          # wait for server
+          for i in {1..15}; do
+            if curl -sSf http://127.0.0.1:8000/api/ping >/dev/null 2>&1; then echo 'server up'; break; fi
+            sleep 1
+          done
+        env:
+          SITE_URL: http://127.0.0.1:8000
+
+      - name: Run PHP lint
+        run: |
+          echo "Running php -l" && find . -type f -name '*.php' -not -path './.git/*' -print0 | xargs -0 -n1 php -l
+
+      - name: Run PHP smoke tests
+        env:
+          TEST_BASE: http://127.0.0.1:8000
+        run: php scripts/smoke_test.php
+
+      - name: Run Playwright tests
+        uses: microsoft/playwright-github-action@v1
+        with:
+          # runs `npm ci` and `npx playwright install` for us
+          run: npx playwright test

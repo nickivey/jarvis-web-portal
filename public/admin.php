@@ -395,6 +395,42 @@ $users = jarvis_list_users(50,0, (string)($_GET['q'] ?? ''));
     </section>
 
     <section>
+      <h2>Command History</h2>
+      <p class="muted">View recent commands issued by users. Admins may filter by user.</p>
+      <?php
+        $cmdUserFilter = isset($_GET['cmd_user_id']) ? (int)$_GET['cmd_user_id'] : null;
+        $cmdQ = isset($_GET['cmd_q']) ? trim((string)$_GET['cmd_q']) : null;
+        $cmdLimit = isset($_GET['cmd_limit']) ? min(200, max(1, (int)$_GET['cmd_limit'])) : 50;
+        $cmds = jarvis_list_commands($cmdLimit, 0, ($cmdUserFilter ? $cmdUserFilter : null), $cmdQ);
+      ?>
+      <form method="get" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
+        <label>User ID: <input name="cmd_user_id" value="<?= htmlspecialchars((string)($cmdUserFilter ?? '')) ?>" placeholder="optional user id"></label>
+        <label>Query: <input name="cmd_q" value="<?= htmlspecialchars((string)($cmdQ ?? '')) ?>" placeholder="search text"></label>
+        <label>Limit: <input name="cmd_limit" value="<?= htmlspecialchars((string)($cmdLimit)) ?>" style="width:80px"></label>
+        <button class="btn" type="submit">Filter</button>
+      </form>
+      <?php if (empty($cmds)): ?>
+         <p class="muted">No commands found.</p>
+      <?php else: ?>
+        <table>
+          <thead><tr><th>When</th><th>User</th><th>Type</th><th>Command</th><th>Response</th><th>Meta</th></tr></thead>
+          <tbody>
+            <?php foreach ($cmds as $c): ?>
+              <tr>
+                <td style="white-space:nowrap"><?= htmlspecialchars($c['created_at'] ?? '') ?></td>
+                <td><?= htmlspecialchars((string)($c['user_id'] ?? '')) ?></td>
+                <td><?= htmlspecialchars((string)($c['type'] ?? '')) ?></td>
+                <td><?= htmlspecialchars((string)($c['command_text'] ?? '')) ?></td>
+                <td><?= htmlspecialchars((string)($c['jarvis_response'] ?? '')) ?></td>
+                <td><small class="muted"><?= htmlspecialchars(substr((string)($c['metadata_json'] ?? ''),0,200)) ?></small></td>
+              </tr>
+            <?php endforeach; ?>
+          </tbody>
+        </table>
+      <?php endif; ?>
+    </section>
+
+    <section>
       <h2>Weather API</h2>
       <p class="muted">JARVIS can fetch local weather when <code>OPENWEATHER_API_KEY</code> is configured (DB or env). You can also set a failsafe fallback via env <code>OPENWEATHER_API_KEY_DEFAULT</code>.
       </p>
