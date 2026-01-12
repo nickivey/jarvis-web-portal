@@ -467,3 +467,45 @@ function jarvis_list_calendar_events(int $userId, int $limit=20): array {
   $stmt->execute();
   return $stmt->fetchAll() ?: [];
 }
+
+// Password reset helpers
+function jarvis_initiate_password_reset(string $email): ?string {
+  $pdo = jarvis_pdo();
+  if (!$pdo) return null;
+  $stmt = $pdo->prepare('SELECT id FROM users WHERE email=:e LIMIT 1');
+  $stmt->execute([':e'=>$email]);
+  $row = $stmt->fetch();
+  if (!$row) return null;
+  $userId = (int)$row['id'];
+  $token = bin2hex(random_bytes(24));
+  $expiresAt = (new DateTime('+1 hour'))->format('Y-m-d H:i:s');
+  $pdo->prepare('UPDATE users SET password_reset_token=:t, password_reset_expires_at=:e WHERE id=:id')
+      ->execute([':t'=>$token, ':e'=>$expiresAt, ':id'=>$userId]);
+  return $token;
+}
+
+function jarvis_reset_password_with_token(string $token, string $newPasswordHash): bool {
+  $pdo = jarvis_pdo();
+  if (!$pdo) return false;
+  $stmt = $pdo->prepare('SELECT id FROM users WHERE password_reset_token=:t AND password_reset_expires_at > NOW() LIMIT 1');
+  $stmt->execute([':t'=>$token]);
+  $row = $stmt->fetch();
+  if (!$row) return false;
+  $userId = (int)$row['id'];
+  $pdo->prepare('UPDATE users SET password_hash=:p, password_reset_token=NULL, password_reset_expires_at=NULL WHERE id=:id')
+      ->execute([':p'=>$newPasswordHash, ':id'=>$userId]);
+  jarvis_audit($userId, 'PASSWORD_RESET', 'auth', null);
+  return true;
+}
+
+function jarvis_resend_email_verification(int $userId): bool {
+  $pdo = jarvis_pdo();
+  if (!$pdo) return false;
+  $user = jarvis_user_by_id($userId);
+  if (!$user) return false;
+  $token = bin2hex(random_bytes(24));
+  $pdo->prepare('UPDATE users SET email_verify_token=:t WHERE id=:id')->execute([':t'=>$token, ':id'=>$userId]);
+  jarvis_send_confirmation_email($user['email'], $user['username'], $token);
+  jarvis_audit($userId, 'EMAIL_VERIFICATION_RESENT', 'auth', null);
+  return true;
+}

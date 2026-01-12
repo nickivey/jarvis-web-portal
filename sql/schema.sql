@@ -8,6 +8,8 @@ CREATE TABLE IF NOT EXISTS users (
   password_hash VARCHAR(255) NOT NULL,
   email_verify_token VARCHAR(128) NULL,
   email_verified_at DATETIME NULL,
+  password_reset_token VARCHAR(128) NULL,
+  password_reset_expires_at DATETIME NULL,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   last_login_at DATETIME NULL,
   last_seen_at DATETIME NULL,

@@ -22,6 +22,7 @@ unset($_SESSION['pending_user']);
       <div class="success">
         <p>If an email service is configured, we sent a confirmation link<?php echo $u ? ' for <b>'.htmlspecialchars($u).'</b>' : ''; ?>.</p>
         <p>Open the link to activate your account, then return to login.</p>
+        <p style="margin-top:12px;font-size:13px">Didn't receive it? <a href="verify_email.php" style="color:var(--blue2)">Click here to resend</a> (you'll need to log in first).</p>
       </div>
       <div class="nav-links"><a href="login.php">Back to login</a></div>
     </div>
