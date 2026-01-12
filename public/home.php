@@ -230,6 +230,7 @@ $phone = (string)($dbUser['phone_e164'] ?? '');
           <form class="chatinput" id="chatForm">
             <div style="display:flex;flex-direction:column;gap:8px;">
               <textarea name="message" id="messageInput" placeholder="Type a message to JARVIS..." style="flex:1;min-height:56px"></textarea>
+              <div style="margin-top:6px"><small class="muted">Tip: Press <b>Enter</b> to send. Use <b>Shift+Enter</b> to insert a newline.</small></div>
               <div style="display:flex;gap:8px;align-items:center;justify-content:space-between;margin-top:6px">
                 <div style="display:flex;gap:8px;align-items:center">
                   <button type="button" id="micBtn" class="btn" title="Start/Stop voice input">🎤</button>
@@ -1090,6 +1091,21 @@ Content-Type: application/json
         ev.preventDefault(); ev.stopPropagation(); ev.stopImmediatePropagation && ev.stopImmediatePropagation();
         await handleSendAction();
       });
+
+      // Support Enter-to-send: Enter sends, Shift+Enter inserts a newline, Ctrl/Cmd/Alt+Enter ignored (user-intent modifiers)
+      try{
+        const msgInputEl = document.getElementById('messageInput');
+        if (msgInputEl) {
+          msgInputEl.addEventListener('keydown', async (ev)=>{
+            if (ev.key === 'Enter' || ev.keyCode === 13) {
+              // If user intends a newline or using modifier keys, skip sending
+              if (ev.shiftKey || ev.ctrlKey || ev.metaKey || ev.altKey) return;
+              ev.preventDefault(); ev.stopPropagation();
+              await handleSendAction();
+            }
+          });
+        }
+      }catch(e){ console.error('Enter-to-send handler failed', e); }
 
       const sendBtnEl = document.getElementById('sendBtn');
       if (sendBtnEl) sendBtnEl.addEventListener('click', async (ev) => {
