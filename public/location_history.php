@@ -80,10 +80,15 @@ $focusLon = isset($_GET['lon']) ? (float)$_GET['lon'] : null;
     (function(){
       const token = <?php echo $webJwt ? json_encode($webJwt) : 'null'; ?>;
       let _map = null;
+      function osmEmbedUrl(centerLat, centerLon, zoom=12){
+        const lat = parseFloat(centerLat); const lon = parseFloat(centerLon); const delta = 0.02;
+        const left = (lon - delta).toFixed(6), bottom = (lat - delta).toFixed(6), right = (lon + delta).toFixed(6), top = (lat + delta).toFixed(6);
+        return `https://www.openstreetmap.org/export/embed.html?bbox=${left},${bottom},${right},${top}&layer=mapnik&marker=${lat},${lon}`;
+      }
       function setEmbedMap(centerLat, centerLon, zoom=12){
         const el = document.getElementById('map');
         if (!el) return;
-        const src = `https://www.google.com/maps?q=${encodeURIComponent(centerLat)},${encodeURIComponent(centerLon)}&z=${zoom}&output=embed`;
+        const src = osmEmbedUrl(centerLat, centerLon, zoom);
         el.innerHTML = `<iframe class="embedMapIframe" src="${src}" style="width:100%;height:100%;border:0;" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>`;
         _map = 'embed';
       }

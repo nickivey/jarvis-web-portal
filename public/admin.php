@@ -221,7 +221,7 @@ $users = jarvis_list_users(50,0, (string)($_GET['q'] ?? ''));
                 <td>
                   <?php if (!empty($meta['location'])): ?>
                     <?php $loc = $meta['location']; ?>
-                    <div>Accessed: <a href="https://www.google.com/maps?q=<?= htmlspecialchars($loc['lat']) ?>,<?= htmlspecialchars($loc['lon']) ?>" target="_blank"><?= number_format((float)$loc['lat'],4) ?>, <?= number_format((float)$loc['lon'],4) ?></a></div>
+                    <div>Accessed: <a href="https://www.openstreetmap.org/?mlat=<?= htmlspecialchars($loc['lat']) ?>&mlon=<?= htmlspecialchars($loc['lon']) ?>#map=12/<?= htmlspecialchars($loc['lat']) ?>/<?= htmlspecialchars($loc['lon']) ?>" target="_blank"><?= number_format((float)$loc['lat'],4) ?>, <?= number_format((float)$loc['lon'],4) ?></a></div>
                     <div class="muted">Acc: <?= (int)($loc['accuracy']??0) ?>m</div>
                   <?php else: ?>
                     <div class="muted">No location data</div>

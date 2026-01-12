@@ -236,7 +236,7 @@ $phone = (string)($dbUser['phone_e164'] ?? '');
                   <button type="button" id="voiceCmdBtn" class="btn" title="Voice-only command">🎙️ Voice Cmd</button>
                 </div>
                 <div style="display:flex;gap:8px;align-items:center">
-                  <button type="submit" name="send_chat" value="1" id="sendBtn" class="btn">Send</button>
+                  <button type="button" name="send_chat" value="1" id="sendBtn" class="btn">Send</button>
                   <button type="button" id="testVoiceBtn" class="btn" title="Upload sample audio and send">Test Voice</button>
                 </div>
               </div>
@@ -438,11 +438,19 @@ Content-Type: application/json
         try{ const el = document.getElementById(elId); if (el) el.innerHTML=''; }catch(e){}
       }
       // Use an embedded third-party map (Google Maps embed) instead of Leaflet
+      function osmEmbedUrl(centerLat, centerLon, zoom=13){
+        // Build a small bbox around the center to center the embedded map
+        const lat = parseFloat(centerLat); const lon = parseFloat(centerLon); const z = parseInt(zoom) || 13;
+        const delta = 0.02; // ~2km box; simple fixed delta is fine for small zoom levels
+        const left = (lon - delta).toFixed(6), bottom = (lat - delta).toFixed(6), right = (lon + delta).toFixed(6), top = (lat + delta).toFixed(6);
+        return `https://www.openstreetmap.org/export/embed.html?bbox=${left},${bottom},${right},${top}&layer=mapnik&marker=${lat},${lon}`;
+      }
+
       function makeEmbedMap(elId, centerLat, centerLon, zoom=13){
         destroyMap(elId, elId === 'map' ? _mainMap : _miniMap);
         const el = document.getElementById(elId);
         if (!el) return null;
-        const src = `https://www.google.com/maps?q=${encodeURIComponent(centerLat)},${encodeURIComponent(centerLon)}&z=${zoom}&output=embed`;
+        const src = osmEmbedUrl(centerLat, centerLon, zoom);
         el.innerHTML = `<iframe class="embedMapIframe" src="${src}" style="width:100%;height:100%;border:0;" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>`;
         if (elId === 'map') _mainMap = 'embed'; else _miniMap = 'embed';
         return true;
@@ -1059,29 +1067,34 @@ Content-Type: application/json
       }
 
       const chatForm = document.getElementById('chatForm');
-      if (chatForm) chatForm.addEventListener('submit', async (ev) => {
-        ev.preventDefault(); ev.stopPropagation(); ev.stopImmediatePropagation && ev.stopImmediatePropagation();
-        // If there's a pending recorded audio, send that instead of text if present
+      async function handleSendAction(){
         try{
           if (sendBtn && sendBtn.dataset && sendBtn.dataset.pendingVoice) {
             const pendingId = sendBtn.dataset.pendingVoice;
-            // send a command with voice_input_id and no text (the server can use transcript or do STT on file)
             try{ await fetch('/api/voice/'+pendingId+'/download', { method: 'HEAD', headers: sendBtn && token ? { 'Authorization': 'Bearer ' + token } : {} }); }catch(e){}
-            // audit event: user submitted recorded voice
             try{ if (token) fetch('/api/audit', { method:'POST', headers:{ 'Content-Type':'application/json','Authorization':'Bearer '+token }, body: JSON.stringify({ action: 'VOICE_SUBMIT', entity: 'voice', metadata: { id: pendingId } }) }); }catch(e){}
-            // Send an empty text command with voice_input_id to correlate audio on server-side
             await sendCommand('', 'voice', { voice_input_id: pendingId });
-            // clear pending flag
             try{ delete sendBtn.dataset.pendingVoice; sendBtn.textContent = 'Send'; window._pendingVoiceToSend = null; }catch(e){}
             return;
           }
-        }catch(e){}
+        }catch(e){ console.error('handleSendAction voice check failed', e); }
 
         const msg = (msgInput.value || '').trim();
         if (!msg) return;
         appendMessage(msg, 'me');
         msgInput.value = '';
         await sendCommand(msg, lastInputType);
+      }
+
+      if (chatForm) chatForm.addEventListener('submit', async (ev) => {
+        ev.preventDefault(); ev.stopPropagation(); ev.stopImmediatePropagation && ev.stopImmediatePropagation();
+        await handleSendAction();
+      });
+
+      const sendBtnEl = document.getElementById('sendBtn');
+      if (sendBtnEl) sendBtnEl.addEventListener('click', async (ev) => {
+        ev.preventDefault(); ev.stopPropagation();
+        await handleSendAction();
       });
 
       // On load, do not prompt for notifications automatically; just sync checkbox state
