@@ -120,7 +120,7 @@ $phone = (string)($dbUser['phone_e164'] ?? '');
   <link rel="stylesheet" href="style.css" />
   <!-- Using embedded third-party maps (Google Maps iframe) for location previews -->
 </head>
-<body class="overlay-active">
+<body>
   <div class="navbar">
     <div class="brand">
       <img src="images/logo.svg" alt="JARVIS logo" />
@@ -160,7 +160,7 @@ $phone = (string)($dbUser['phone_e164'] ?? '');
     <?php if($success):?><div class="success"><p><?php echo htmlspecialchars($success); ?></p></div><?php endif;?>
     <?php if($error):?><div class="error"><p><?php echo htmlspecialchars($error); ?></p></div><?php endif;?>
 
-    <div class="grid" id="homeMainGrid">
+    <div class="grid">
       <!-- 1 -->
       <div class="card">
         <h3>Connection Status</h3>
@@ -233,8 +233,8 @@ $phone = (string)($dbUser['phone_e164'] ?? '');
         <div style="margin-top:8px"><a href="/public/photos.php">Open photo gallery</a> • <a href="/public/ios_photos.php">iOS setup</a></div>
       </div>
 
-      <div class="card overlay-card" id="commandCenterCard">
-        <h3>Command Center</h3>
+      <div class="card">
+        <h3>JARVIS Chat</h3>
         <div class="chatbox">
           <form class="chatinput" id="chatForm">
             <div style="display:flex;flex-direction:column;gap:8px;">
@@ -275,7 +275,21 @@ $phone = (string)($dbUser['phone_e164'] ?? '');
         </div>
       </div>
 
-      <!-- 3 (Removed .NET Desktop tile per request) -->
+      <!-- 3 -->
+      <div class="card">
+        <h3>REST for .NET Desktop</h3>
+        <p class="muted">Use these endpoints from a desktop app:</p>
+        <pre><code>POST /api/auth/login
+POST /api/command
+POST /api/messages
+POST /api/location
+
+Example: send a Slack message
+Content-Type: application/json
+{
+  "message": "Hello from .NET"
+}</code></pre>
+      </div>
 
       <!-- 4 -->
       <div class="card">
@@ -344,7 +358,7 @@ $phone = (string)($dbUser['phone_e164'] ?? '');
     </div>
   </div>
 
-  <div class="container" id="homeSecondary">
+  <div class="container">
     <div class="card">
       <h3>Upcoming Calendar Events</h3>
       <?php if (empty($calendarEvents)): ?>
