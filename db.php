@@ -485,14 +485,29 @@ function jarvis_log_api_request(?int $userId, string $clientType, string $endpoi
 function jarvis_log_command(int $userId, string $type, ?string $commandText, string $jarvisResponse, ?array $meta=null): void {
   $pdo = jarvis_pdo();
   if (!$pdo) return;
-  $pdo->prepare('INSERT INTO command_history (user_id,type,command_text,jarvis_response,metadata_json) VALUES (:u,:t,:c,:r,:m)')
-      ->execute([
-        ':u'=>$userId,
-        ':t'=>$type,
-        ':c'=>$commandText,
-        ':r'=>$jarvisResponse,
-        ':m'=>$meta ? json_encode($meta) : null,
-      ]);
+  $stmt = $pdo->prepare('INSERT INTO command_history (user_id,type,command_text,jarvis_response,metadata_json) VALUES (:u,:t,:c,:r,:m)');
+  $stmt->execute([
+    ':u'=>$userId,
+    ':t'=>$type,
+    ':c'=>$commandText,
+    ':r'=>$jarvisResponse,
+    ':m'=>$meta ? json_encode($meta) : null,
+  ]);
+  $cmdId = (int)$pdo->lastInsertId();
+
+  // If this command is associated with a voice input, create an audit log entry linking the command and the audio file
+  if ($meta && isset($meta['voice_input_id'])) {
+    $vid = (int)$meta['voice_input_id'];
+    try {
+      $v = jarvis_voice_input_by_id($vid);
+      $auditMeta = $meta;
+      $auditMeta['voice_input'] = $v ? $v : ['id'=>$vid];
+      $auditMeta['command_id'] = $cmdId;
+      jarvis_audit($userId, 'COMMAND_VOICE_PROCESSED', 'voice', $auditMeta);
+    } catch (Throwable $e) {
+      // ignore auditing failures
+    }
+  }
 }
 
 function jarvis_recent_commands(int $userId, int $limit=20): array {
