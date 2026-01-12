@@ -237,10 +237,40 @@ $phone = (string)($dbUser['phone_e164'] ?? '');
                 $weatherState = $addr['state'] ?? '';
               }
               $locationStr = trim($weatherCity . ($weatherCity && $weatherState ? ', ' : '') . $weatherState);
+              $animClass = $lastWeather['icon_anim'] ?? 'cloudy';
             ?>
             <div class="weather-widget">
               <div class="weather-main">
-                <div class="weather-icon"><?php echo $lastWeather['icon'] ?? '🌡️'; ?></div>
+                <div class="weather-icon-animated <?php echo htmlspecialchars($animClass); ?>">
+                  <?php if ($animClass === 'sunny'): ?>
+                    <div class="sun"><div class="sun-rays"></div></div>
+                  <?php elseif ($animClass === 'moon'): ?>
+                    <div class="moon"><div class="moon-crater"></div><div class="moon-crater c2"></div></div>
+                  <?php elseif ($animClass === 'partly-cloudy'): ?>
+                    <div class="sun small"><div class="sun-rays"></div></div>
+                    <div class="cloud front"></div>
+                  <?php elseif ($animClass === 'cloudy'): ?>
+                    <div class="cloud"></div>
+                    <div class="cloud back"></div>
+                  <?php elseif ($animClass === 'foggy'): ?>
+                    <div class="fog-line"></div>
+                    <div class="fog-line f2"></div>
+                    <div class="fog-line f3"></div>
+                  <?php elseif ($animClass === 'rainy'): ?>
+                    <div class="cloud"></div>
+                    <div class="rain"><div class="drop"></div><div class="drop d2"></div><div class="drop d3"></div></div>
+                  <?php elseif ($animClass === 'stormy'): ?>
+                    <div class="cloud dark"></div>
+                    <div class="rain heavy"><div class="drop"></div><div class="drop d2"></div><div class="drop d3"></div><div class="drop d4"></div></div>
+                  <?php elseif ($animClass === 'snowy'): ?>
+                    <div class="cloud"></div>
+                    <div class="snow"><div class="flake"></div><div class="flake f2"></div><div class="flake f3"></div></div>
+                  <?php elseif ($animClass === 'thunderstorm'): ?>
+                    <div class="cloud dark"></div>
+                    <div class="lightning"></div>
+                    <div class="rain heavy"><div class="drop"></div><div class="drop d2"></div><div class="drop d3"></div></div>
+                  <?php endif; ?>
+                </div>
                 <div class="weather-temp">
                   <span class="temp-current"><?php echo ($lastWeather['temp_c'] !== null) ? round($lastWeather['temp_c']) : '--'; ?>°</span>
                   <span class="temp-unit">C</span>

@@ -267,42 +267,43 @@ function jarvis_fetch_weather(float $lat, float $lon): ?array {
   $weatherCode = (int)($current['weather_code'] ?? 0);
   $isDay = (bool)($current['is_day'] ?? true);
   
-  // Map WMO weather codes to descriptions and icons
+  // Map WMO weather codes to descriptions, emojis, and animation classes
   // https://open-meteo.com/en/docs (see WMO Weather interpretation codes)
   $weatherData = [
-    0 => ['desc' => 'Clear sky', 'icon_day' => '☀️', 'icon_night' => '🌙'],
-    1 => ['desc' => 'Mainly clear', 'icon_day' => '🌤️', 'icon_night' => '🌙'],
-    2 => ['desc' => 'Partly cloudy', 'icon_day' => '⛅', 'icon_night' => '☁️'],
-    3 => ['desc' => 'Overcast', 'icon_day' => '☁️', 'icon_night' => '☁️'],
-    45 => ['desc' => 'Foggy', 'icon_day' => '🌫️', 'icon_night' => '🌫️'],
-    48 => ['desc' => 'Rime fog', 'icon_day' => '🌫️', 'icon_night' => '🌫️'],
-    51 => ['desc' => 'Light drizzle', 'icon_day' => '🌦️', 'icon_night' => '🌧️'],
-    53 => ['desc' => 'Drizzle', 'icon_day' => '🌦️', 'icon_night' => '🌧️'],
-    55 => ['desc' => 'Dense drizzle', 'icon_day' => '🌧️', 'icon_night' => '🌧️'],
-    56 => ['desc' => 'Freezing drizzle', 'icon_day' => '🌧️', 'icon_night' => '🌧️'],
-    57 => ['desc' => 'Heavy freezing drizzle', 'icon_day' => '🌧️', 'icon_night' => '🌧️'],
-    61 => ['desc' => 'Light rain', 'icon_day' => '🌦️', 'icon_night' => '🌧️'],
-    63 => ['desc' => 'Rain', 'icon_day' => '🌧️', 'icon_night' => '🌧️'],
-    65 => ['desc' => 'Heavy rain', 'icon_day' => '🌧️', 'icon_night' => '🌧️'],
-    66 => ['desc' => 'Freezing rain', 'icon_day' => '🌧️', 'icon_night' => '🌧️'],
-    67 => ['desc' => 'Heavy freezing rain', 'icon_day' => '🌧️', 'icon_night' => '🌧️'],
-    71 => ['desc' => 'Light snow', 'icon_day' => '🌨️', 'icon_night' => '🌨️'],
-    73 => ['desc' => 'Snow', 'icon_day' => '❄️', 'icon_night' => '❄️'],
-    75 => ['desc' => 'Heavy snow', 'icon_day' => '❄️', 'icon_night' => '❄️'],
-    77 => ['desc' => 'Snow grains', 'icon_day' => '🌨️', 'icon_night' => '🌨️'],
-    80 => ['desc' => 'Light showers', 'icon_day' => '🌦️', 'icon_night' => '🌧️'],
-    81 => ['desc' => 'Showers', 'icon_day' => '🌧️', 'icon_night' => '🌧️'],
-    82 => ['desc' => 'Heavy showers', 'icon_day' => '🌧️', 'icon_night' => '🌧️'],
-    85 => ['desc' => 'Snow showers', 'icon_day' => '🌨️', 'icon_night' => '🌨️'],
-    86 => ['desc' => 'Heavy snow showers', 'icon_day' => '❄️', 'icon_night' => '❄️'],
-    95 => ['desc' => 'Thunderstorm', 'icon_day' => '⛈️', 'icon_night' => '⛈️'],
-    96 => ['desc' => 'Thunderstorm with hail', 'icon_day' => '⛈️', 'icon_night' => '⛈️'],
-    99 => ['desc' => 'Severe thunderstorm', 'icon_day' => '⛈️', 'icon_night' => '⛈️'],
+    0 => ['desc' => 'Clear sky', 'icon_day' => '☀️', 'icon_night' => '🌙', 'anim_day' => 'sunny', 'anim_night' => 'moon'],
+    1 => ['desc' => 'Mainly clear', 'icon_day' => '🌤️', 'icon_night' => '🌙', 'anim_day' => 'partly-cloudy', 'anim_night' => 'moon'],
+    2 => ['desc' => 'Partly cloudy', 'icon_day' => '⛅', 'icon_night' => '☁️', 'anim_day' => 'partly-cloudy', 'anim_night' => 'cloudy'],
+    3 => ['desc' => 'Overcast', 'icon_day' => '☁️', 'icon_night' => '☁️', 'anim_day' => 'cloudy', 'anim_night' => 'cloudy'],
+    45 => ['desc' => 'Foggy', 'icon_day' => '🌫️', 'icon_night' => '🌫️', 'anim_day' => 'foggy', 'anim_night' => 'foggy'],
+    48 => ['desc' => 'Rime fog', 'icon_day' => '🌫️', 'icon_night' => '🌫️', 'anim_day' => 'foggy', 'anim_night' => 'foggy'],
+    51 => ['desc' => 'Light drizzle', 'icon_day' => '🌦️', 'icon_night' => '🌧️', 'anim_day' => 'rainy', 'anim_night' => 'rainy'],
+    53 => ['desc' => 'Drizzle', 'icon_day' => '🌦️', 'icon_night' => '🌧️', 'anim_day' => 'rainy', 'anim_night' => 'rainy'],
+    55 => ['desc' => 'Dense drizzle', 'icon_day' => '🌧️', 'icon_night' => '🌧️', 'anim_day' => 'rainy', 'anim_night' => 'rainy'],
+    56 => ['desc' => 'Freezing drizzle', 'icon_day' => '🌧️', 'icon_night' => '🌧️', 'anim_day' => 'rainy', 'anim_night' => 'rainy'],
+    57 => ['desc' => 'Heavy freezing drizzle', 'icon_day' => '🌧️', 'icon_night' => '🌧️', 'anim_day' => 'rainy', 'anim_night' => 'rainy'],
+    61 => ['desc' => 'Light rain', 'icon_day' => '🌦️', 'icon_night' => '🌧️', 'anim_day' => 'rainy', 'anim_night' => 'rainy'],
+    63 => ['desc' => 'Rain', 'icon_day' => '🌧️', 'icon_night' => '🌧️', 'anim_day' => 'rainy', 'anim_night' => 'rainy'],
+    65 => ['desc' => 'Heavy rain', 'icon_day' => '🌧️', 'icon_night' => '🌧️', 'anim_day' => 'stormy', 'anim_night' => 'stormy'],
+    66 => ['desc' => 'Freezing rain', 'icon_day' => '🌧️', 'icon_night' => '🌧️', 'anim_day' => 'rainy', 'anim_night' => 'rainy'],
+    67 => ['desc' => 'Heavy freezing rain', 'icon_day' => '🌧️', 'icon_night' => '🌧️', 'anim_day' => 'stormy', 'anim_night' => 'stormy'],
+    71 => ['desc' => 'Light snow', 'icon_day' => '🌨️', 'icon_night' => '🌨️', 'anim_day' => 'snowy', 'anim_night' => 'snowy'],
+    73 => ['desc' => 'Snow', 'icon_day' => '❄️', 'icon_night' => '❄️', 'anim_day' => 'snowy', 'anim_night' => 'snowy'],
+    75 => ['desc' => 'Heavy snow', 'icon_day' => '❄️', 'icon_night' => '❄️', 'anim_day' => 'snowy', 'anim_night' => 'snowy'],
+    77 => ['desc' => 'Snow grains', 'icon_day' => '🌨️', 'icon_night' => '🌨️', 'anim_day' => 'snowy', 'anim_night' => 'snowy'],
+    80 => ['desc' => 'Light showers', 'icon_day' => '🌦️', 'icon_night' => '🌧️', 'anim_day' => 'rainy', 'anim_night' => 'rainy'],
+    81 => ['desc' => 'Showers', 'icon_day' => '🌧️', 'icon_night' => '🌧️', 'anim_day' => 'rainy', 'anim_night' => 'rainy'],
+    82 => ['desc' => 'Heavy showers', 'icon_day' => '🌧️', 'icon_night' => '🌧️', 'anim_day' => 'stormy', 'anim_night' => 'stormy'],
+    85 => ['desc' => 'Snow showers', 'icon_day' => '🌨️', 'icon_night' => '🌨️', 'anim_day' => 'snowy', 'anim_night' => 'snowy'],
+    86 => ['desc' => 'Heavy snow showers', 'icon_day' => '❄️', 'icon_night' => '❄️', 'anim_day' => 'snowy', 'anim_night' => 'snowy'],
+    95 => ['desc' => 'Thunderstorm', 'icon_day' => '⛈️', 'icon_night' => '⛈️', 'anim_day' => 'thunderstorm', 'anim_night' => 'thunderstorm'],
+    96 => ['desc' => 'Thunderstorm with hail', 'icon_day' => '⛈️', 'icon_night' => '⛈️', 'anim_day' => 'thunderstorm', 'anim_night' => 'thunderstorm'],
+    99 => ['desc' => 'Severe thunderstorm', 'icon_day' => '⛈️', 'icon_night' => '⛈️', 'anim_day' => 'thunderstorm', 'anim_night' => 'thunderstorm'],
   ];
   
-  $info = $weatherData[$weatherCode] ?? ['desc' => 'Unknown', 'icon_day' => '🌡️', 'icon_night' => '🌡️'];
+  $info = $weatherData[$weatherCode] ?? ['desc' => 'Unknown', 'icon_day' => '🌡️', 'icon_night' => '🌡️', 'anim_day' => 'cloudy', 'anim_night' => 'cloudy'];
   $desc = $info['desc'];
   $icon = $isDay ? $info['icon_day'] : $info['icon_night'];
+  $animClass = $isDay ? $info['anim_day'] : $info['anim_night'];
   
   // Get today's high/low from daily forecast
   $highTemp = null;
@@ -320,6 +321,7 @@ function jarvis_fetch_weather(float $lat, float $lon): ?array {
     'low_c' => $lowTemp,
     'desc' => $desc,
     'icon' => $icon,
+    'icon_anim' => $animClass,
     'is_day' => $isDay,
     'humidity' => isset($current['relative_humidity_2m']) ? (int)$current['relative_humidity_2m'] : null,
     'wind_speed' => isset($current['wind_speed_10m']) ? (float)$current['wind_speed_10m'] : null,
