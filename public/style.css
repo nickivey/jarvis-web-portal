@@ -213,3 +213,36 @@ code, pre{background:rgba(2,7,18,.55);border:1px solid rgba(30,120,255,.18);bord
 .navbar nav{max-height:0;opacity:0;overflow:hidden}
 .navbar.nav-open nav{max-height:240px;opacity:1}
 
+/* Global Jarvis loading overlay */
+.loader-overlay{
+  position:fixed; inset:0; z-index:9999; display:flex; align-items:center; justify-content:center;
+  background:linear-gradient(180deg, rgba(1,3,8,.86), rgba(4,9,18,.86));
+  color:var(--txt); text-align:center; padding:24px; backdrop-filter: blur(6px);
+}
+.loader-panel{max-width:360px;padding:28px;border-radius:14px;border:1px solid rgba(30,120,255,.12);background:linear-gradient(180deg, rgba(7,18,42,.7), rgba(2,7,18,.55));box-shadow:0 20px 60px rgba(0,0,0,.6);}
+.loader-logo{width:64px;height:64px;margin:0 auto 12px;display:block;filter:drop-shadow(0 0 18px rgba(0,212,255,.25))}
+.loader-title{font-weight:800;letter-spacing:.12em;margin:6px 0 8px}
+.loader-sub{color:var(--muted);font-size:13px;margin-bottom:12px}
+
+/* ring spinner */
+.loader-ring{width:48px;height:48px;margin:6px auto 14px;border-radius:999px;border:4px solid rgba(255,255,255,.06);border-top-color:var(--blue2);animation:spin 1.1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* subtle background animated scanlines */
+.loader-overlay::before{content:"";position:absolute;inset:0;background-image:repeating-linear-gradient(0deg, rgba(255,255,255,.02) 0px, rgba(255,255,255,.01) 1px, transparent 4px);opacity:.18;mix-blend-mode:screen;pointer-events:none;animation:loaderDrift 10s linear infinite}
+@keyframes loaderDrift{0%{transform:translateY(0)}100%{transform:translateY(50px)}}
+
+/* Dot typing */
+.loader-dots{display:inline-block;width:64px}
+.loader-dots span{display:inline-block;margin:0 4px;width:8px;height:8px;border-radius:999px;background:var(--blue2);opacity:.2;transform:translateY(0);animation:dotJump 1s infinite ease-in-out}
+.loader-dots span:nth-child(2){animation-delay:.12s}
+.loader-dots span:nth-child(3){animation-delay:.24s}
+@keyframes dotJump{0%{opacity:.15;transform:translateY(0)}50%{opacity:1;transform:translateY(-6px)}100%{opacity:.15;transform:translateY(0)}}
+
+/* Respect reduced motion */
+@media (prefers-reduced-motion: reduce){
+  .loader-ring{animation:none}
+  .loader-overlay::before{animation:none}
+  .loader-dots span{animation:none}
+}
+
