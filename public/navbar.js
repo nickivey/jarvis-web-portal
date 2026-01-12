@@ -167,7 +167,22 @@
                   const b = document.createElement('b'); b.textContent = n.title || '';
                   const body = document.createElement('div'); body.textContent = n.body || '';
                   const meta = document.createElement('div'); meta.className='meta'; meta.textContent = (n.created_at || '') + ((n.is_read == 0) ? ' • UNREAD' : '');
-                  div.appendChild(b); div.appendChild(body); div.appendChild(meta); listEl.appendChild(div);
+                  div.appendChild(b); div.appendChild(body); div.appendChild(meta);
+                  if (n.is_read == 0) {
+                    const btn = document.createElement('button'); btn.className='btn secondary'; btn.style.marginTop='8px'; btn.textContent='Mark as read';
+                    btn.addEventListener('click', async ()=>{
+                      try {
+                        if (!window.jarvisApi) return;
+                        await window.jarvisApi.post('/api/notifications/' + (n.id||n.ID) + '/read', {});
+                        // refresh
+                        window.jarvisInvalidateNotifications && window.jarvisInvalidateNotifications();
+                        // Fire event
+                        window.jarvisEmit('notification.read', { id: n.id||n.ID });
+                      } catch(e){}
+                    });
+                    div.appendChild(btn);
+                  }
+                  listEl.appendChild(div);
                 });
               }
             }

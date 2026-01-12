@@ -428,16 +428,17 @@ Content-Type: application/json
             if (!text.trim()) return;
             appendMessage(text, 'me');
             try {
-              const r = await fetch('/api/command', {
-                method: 'POST', headers: { 'Content-Type':'application/json', 'Authorization': token ? 'Bearer '+token : '' }, body: JSON.stringify({ text, type: 'voice' })
-              });
-              const data = await r.json().catch(()=>null);
+              if (window.jarvisShowLoader) jarvisShowLoader();
+              const data = await (window.jarvisApi ? window.jarvisApi.post('/api/command', { text, type: 'voice' }) : (async ()=>{ const r=await fetch('/api/command',{method:'POST',headers:{'Content-Type':'application/json','Authorization': token ? 'Bearer '+token : ''},body:JSON.stringify({text,type:'voice'})}); return r.json(); })());
               if (data && typeof data.jarvis_response === 'string' && data.jarvis_response.trim() !== ''){
                 appendMessage(data.jarvis_response, 'jarvis');
                 speakText(data.jarvis_response);
                 showNotification(data.jarvis_response);
+                window.jarvisEmit && window.jarvisEmit('command.response', data);
+                if (window.jarvisInvalidateNotifications) window.jarvisInvalidateNotifications();
               }
             } catch(e) {}
+            finally { if (window.jarvisHideLoader) jarvisHideLoader(); }
           } else {
             msgInput.value = text;
           }
@@ -482,26 +483,17 @@ Content-Type: application/json
           appendMessage(text, 'me');
           lastInputType = 'voice';
           try {
-            const r = await fetch('/api/command', {
-              method: 'POST', headers: { 'Content-Type':'application/json', 'Authorization': token ? 'Bearer '+token : '' }, body: JSON.stringify({ text, type: 'voice' })
-            });
-            const data = await r.json().catch(()=>null);
+            if (window.jarvisShowLoader) jarvisShowLoader();
+            const data = await (window.jarvisApi ? window.jarvisApi.post('/api/command', { text, type: 'voice' }) : (async ()=>{ const r=await fetch('/api/command',{method:'POST',headers:{'Content-Type':'application/json','Authorization': token? 'Bearer '+token : ''},body:JSON.stringify({text,type:'voice'})}); return r.json(); })());
             if (data && typeof data.jarvis_response === 'string' && data.jarvis_response.trim() !== ''){
               appendMessage(data.jarvis_response, 'jarvis');
               speakText(data.jarvis_response);
               showNotification(data.jarvis_response);
+              window.jarvisEmit && window.jarvisEmit('command.response', data);
+              if (window.jarvisInvalidateNotifications) window.jarvisInvalidateNotifications();
             }
           } catch(e) {}
-        };
-        try { recognition.start(); recognizing = true; voiceCmdBtn.classList.add('active'); }
-        catch(e){ recognizing=false; voiceCmdBtn.classList.remove('active'); }
-      });
-
-      // Append message to chat log
-      function appendMessage(text, who='jarvis'){
-        const wrapper = document.createElement('div');
-        wrapper.className = who === 'me' ? 'msg me' : 'msg jarvis';
-        const bubble = document.createElement('div'); bubble.className='bubble';
+          finally { if (window.jarvisHideLoader) jarvisHideLoader(); }
         const content = document.createElement('div'); content.textContent = text;
         const meta = document.createElement('div'); meta.className='meta';
         const now = new Date(); meta.textContent = now.toISOString().replace('T',' ').replace('Z',' UTC');
