@@ -59,7 +59,7 @@ try {
 $success = ''; $error = '';
 $recentLocations = jarvis_recent_locations($userId, 20);
 $lastWeather = null;
-$weatherConfigured = (bool)(jarvis_setting_get('OPENWEATHER_API_KEY') ?: getenv('OPENWEATHER_API_KEY'));
+$weatherConfigured = (bool)(jarvis_setting_get('OPENWEATHER_API_KEY') ?: getenv('OPENWEATHER_API_KEY') ?: getenv('OPENWEATHER_API_KEY_DEFAULT'));
 if (!empty($recentLocations) && isset($recentLocations[0]['lat']) && isset($recentLocations[0]['lon'])) {
   try { $lastWeather = jarvis_fetch_weather((float)$recentLocations[0]['lat'], (float)$recentLocations[0]['lon']); } catch (Throwable $e) { $lastWeather = null; }
 }
@@ -121,25 +121,7 @@ $phone = (string)($dbUser['phone_e164'] ?? '');
   <!-- Using embedded third-party maps (Google Maps iframe) for location previews -->
 </head>
 <body>
-  <div class="navbar">
-    <div class="brand">
-      <img src="images/logo.svg" alt="JARVIS logo" />
-      <span class="dot" aria-hidden="true"></span>
-      <span>JARVIS</span>
-    </div>
-    <button class="nav-toggle" id="navToggle" aria-label="Open menu">☰</button>
-    <nav>
-      <a href="home.php">Home</a>
-      <a href="preferences.php">Preferences</a>
-      <?php if (!empty($isAdmin)): ?>
-        <a href="admin.php">Admin</a>
-      <?php endif; ?>
-      <a href="audit.php">Audit Log</a>
-      <a href="notifications.php">Notifications</a>
-      <a href="siri.php">Add to Siri</a>
-      <a href="logout.php">Logout</a>
-    </nav>
-  </div>
+  <?php include __DIR__ . '/navbar.php'; ?>
 
   <div class="hero">
     <div class="scanlines" aria-hidden="true"></div>
@@ -147,6 +129,8 @@ $phone = (string)($dbUser['phone_e164'] ?? '');
     <h1>JARVIS</h1>
     <p>Blue / Black command portal • REST + Slack messaging • Timestamped logs</p>
   </div>
+  <!-- Pixel Dust FX Canvas -->
+  <canvas id="fxCanvas" class="fx-canvas" aria-hidden="true"></canvas>
 
   <div class="container">
     <!-- Permission banner (hidden when not needed) -->
@@ -159,6 +143,48 @@ $phone = (string)($dbUser['phone_e164'] ?? '');
     <?php if($error):?><div class="error"><p><?php echo htmlspecialchars($error); ?></p></div><?php endif;?>
 
     <div class="grid">
+      <!-- JARVIS Chat: full-width first row -->
+      <div class="card wide" id="commandCard">
+        <h3>JARVIS Chat</h3>
+        <div class="chatbox">
+          <form class="chatinput" id="chatForm">
+            <div style="display:flex;flex-direction:column;gap:8px;">
+              <textarea name="message" id="messageInput" placeholder="Type a message to JARVIS..." style="flex:1;min-height:56px"></textarea>
+              <div style="margin-top:6px"><small class="muted">Tip: Press <b>Enter</b> to send. Use <b>Shift+Enter</b> to insert a newline.</small></div>
+              <div style="display:flex;gap:8px;align-items:center;justify-content:space-between;margin-top:6px">
+                <div style="display:flex;gap:8px;align-items:center">
+                  <button type="button" id="micBtn" class="btn" title="Start/Stop voice input">🎤</button>
+                  <button type="button" id="voiceCmdBtn" class="btn" title="Voice-only command">🎙️ Voice Cmd</button>
+                </div>
+                <div style="display:flex;gap:8px;align-items:center">
+                  <button type="submit" name="send_chat" value="1" id="sendBtn" class="btn">Send</button>
+                </div>
+              </div>
+              <div style="margin-top:8px;display:flex;gap:12px;align-items:center;justify-content:flex-start">
+                <label style="font-size:13px"><input type="checkbox" id="enableTTS" checked /> Speak responses</label>
+                <label style="font-size:13px"><input type="checkbox" id="enableNotif" checked /> Show notifications</label>
+                <label style="font-size:13px"><input type="checkbox" id="voiceOnlyMode" /> Voice-only mode</label>
+              </div>
+            </div>
+          </form>
+
+          <div id="jarvisChatLog" class="chatlog">
+            <?php if(!$recent): ?>
+              <p class="muted">No messages yet. Send your first message below.</p>
+            <?php else: ?>
+              <?php foreach($recent as $m): ?>
+                <div class="msg me">
+                  <div class="bubble">
+                    <div><?php echo htmlspecialchars($m['message_text']); ?></div>
+                    <div class="meta"><?php echo htmlspecialchars($m['created_at']); ?> • <?php echo htmlspecialchars($m['channel_id'] ?? ''); ?></div>
+                  </div>
+                </div>
+              <?php endforeach; ?>
+            <?php endif; ?>
+          </div>
+        </div>
+      </div>
+
       <!-- 1 -->
       <div class="card">
         <h3>Connection Status</h3>
@@ -224,47 +250,13 @@ $phone = (string)($dbUser['phone_e164'] ?? '');
       </div>
 
       <!-- 2 -->
-      <div class="card">
-        <h3>JARVIS Chat</h3>
-        <div class="chatbox">
-          <form class="chatinput" id="chatForm">
-            <div style="display:flex;flex-direction:column;gap:8px;">
-              <textarea name="message" id="messageInput" placeholder="Type a message to JARVIS..." style="flex:1;min-height:56px"></textarea>
-              <div style="margin-top:6px"><small class="muted">Tip: Press <b>Enter</b> to send. Use <b>Shift+Enter</b> to insert a newline.</small></div>
-              <div style="display:flex;gap:8px;align-items:center;justify-content:space-between;margin-top:6px">
-                <div style="display:flex;gap:8px;align-items:center">
-                  <button type="button" id="micBtn" class="btn" title="Start/Stop voice input">🎤</button>
-                  <button type="button" id="voiceCmdBtn" class="btn" title="Voice-only command">🎙️ Voice Cmd</button>
-                </div>
-                <div style="display:flex;gap:8px;align-items:center">
-                  <button type="submit" name="send_chat" value="1" id="sendBtn" class="btn">Send</button>
-                  <button type="button" id="testVoiceBtn" class="btn" title="Upload sample audio and send">Test Voice</button>
-                </div>
-              </div>
-              <div style="margin-top:8px;display:flex;gap:12px;align-items:center;justify-content:flex-start">
-                <label style="font-size:13px"><input type="checkbox" id="enableTTS" checked /> Speak responses</label>
-                <label style="font-size:13px"><input type="checkbox" id="enableNotif" checked /> Show notifications</label>
-                <label style="font-size:13px"><input type="checkbox" id="voiceOnlyMode" /> Voice-only mode</label>
-              </div>
-            </div>
-          </form>
 
-          <div id="jarvisChatLog" class="chatlog">
-            <?php if(!$recent): ?>
-              <p class="muted">No messages yet. Send your first message below.</p>
-            <?php else: ?>
-              <?php foreach($recent as $m): ?>
-                <div class="msg me">
-                  <div class="bubble">
-                    <div><?php echo htmlspecialchars($m['message_text']); ?></div>
-                    <div class="meta"><?php echo htmlspecialchars($m['created_at']); ?> • <?php echo htmlspecialchars($m['channel_id'] ?? ''); ?></div>
-                  </div>
-                </div>
-              <?php endforeach; ?>
-            <?php endif; ?>
-          </div>
-        </div>
+      <div class="card" id="photosCard">
+        <h3>Photos</h3>
+        <div id="photoPreview" style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-start"></div>
+        <div style="margin-top:8px"><a href="/public/photos.php">Open photo gallery</a> • <a href="/public/ios_photos.php">iOS setup</a></div>
       </div>
+
 
       <!-- 3 -->
       <div class="card">
@@ -364,6 +356,22 @@ Content-Type: application/json
         </ul>
       <?php endif; ?>
     </div>
+
+    <div class="card" style="margin-top:14px" id="channelsActivity">
+      <h3>Channels & Activity</h3>
+      <div style="display:flex;gap:14px;align-items:flex-start;">
+        <div style="flex:1">
+          <div style="margin-bottom:8px"><strong>Channel:</strong> <span id="caChannel">local:rhats</span> • <a href="/public/channel.php">Open Channels</a></div>
+          <div id="caMessages" style="display:flex;flex-direction:column;gap:8px;max-height:260px;overflow:auto;padding:6px;border-radius:8px;border:1px solid rgba(255,255,255,.02);background:linear-gradient(180deg, rgba(255,255,255,.01), rgba(255,255,255,.00));"></div>
+        </div>
+        <div style="width:320px">
+          <div class="card">
+            <h4>Recent Audit Log</h4>
+            <div id="caAudit" style="max-height:240px;overflow:auto;padding:6px"></div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 
   <script>
@@ -371,11 +379,15 @@ Content-Type: application/json
     (function(){
       const enabled = <?php echo !empty($prefs['location_logging_enabled']) ? 'true' : 'false'; ?>;
       const token = <?php echo $webJwt ? json_encode($webJwt) : 'null'; ?>;
+      // Global diagnostic: expose token to window and capture parse/runtime errors early
+      try { window.jarvisJwt = token; } catch(e){}
+      window.addEventListener('error', (e) => { try{ console.log('PAGE_JS_ERROR', e.message, e.filename, e.lineno, e.colno, e && e.error && e.error.stack ? e.error.stack : null); }catch(e){} });
+      window.addEventListener('unhandledrejection', (e) => { try{ console.log('PAGE_PROMISE_REJECTION', e.reason && (e.reason.stack || e.reason)); }catch(e){} });
       const recentLocations = <?php echo json_encode(array_values($recentLocations)); ?>;
       const lastWeather = <?php echo json_encode($lastWeather); ?>;
 
       // Map management and location refreshing
-      let _mainMap = null, _miniMap = null;
+      let _mainMap = null, _miniMap = null; window._sending = window._sending || false;
 
       // Smart Home Device Management
       async function refreshHomeDevices(){
@@ -619,7 +631,110 @@ Content-Type: application/json
     })();
   </script>
   <!-- No Leaflet required when using embedded maps -->
-    <script src="navbar.js"></script>
+    
+    <script>
+    // Ambient pixel-dust particles (Pixar-like sparkle swirls)
+    (function(){
+      const prefersReduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      const canvas = document.getElementById('fxCanvas');
+      if (!canvas || prefersReduced) return;
+      const ctx = canvas.getContext('2d');
+      let w=0,h=0, dpr = Math.max(1, Math.min(2, window.devicePixelRatio||1));
+      function resize(){ w = window.innerWidth; h = window.innerHeight; canvas.width = Math.floor(w*dpr); canvas.height = Math.floor(h*dpr); canvas.style.width = w+'px'; canvas.style.height = h+'px'; ctx.setTransform(dpr,0,0,dpr,0,0); }
+      resize(); window.addEventListener('resize', resize);
+
+      const particles = []; const MAX = 160; const COLORS = ['#7dd3fc','#00d4ff','#1e78ff','#a5b4fc'];
+      function rand(min,max){ return Math.random()*(max-min)+min; }
+      function pick(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
+
+      function spawn(x, y, opts={}){
+        for (let i=0;i<(opts.count||24);i++){
+          const angle = rand(0, Math.PI*2);
+          const speed = rand(0.4, 2.2) * (opts.power||1);
+          const size = rand(1.25, 3.5) * (opts.size||1);
+          const life = rand(0.8, 2.2) * (opts.life||1);
+          const color = pick(COLORS);
+          const shape = Math.random() < 0.6 ? 'square' : 'tri';
+          particles.push({ x, y, vx: Math.cos(angle)*speed, vy: Math.sin(angle)*speed, ax: 0, ay: 0.02, size, life, alpha: 1, color, shape, t: 0 });
+          if (particles.length > MAX) particles.shift();
+        }
+      }
+
+      // Gentle ambient swirl
+      let tGlobal = 0; function ambient(){
+        tGlobal += 0.016; const cx = w*0.5 + Math.sin(tGlobal*0.6)*w*0.12; const cy = h*0.28 + Math.cos(tGlobal*0.8)*h*0.06;
+        spawn(cx, cy, { count: 6, power: 0.8, size: 1, life: 1.4 });
+      }
+
+      function step(dt){
+        for (let p of particles){
+          p.t += dt; p.vx += p.ax*dt; p.vy += p.ay*dt; p.x += p.vx*dt*60; p.y += p.vy*dt*60;
+          // Fade and shrink
+          p.alpha = Math.max(0, 1 - (p.t / p.life));
+          p.size *= 0.995;
+        }
+        // Remove dead
+        for (let i=particles.length-1;i>=0;i--){ if (particles[i].alpha <= 0 || particles[i].size <= 0.2) particles.splice(i,1); }
+      }
+      function draw(){
+        ctx.clearRect(0,0,w,h);
+        // soft glow trail overlay to keep motion subtle
+        ctx.fillStyle = 'rgba(2,7,18,0.06)'; ctx.fillRect(0,0,w,h);
+        for (let p of particles){
+          ctx.globalAlpha = Math.max(0, Math.min(1, p.alpha));
+          ctx.fillStyle = p.color;
+          // slight pixel-saw look via crisp edges
+          if (p.shape === 'square'){
+            ctx.fillRect(Math.floor(p.x), Math.floor(p.y), Math.max(1, Math.floor(p.size)), Math.max(1, Math.floor(p.size)));
+          } else {
+            ctx.beginPath();
+            ctx.moveTo(Math.floor(p.x), Math.floor(p.y));
+            ctx.lineTo(Math.floor(p.x + p.size), Math.floor(p.y));
+            ctx.lineTo(Math.floor(p.x + p.size/2), Math.floor(p.y - p.size));
+            ctx.closePath();
+            ctx.fill();
+          }
+          // halo glow
+          ctx.globalAlpha = Math.max(0, Math.min(0.25, p.alpha*0.25));
+          ctx.fillStyle = 'rgba(0,212,255,0.15)';
+          ctx.beginPath(); ctx.arc(p.x, p.y, Math.max(1.5, p.size*1.6), 0, Math.PI*2); ctx.fill();
+          ctx.globalAlpha = 1;
+        }
+      }
+      let last = performance.now();
+      function loop(now){ const dt = Math.min(0.06, (now - last)/1000); last = now; ambient(); step(dt); draw(); requestAnimationFrame(loop); }
+      requestAnimationFrame(loop);
+
+      // Expose a burst API for UX hooks (e.g., on send)
+      window.jarvisFx = window.jarvisFx || {};
+      window.jarvisFx.spawnBurst = (x,y,opts)=>spawn(x,y,opts||{});
+
+      // Hook message send to spawn a burst near chat input
+      try {
+        const sendBtn = document.getElementById('sendBtn');
+        sendBtn && sendBtn.addEventListener('click', ()=>{
+          const el = document.getElementById('messageInput');
+          if (!el) return;
+          const r = el.getBoundingClientRect();
+          const x = (r.left + r.right)/2; const y = r.top; spawn(x, y, { count: 26, power: 1.4, size: 1.2, life: 1.6 });
+        });
+      } catch(e){}
+
+      // Cursor sparkle: tiny trail follows pointer
+      (function(){
+        let lastX=0,lastY=0; const trail = (ev)=>{ const x = ev.clientX, y = ev.clientY; if (!x && !y) return; const speed = Math.hypot(x-lastX,y-lastY); lastX=x; lastY=y; spawn(x, y, { count: Math.min(8, Math.max(2, Math.floor(speed*0.05))), power: 0.6, size: 0.8, life: 0.9 }); };
+        window.addEventListener('pointermove', trail, { passive: true });
+      })();
+
+      // Wake prompt sparkle
+      try {
+        const hero = document.querySelector('.hero');
+        if (hero) {
+          const r = hero.getBoundingClientRect(); spawn(r.left + r.width*0.5, r.top + r.height*0.35, { count: 32, power: 1.2 });
+        }
+      } catch(e){}
+    })();
+    </script>
     <script>
     // ----------------------------
     // Voice input / output + Notifications
@@ -803,54 +918,56 @@ Content-Type: application/json
           _mediaRecorder.ondataavailable = (evt)=>{ if (evt && evt.data) _audioChunks.push(evt.data); };
           _mediaRecorder.onstop = async ()=>{
             let blob = null;
-            try{
+            try {
               blob = new Blob(_audioChunks, { type: _audioChunks[0] ? _audioChunks[0].type || 'audio/webm' : 'audio/webm' });
               // Immediately add audio element to chat for user to see/play
-              try{
-                const container = appendAudioMessage(blob, 'me', _lastTranscript);
-                // Upload in background; update UI when done
-                const statusEl = container ? container.querySelector('.audio-status') : null;
-                if (statusEl) statusEl.textContent = 'Uploading...';
-                try {
-                  const resp = await sendAudioBlob(blob, _lastTranscript, Math.floor((blob.size/16000)), _voiceContextId);
-                  if (resp && resp.ok && resp.id) {
-                    const link = document.createElement('a'); link.href = '/api/voice/' + resp.id + '/download'; link.target='_blank'; link.textContent = 'Download'; link.style.marginLeft='8px';
-                    if (statusEl) { statusEl.textContent = 'Uploaded • id: ' + resp.id; statusEl.appendChild(link); }
-                    else { const note = document.createElement('div'); note.className='muted'; note.style.marginTop='6px'; note.textContent = 'Uploaded • id: ' + resp.id; note.appendChild(link); if (container) container.appendChild(note); }
-                    // Make this uploaded audio available to be sent via the Send button (but auto-send below)
-                    window._pendingVoiceToSend = { id: resp.id, transcript: _lastTranscript, contextId: _voiceContextId };
-                    const sendBtnEl = document.getElementById('sendBtn');
-                    if (sendBtnEl) { sendBtnEl.dataset.pendingVoice = String(resp.id); sendBtnEl.textContent = 'Send (voice)'; }
+              const container = appendAudioMessage(blob, 'me', _lastTranscript);
+              // Upload in background; update UI when done
+              const statusEl = container ? container.querySelector('.audio-status') : null;
+              if (statusEl) statusEl.textContent = 'Uploading...';
 
-                    // If there's a pending voice command (voice-only mode), send it now with voice_input_id
-                    if (_pendingVoiceCmd && _pendingVoiceCmd.text) {
-                      try {
-                        await sendCommand(_pendingVoiceCmd.text, 'voice', { voice_input_id: resp.id, voice_context_id: _pendingVoiceCmd.contextId });
-                        if (statusEl) statusEl.textContent = 'Sent • id: ' + resp.id;
-                      } catch(e) { console.error('sendCommand after upload failed', e); if (statusEl) statusEl.textContent = 'Send failed'; }
-                      _pendingVoiceCmd = null;
-                      try{ if (token) fetch('/api/audit', { method:'POST', headers: { 'Content-Type':'application/json', 'Authorization': 'Bearer '+token }, body: JSON.stringify({ action: 'VOICE_AUTO_SENT', entity: 'voice', metadata: { id: resp.id } }) }); }catch(e){}
-                    } else {
-                      // Auto-send uploaded audio as a command (for manual voice-cmd flow)
-                      try{
-                        const sendText = (window._pendingVoiceToSend && window._pendingVoiceToSend.transcript) ? window._pendingVoiceToSend.transcript : '';
-                        await sendCommand(sendText || '', 'voice', { voice_input_id: resp.id, voice_context_id: window._pendingVoiceToSend ? window._pendingVoiceToSend.contextId : null });
-                        if (statusEl) statusEl.textContent = 'Sent • id: ' + resp.id;
-                        try{ if (token) fetch('/api/audit', { method:'POST', headers: { 'Content-Type':'application/json', 'Authorization': 'Bearer '+token }, body: JSON.stringify({ action: 'VOICE_AUTO_SENT', entity: 'voice', metadata: { id: resp.id } }) }); }catch(e){}
-                        // Clear pending
-                        window._pendingVoiceToSend = null;
-                      } catch(e) { console.error('auto-send failed', e); if (statusEl) statusEl.textContent = 'Send failed'; }
-                    }
-                    try{ if (token) fetch('/api/audit', { method:'POST', headers: { 'Content-Type':'application/json', 'Authorization': 'Bearer '+token }, body: JSON.stringify({ action: 'VOICE_UPLOAD_SUCCESS', entity: 'voice', metadata: { id: resp.id, size: blob.size } }) }); }catch(e){}
+              try {
+                const resp = await sendAudioBlob(blob, _lastTranscript, Math.floor((blob.size/16000)), _voiceContextId);
+                if (resp && resp.ok && resp.id) {
+                  const link = document.createElement('a'); link.href = '/api/voice/' + resp.id + '/download'; link.target='_blank'; link.textContent = 'Download'; link.style.marginLeft='8px';
+                  if (statusEl) { statusEl.textContent = 'Uploaded • id: ' + resp.id; statusEl.appendChild(link); }
+                  else { const note = document.createElement('div'); note.className='muted'; note.style.marginTop='6px'; note.textContent = 'Uploaded • id: ' + resp.id; note.appendChild(link); if (container) container.appendChild(note); }
+
+                  // Make this uploaded audio available to be sent via the Send button (but auto-send below)
+                  window._pendingVoiceToSend = { id: resp.id, transcript: _lastTranscript, contextId: _voiceContextId };
+                  const sendBtnEl = document.getElementById('sendBtn');
+                  if (sendBtnEl) { sendBtnEl.dataset.pendingVoice = String(resp.id); sendBtnEl.textContent = 'Send (voice)'; }
+
+                  // If there's a pending voice command (voice-only mode), send it now with voice_input_id
+                  if (_pendingVoiceCmd && _pendingVoiceCmd.text) {
+                    try {
+                      await sendCommand(_pendingVoiceCmd.text, 'voice', { voice_input_id: resp.id, voice_context_id: _pendingVoiceCmd.contextId });
+                      if (statusEl) statusEl.textContent = 'Sent • id: ' + resp.id;
+                    } catch(e) { console.error('sendCommand after upload failed', e); if (statusEl) statusEl.textContent = 'Send failed'; }
+                    _pendingVoiceCmd = null;
+                    try{ if (window.jarvisJwt) fetch('/api/audit', { method:'POST', headers: { 'Content-Type':'application/json', 'Authorization': 'Bearer '+window.jarvisJwt }, body: JSON.stringify({ action: 'VOICE_AUTO_SENT', entity: 'voice', metadata: { id: resp.id } }) }); }catch(e){}
                   } else {
-                    if (statusEl) statusEl.textContent = 'Upload failed';
-                    const note = document.createElement('div'); note.className='muted'; note.style.marginTop='6px'; note.textContent = 'Upload failed'; if (container) container.appendChild(note);
-                    // Clear any pending send button flag
-                    try { const sb = document.getElementById('sendBtn'); if (sb && sb.dataset && sb.dataset.pendingVoice) { delete sb.dataset.pendingVoice; sb.textContent = 'Send'; } } catch(e){}
-                    try{ if (token) fetch('/api/audit', { method:'POST', headers:{ 'Content-Type':'application/json','Authorization':'Bearer '+token }, body: JSON.stringify({ action: 'VOICE_UPLOAD_FAILED', entity: 'voice' }) }); }catch(e){}
+                    // Auto-send uploaded audio as a command (for manual voice-cmd flow)
+                    try{
+                      const sendText = (window._pendingVoiceToSend && window._pendingVoiceToSend.transcript) ? window._pendingVoiceToSend.transcript : '';
+                      await sendCommand(sendText || '', 'voice', { voice_input_id: resp.id, voice_context_id: window._pendingVoiceToSend ? window._pendingVoiceToSend.contextId : null });
+                      if (statusEl) statusEl.textContent = 'Sent • id: ' + resp.id;
+                      try{ if (window.jarvisJwt) fetch('/api/audit', { method:'POST', headers: { 'Content-Type':'application/json', 'Authorization': 'Bearer '+window.jarvisJwt }, body: JSON.stringify({ action: 'VOICE_AUTO_SENT', entity: 'voice', metadata: { id: resp.id } }) }); }catch(e){}
+                      // Clear pending
+                      window._pendingVoiceToSend = null;
+                    } catch(e) { console.error('auto-send failed', e); if (statusEl) statusEl.textContent = 'Send failed'; }
                   }
-                } catch(e) { console.warn('upload voice failed', e); const note = document.createElement('div'); note.className='muted'; note.style.marginTop='6px'; note.textContent = 'Upload failed'; if (container) container.appendChild(note); }
-              } catch(e) {}
+
+                  try{ if (window.jarvisJwt) fetch('/api/audit', { method:'POST', headers: { 'Content-Type':'application/json', 'Authorization': 'Bearer '+window.jarvisJwt }, body: JSON.stringify({ action: 'VOICE_UPLOAD_SUCCESS', entity: 'voice', metadata: { id: resp.id, size: blob.size } }) }); }catch(e){}
+                } else {
+                  if (statusEl) statusEl.textContent = 'Upload failed';
+                  const note = document.createElement('div'); note.className='muted'; note.style.marginTop='6px'; note.textContent = 'Upload failed'; if (container) container.appendChild(note);
+                  // Clear any pending send button flag
+                  try { const sb = document.getElementById('sendBtn'); if (sb && sb.dataset && sb.dataset.pendingVoice) { delete sb.dataset.pendingVoice; sb.textContent = 'Send'; } } catch(e){}
+                  try{ if (window.jarvisJwt) fetch('/api/audit', { method:'POST', headers:{ 'Content-Type':'application/json','Authorization':'Bearer '+window.jarvisJwt }, body: JSON.stringify({ action: 'VOICE_UPLOAD_FAILED', entity: 'voice' }) }); }catch(e){}
+                }
+              } catch(e) { console.warn('upload voice failed', e); const note = document.createElement('div'); note.className='muted'; note.style.marginTop='6px'; note.textContent = 'Upload failed'; if (container) container.appendChild(note); }
+            } catch(e) { /* ignore */ }
             try{ if (_mediaStream) { _mediaStream.getTracks().forEach(t=>t.stop()); _mediaStream=null; } }catch(e){}
             _mediaRecorder = null; _audioChunks=[]; _lastTranscript=null; _voiceContextId=null; _pendingVoiceCmd = null;
           };
@@ -880,26 +997,7 @@ Content-Type: application/json
         } catch(e){ return null; }
       }
 
-      // Upload a remote sample audio file and auto-send as a voice command (for quick testing)
-      document.getElementById('testVoiceBtn')?.addEventListener('click', async ()=>{
-        try{
-          const sampleUrl = 'https://interactive-examples.mdn.mozilla.net/media/examples/t-rex-roar.mp3';
-          const r = await fetch(sampleUrl);
-          if (!r.ok) { appendMessage('Failed to fetch sample audio', 'jarvis'); return; }
-          const blob = await r.blob();
-          appendMessage('Uploading sample audio...', 'me');
-          const statusNote = document.createElement('div'); statusNote.className='muted'; statusNote.textContent = 'Uploading sample...';
-          const container = appendAudioMessage(blob, 'me', 'Sample audio'); if (container) container.appendChild(statusNote);
-          const resp = await sendAudioBlob(blob, 'Sample audio test', Math.floor((blob.size/16000)), 'sample');
-          if (resp && resp.ok && resp.id) {
-            statusNote.textContent = 'Uploaded • id: '+resp.id;
-            // Auto-send blank text with voice_input_id so server will use transcript
-            await sendCommand('', 'voice', { voice_input_id: resp.id });
-          } else {
-            statusNote.textContent = 'Upload failed';
-          }
-        }catch(e){ console.error('test voice upload failed', e); appendMessage('Test voice upload failed: '+(e && e.message ? e.message : String(e)), 'jarvis'); }
-      });
+      // Test Voice button removed
 
       // Try to initialize Web Speech Recognition if available
       function initRecognition(){
@@ -1114,32 +1212,40 @@ Content-Type: application/json
 
       const chatForm = document.getElementById('chatForm');
       async function handleSendAction(){
-        try{ try{ if (typeof window !== 'undefined') window._handleSendActionInvoked = true; }catch(e){}
+        if (window._sending) return;
+        window._sending = true;
+        try {
+          try{ if (typeof window !== 'undefined') window._handleSendActionInvoked = true; }catch(e){}
+
           if (sendBtn && sendBtn.dataset && sendBtn.dataset.pendingVoice) {
             const pendingId = sendBtn.dataset.pendingVoice;
             // Ensure the uploaded voice file actually exists before sending; if HEAD fails, clear pending and fall through so regular text send works
             let headOk = false;
             try{
-              const r = await fetch('/api/voice/'+pendingId+'/download', { method: 'HEAD', headers: sendBtn && token ? { 'Authorization': 'Bearer ' + token } : {} });
+              const r = await fetch('/api/voice/'+pendingId+'/download', { method: 'HEAD', headers: sendBtn && (window.jarvisJwt||token) ? { 'Authorization': 'Bearer ' + (window.jarvisJwt||token) } : {} });
               headOk = !!(r && r.ok);
             }catch(e){ headOk = false; }
             if (!headOk) {
               try { delete sendBtn.dataset.pendingVoice; sendBtn.textContent = 'Send'; window._pendingVoiceToSend = null; } catch(e){}
               // fall through to regular text send behavior
             } else {
-              try{ if (token) fetch('/api/audit', { method:'POST', headers:{ 'Content-Type':'application/json','Authorization':'Bearer '+token }, body: JSON.stringify({ action: 'VOICE_SUBMIT', entity: 'voice', metadata: { id: pendingId } }) }); }catch(e){}
+              try{ if (window.jarvisJwt||token) fetch('/api/audit', { method:'POST', headers:{ 'Content-Type':'application/json','Authorization':'Bearer '+(window.jarvisJwt||token) }, body: JSON.stringify({ action: 'VOICE_SUBMIT', entity: 'voice', metadata: { id: pendingId } }) }); }catch(e){}
               await sendCommand('', 'voice', { voice_input_id: pendingId });
               try{ delete sendBtn.dataset.pendingVoice; sendBtn.textContent = 'Send'; window._pendingVoiceToSend = null; }catch(e){}
               return;
             }
           }
-        }catch(e){ console.error('handleSendAction voice check failed', e); }
 
-        const msg = (msgInput.value || '').trim();
-        if (!msg) return;
-        appendMessage(msg, 'me');
-        msgInput.value = '';
-        await sendCommand(msg, lastInputType);
+          const msg = (msgInput.value || '').trim();
+          if (!msg) return;
+          appendMessage(msg, 'me');
+          msgInput.value = '';
+          await sendCommand(msg, lastInputType);
+        } catch (e) {
+          console.error('handleSendAction failed', e);
+        } finally {
+          window._sending = false;
+        }
       }
 
       if (chatForm) chatForm.addEventListener('submit', async (ev) => {
@@ -1151,7 +1257,16 @@ Content-Type: application/json
       // Ensure clicking the Send button triggers the same submit handler reliably (handles some headless/browser race conditions)
       try {
         const sendBtnEl = document.getElementById('sendBtn');
-        if (sendBtnEl) sendBtnEl.addEventListener('click', async (ev)=>{ try{ if (typeof window !== 'undefined') window._sendBtnClicked = true; }catch(e){} ev.preventDefault && ev.preventDefault(); await handleSendAction(); });
+        if (sendBtnEl && !sendBtnEl.dataset.sendListenerAttached) {
+          const sendHandler = async (ev)=>{
+            try{ if (typeof window !== 'undefined') window._sendBtnClicked = true; }catch(e){}
+            ev && ev.preventDefault && ev.preventDefault();
+            await handleSendAction();
+          };
+          sendBtnEl.addEventListener('click', sendHandler);
+          sendBtnEl.addEventListener('pointerup', sendHandler);
+          sendBtnEl.dataset.sendListenerAttached = '1';
+        }
       } catch(e) { console.error('attach sendBtn click failed', e); }
 
       // Support Enter-to-send: Enter sends, Shift+Enter inserts a newline, Ctrl/Cmd/Alt+Enter ignored (user-intent modifiers)
@@ -1170,10 +1285,15 @@ Content-Type: application/json
       }catch(e){ console.error('Enter-to-send handler failed', e); }
 
       const sendBtnEl = document.getElementById('sendBtn');
-      if (sendBtnEl) sendBtnEl.addEventListener('click', async (ev) => {
-        ev.preventDefault(); ev.stopPropagation();
-        await handleSendAction();
-      });
+      if (sendBtnEl && !sendBtnEl.dataset.sendListenerAttached) {
+        const sendHandler = async (ev)=>{
+          ev && ev.preventDefault && ev.preventDefault(); ev && ev.stopPropagation && ev.stopPropagation();
+          await handleSendAction();
+        };
+        sendBtnEl.addEventListener('click', sendHandler);
+        sendBtnEl.addEventListener('pointerup', sendHandler);
+        sendBtnEl.dataset.sendListenerAttached = '1';
+      }
 
       // On load, do not prompt for notifications automatically; just sync checkbox state
       if ('Notification' in window && enableNotif) { enableNotif.checked = (Notification.permission === 'granted'); }
@@ -1251,13 +1371,13 @@ Content-Type: application/json
     }
 
     async function postLocationAndRunWake(){
-      if (!token || !navigator.geolocation) return;
+      if (!window.jarvisJwt || !navigator.geolocation) return;
       try{ if (sessionStorage.getItem('jarvis_wake_prompt_shown')) return; }catch(e){}
       try{
         navigator.geolocation.getCurrentPosition(async (pos)=>{
           try {
             const body = { lat: pos.coords.latitude, lon: pos.coords.longitude, accuracy: pos.coords.accuracy };
-            const r = await fetch('/api/location', { method:'POST', headers:{ 'Content-Type':'application/json', 'Authorization': 'Bearer '+token }, body: JSON.stringify(body) });
+            const r = await fetch('/api/location', { method:'POST', headers:{ 'Content-Type':'application/json', 'Authorization': 'Bearer ' + (window.jarvisJwt || '') }, body: JSON.stringify(body) });
             const data = await r.json().catch(()=>null);
             if (data && data.weather && window.jarvisUpdateWeather) {
               window.jarvisUpdateWeather(data);
@@ -1319,6 +1439,61 @@ Content-Type: application/json
       checkAndShowPermissions();
       // If permissions look ok and we haven't shown the wake prompt, try to post location and run wake
       try{ if (sessionStorage.getItem('jarvis_wake_prompt_shown') === null) postLocationAndRunWake(); }catch(e){}
+
+      // Fetch recent photos for preview
+      (async function(){
+        const el = document.getElementById('photoPreview');
+
+        // Also load channels activity preview (small recent messages + audit)
+        try{
+          const ca = document.getElementById('caMessages'); if (ca) {
+            const r = await fetch('/api/messages?channel=local:rhats&limit=6', { headers: { 'Authorization': 'Bearer ' + (window.jarvisJwt || '') } });
+            const j = await r.json().catch(()=>null);
+            if (j && Array.isArray(j.messages)) {
+              j.messages.forEach(m=>{
+                const im = document.createElement('div'); im.style.display='flex'; im.style.justifyContent='space-between'; im.style.alignItems='center'; im.style.gap='12px'; im.style.padding='8px'; im.style.borderRadius='8px';
+                const left = document.createElement('div'); left.style.flex='1'; left.innerHTML = '<div style="font-weight:700">'+(m.username||'you')+'</div><div style="color:var(--muted);font-size:13px">'+(m.message_text||'').replace(/(#([A-Za-z0-9_\-]+))/g, '<span style="color:var(--blue2)">$1</span>').replace(/@([A-Za-z0-9_\-]+)/g,'<span style="color:var(--ok)">$&</span>')+'</div>';
+                const meta = document.createElement('div'); meta.style.fontSize='12px'; meta.style.color='var(--muted)'; meta.textContent = new Date(m.created_at).toLocaleString();
+                im.appendChild(left); im.appendChild(meta); ca.appendChild(im);
+              });
+            }
+          }
+        }catch(e){}
+
+        if (!el || typeof window.jarvisJwt === 'undefined') return;
+        try {
+          const r = await fetch('/api/photos?limit=6', { headers: { 'Authorization': 'Bearer ' + window.jarvisJwt } });
+          const j = await r.json().catch(()=>null);
+          if (!j || !Array.isArray(j.photos)) return;
+          j.photos.forEach(p => {
+            const img = document.createElement('img');
+            img.src = '/api/photos/' + p.id + '/download?thumb=1';
+            img.style.width = '120px'; img.style.height = '120px'; img.style.objectFit = 'cover'; img.style.borderRadius = '12px'; img.style.filter = 'grayscale(40%) contrast(0.95)'; img.style.cursor = 'pointer';
+            img.title = p.original_filename || '';
+            img.addEventListener('click', ()=>{
+              openPhotoModal(p.id, p.original_filename);
+            });
+            el.appendChild(img);
+          });
+        } catch(e) { /* ignore */ }
+      })();
+
+      function openPhotoModal(id, title){
+        let modal = document.getElementById('photoModal');
+        if (!modal) {
+          modal = document.createElement('div'); modal.id='photoModal'; modal.style.position='fixed'; modal.style.inset='0'; modal.style.display='flex'; modal.style.alignItems='center'; modal.style.justifyContent='center'; modal.style.background='rgba(10,12,14,0.86)'; modal.style.zIndex=9999; modal.style.padding='24px';
+          const img = document.createElement('img'); img.id='photoModalImg'; img.style.maxWidth='90%'; img.style.maxHeight='90%'; img.style.borderRadius='12px'; img.style.boxShadow='0 28px 80px rgba(0,0,0,.6)';
+          const caption = document.createElement('div'); caption.id='photoModalCaption'; caption.style.color='var(--muted)'; caption.style.marginTop='12px'; caption.style.textAlign='center'; caption.style.fontSize='13px';
+          const wrap = document.createElement('div'); wrap.style.display='flex'; wrap.style.flexDirection='column'; wrap.style.alignItems='center'; wrap.appendChild(img); wrap.appendChild(caption);
+          modal.appendChild(wrap);
+          modal.addEventListener('click', (e)=>{ if (e.target === modal) modal.remove(); });
+          document.body.appendChild(modal);
+        }
+        const imgEl = document.getElementById('photoModalImg');
+        const capEl = document.getElementById('photoModalCaption');
+        imgEl.src = '/api/photos/' + id + '/download';
+        capEl.textContent = title || '';
+      }
     });
 
 

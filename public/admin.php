@@ -80,11 +80,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $lon = isset($_POST['test_lon']) ? (float)$_POST['test_lon'] : -74.0060;
     $w = null;
     try {
+      // Determine which key will be used by jarvis_fetch_weather
+      $dbKey = jarvis_setting_get('OPENWEATHER_API_KEY');
+      $envKey = getenv('OPENWEATHER_API_KEY') ?: null;
+      $envDefaultKey = getenv('OPENWEATHER_API_KEY_DEFAULT') ?: null;
+      $keySource = $dbKey ? 'DB (OPENWEATHER_API_KEY)' : ($envKey ? 'ENV (OPENWEATHER_API_KEY)' : ($envDefaultKey ? 'ENV fallback (OPENWEATHER_API_KEY_DEFAULT)' : 'none - using demo fallback'));
+
       $w = jarvis_fetch_weather($lat, $lon);
       if (!$w) {
-        $notice = 'Weather fetch failed. Is OPENWEATHER_API_KEY configured?';
+        $notice = 'Weather fetch failed. Is OPENWEATHER_API_KEY configured? Current key source: ' . $keySource;
       } else {
-        $notice = 'Weather OK: ' . htmlspecialchars(($w['desc'] ?? '(no desc)') . ' • ' . (($w['temp_c']!==null)?$w['temp_c'].'°C':''));
+        $desc = ($w['desc'] ?? '(no desc)');
+        $temp = ($w['temp_c']!==null) ? $w['temp_c'].'°C' : '';
+        $notice = 'Weather OK (source: ' . $keySource . '): ' . htmlspecialchars($desc . ' • ' . $temp);
       }
     } catch (Throwable $e) {
       $notice = 'Weather test error: ' . htmlspecialchars($e->getMessage());
@@ -388,12 +396,38 @@ $users = jarvis_list_users(50,0, (string)($_GET['q'] ?? ''));
 
     <section>
       <h2>Weather API</h2>
-      <p class="muted">JARVIS can fetch local weather when `OPENWEATHER_API_KEY` is configured. Use the test below to verify server-side weather lookups.</p>
+      <p class="muted">JARVIS can fetch local weather when <code>OPENWEATHER_API_KEY</code> is configured (DB or env). You can also set a failsafe fallback via env <code>OPENWEATHER_API_KEY_DEFAULT</code>.
+      </p>
+
+      <?php
+        $dbKey = jarvis_setting_get('OPENWEATHER_API_KEY');
+        $envKey = getenv('OPENWEATHER_API_KEY') ?: null;
+        $envDefault = getenv('OPENWEATHER_API_KEY_DEFAULT') ?: null;
+      ?>
+      <div style="margin-bottom:8px">
+        <p><b>DB key:</b> <?= $dbKey ? 'SET (in DB)' : 'Not set in DB' ?> &nbsp; &nbsp; <b>ENV key:</b> <?= $envKey ? 'SET (OPENWEATHER_API_KEY)' : 'Not set' ?> &nbsp; &nbsp; <b>ENV fallback:</b> <?= $envDefault ? 'SET (OPENWEATHER_API_KEY_DEFAULT)' : 'Not set' ?></p>
+      </div>
+
       <form method="post" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
         <input type="hidden" name="action" value="weather_test">
         <label style="flex:1;min-width:240px">Test coordinates: <input name="test_lat" placeholder="lat" value="40.7128">,<input name="test_lon" placeholder="lon" value="-74.0060"></label>
         <button class="btn" type="submit">Test Weather</button>
       </form>
+
+      <div style="margin-top:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <form method="post" style="display:inline-block;">
+          <input type="hidden" name="action" value="add">
+          <input type="hidden" name="key" value="OPENWEATHER_API_KEY">
+          <label>Set DB OPENWEATHER key: <input name="value" placeholder="paste key here" style="width:320px"></label>
+          <button class="btn" type="submit">Save OPENWEATHER_API_KEY</button>
+        </form>
+        <form method="post" style="display:inline-block;margin-left:8px;">
+          <input type="hidden" name="action" value="add">
+          <input type="hidden" name="key" value="OPENWEATHER_API_KEY_DEFAULT">
+          <label>Set DEFAULT key: <input name="value" placeholder="paste fallback key here"></label>
+          <button class="btn" type="submit">Save DEFAULT</button>
+        </form>
+      </div>
     </section>
 
     <section>

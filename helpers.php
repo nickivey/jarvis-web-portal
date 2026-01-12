@@ -245,9 +245,19 @@ function jarvis_import_google_calendar(int $userId): array {
 
 
 function jarvis_fetch_weather(float $lat, float $lon): ?array {
-  // Prefer DB setting then env
-  $apiKey = jarvis_setting_get('OPENWEATHER_API_KEY') ?: getenv('OPENWEATHER_API_KEY');
-  if (!$apiKey) return null;
+  // Prefer DB setting then env, with an optional failsafe default env key OPENWEATHER_API_KEY_DEFAULT
+  $apiKey = jarvis_setting_get('OPENWEATHER_API_KEY') ?: getenv('OPENWEATHER_API_KEY') ?: getenv('OPENWEATHER_API_KEY_DEFAULT');
+  // If no API key configured, return a safe demo payload (non-fatal)
+  if (!$apiKey) {
+    return [
+      'temp_c' => null,
+      'desc' => 'OPENWEATHER_API_KEY not configured (using demo fallback)',
+      'icon' => null,
+      'raw' => null,
+      'demo' => true,
+    ];
+  }
+
   $url = sprintf('https://api.openweathermap.org/data/2.5/weather?lat=%s&lon=%s&units=metric&appid=%s', urlencode((string)$lat), urlencode((string)$lon), urlencode($apiKey));
   $ch = curl_init($url);
   curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_TIMEOUT=>8]);
