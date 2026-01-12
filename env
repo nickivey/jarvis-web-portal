@@ -1,5 +1,5 @@
 SITE_URL="https://congenial-space-rotary-phone-pg4vq9x677c7pp6-8000.app.github.dev"
-MAIL_FROM="jarvis@localhost"
+MAIL_FROM="jarvis@nickivey.com"
 
 DB_HOST="127.0.0.1"
 DB_NAME="nickive2_jarvisp"

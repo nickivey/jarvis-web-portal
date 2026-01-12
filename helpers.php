@@ -48,11 +48,29 @@ function jarvis_send_email(string $toEmail, string $subject, string $bodyText, ?
     ]);
     $resp = curl_exec($ch);
     $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $curlError = curl_error($ch);
     curl_close($ch);
-    return $resp !== false && $code >= 200 && $code < 300;
+    
+    // Log detailed error information
+    if ($resp === false) {
+      error_log("SendGrid curl error: {$curlError}");
+      return false;
+    }
+    if ($code < 200 || $code >= 300) {
+      error_log("SendGrid API error: HTTP {$code}, Response: " . substr($resp, 0, 512));
+      error_log("SendGrid payload: " . json_encode($payload));
+      return false;
+    }
+    error_log("SendGrid email sent successfully to {$toEmail}, HTTP {$code}");
+    return true;
   }
+  error_log("No SendGrid API key configured, falling back to PHP mail() for {$toEmail}");
   $headers = 'From: ' . $from . "\r\n" . 'Content-Type: text/plain; charset=utf-8';
-  return @mail($toEmail, $subject, $bodyText, $headers);
+  $result = @mail($toEmail, $subject, $bodyText, $headers);
+  if (!$result) {
+    error_log("PHP mail() failed for {$toEmail}");
+  }
+  return $result;
 }
 
 function jarvis_send_sms(?string $toPhone, string $text): bool {
