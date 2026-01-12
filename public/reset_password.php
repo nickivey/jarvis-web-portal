@@ -7,19 +7,47 @@ if (isset($_SESSION['username'])) { header('Location: home.php'); exit; }
 $error = '';
 $message = '';
 $token = trim($_GET['token'] ?? '');
+$userId = null;
+
+// Validate token upfront
+if ($token !== '') {
+  $pdo = jarvis_pdo();
+  $stmt = $pdo->prepare('SELECT id FROM users WHERE password_reset_token=:t AND password_reset_expires_at > NOW() LIMIT 1');
+  $stmt->execute([':t'=>$token]);
+  $row = $stmt->fetch();
+  if ($row) {
+    $userId = (int)$row['id'];
+    // Log token validation
+    jarvis_audit($userId, 'PASSWORD_RESET_TOKEN_VALIDATED', 'auth', ['token_length'=>strlen($token)]);
+  } else {
+    // Log failed reset attempt (invalid/expired token)
+    $stmt2 = $pdo->prepare('SELECT id FROM users WHERE password_reset_token=:t LIMIT 1');
+    $stmt2->execute([':t'=>$token]);
+    $row2 = $stmt2->fetch();
+    if ($row2) {
+      // Token exists but expired
+      $uid = (int)$row2['id'];
+      jarvis_audit($uid, 'PASSWORD_RESET_TOKEN_EXPIRED', 'auth', ['token_length'=>strlen($token)]);
+    }
+    $error = 'Invalid or expired reset link. Please request a new one.';
+  }
+}
 
 if ($token === '') {
   $error = 'No reset token provided.';
-} elseif ($_SERVER['REQUEST_METHOD'] === 'POST') {
+} elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && $userId) {
   $newPass = (string)($_POST['password'] ?? '');
   $confirmPass = (string)($_POST['password_confirm'] ?? '');
   
   if ($newPass === '' || $confirmPass === '') {
     $error = 'Password is required.';
+    jarvis_audit($userId, 'PASSWORD_RESET_VALIDATION_FAILED', 'auth', ['reason'=>'password_empty']);
   } elseif ($newPass !== $confirmPass) {
     $error = 'Passwords do not match.';
+    jarvis_audit($userId, 'PASSWORD_RESET_VALIDATION_FAILED', 'auth', ['reason'=>'password_mismatch']);
   } elseif (strlen($newPass) < 8) {
     $error = 'Password must be at least 8 characters.';
+    jarvis_audit($userId, 'PASSWORD_RESET_VALIDATION_FAILED', 'auth', ['reason'=>'password_too_short']);
   } else {
     $hash = password_hash($newPass, PASSWORD_DEFAULT);
     if (jarvis_reset_password_with_token($token, $hash)) {

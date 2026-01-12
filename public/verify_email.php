@@ -8,6 +8,9 @@ $userId = (int)$_SESSION['user_id'];
 $user = jarvis_user_by_id($userId);
 if (!$user) { session_destroy(); header('Location: login.php'); exit; }
 
+// Log page view
+jarvis_audit($userId, 'VERIFY_EMAIL_PAGE_VIEWED', 'auth', ['email_verified_at'=>$user['email_verified_at']]);
+
 $message = '';
 $error = '';
 
