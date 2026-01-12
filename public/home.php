@@ -59,6 +59,7 @@ try {
 $success = ''; $error = '';
 $recentLocations = jarvis_recent_locations($userId, 20);
 $lastWeather = null;
+$weatherConfigured = (bool)(jarvis_setting_get('OPENWEATHER_API_KEY') ?: getenv('OPENWEATHER_API_KEY'));
 if (!empty($recentLocations) && isset($recentLocations[0]['lat']) && isset($recentLocations[0]['lon'])) {
   try { $lastWeather = jarvis_fetch_weather((float)$recentLocations[0]['lat'], (float)$recentLocations[0]['lon']); } catch (Throwable $e) { $lastWeather = null; }
 }
@@ -167,7 +168,7 @@ $phone = (string)($dbUser['phone_e164'] ?? '');
         <p class="muted">MySQL: <?php echo jarvis_pdo() ? 'Connected' : 'Not configured / unavailable'; ?></p>
         <p class="muted">REST Base: <span class="badge">/api</span></p>
         <p class="muted">Notifications: <span class="badge"><?php echo (int)$notifCount; ?> unread</span></p>
-        <p class="muted">Weather: <span id="jarvisWeather"><?php echo $lastWeather ? htmlspecialchars($lastWeather['desc'] . ' • ' . ($lastWeather['temp_c'] !== null ? $lastWeather['temp_c'].'°C' : '')) : '(enable location logging in Preferences)'; ?></span></p>
+        <p class="muted">Weather: <span id="jarvisWeather"><?php if ($lastWeather) { echo htmlspecialchars($lastWeather['desc'] . ' • ' . ($lastWeather['temp_c'] !== null ? $lastWeather['temp_c'].'°C' : '')); } else { echo ($weatherConfigured ? '(no weather data for current location)' : '(OPENWEATHER_API_KEY not configured; add it in Admin > Settings)'); } ?></span></p>
         <?php if ($wakePrompt): ?>
           <div class="terminal" style="margin-top:12px">
             <div class="term-title">JARVIS Wake Prompt</div>
@@ -202,11 +203,12 @@ $phone = (string)($dbUser['phone_e164'] ?? '');
         <details <?php echo !empty($recentLocations) ? 'open' : ''; ?>>
           <summary>Recent locations (latest first)</summary>
           <table style="width:100%;margin-top:8px">
-            <thead><tr><th>When</th><th>Lat</th><th>Lon</th><th>Source</th><th></th></tr></thead>
+            <thead><tr><th>When</th><th>Location</th><th>Lat</th><th>Lon</th><th>Source</th><th></th></tr></thead>
             <tbody id="recentLocationsTbody">
               <?php foreach($recentLocations as $loc): ?>
                 <tr data-id="<?php echo (int)$loc['id']; ?>">
                   <td><?php echo htmlspecialchars($loc['created_at']); ?></td>
+                  <td><?php echo htmlspecialchars($loc['address']['city'] ?? ($loc['address']['display_name'] ?? '')); ?></td>
                   <td><?php echo htmlspecialchars($loc['lat']); ?></td>
                   <td><?php echo htmlspecialchars($loc['lon']); ?></td>
                   <td><?php echo htmlspecialchars($loc['source']); ?></td>
@@ -236,6 +238,7 @@ $phone = (string)($dbUser['phone_e164'] ?? '');
                 </div>
                 <div style="display:flex;gap:8px;align-items:center">
                   <button type="submit" name="send_chat" value="1" id="sendBtn" class="btn">Send</button>
+                  <button type="button" id="testVoiceBtn" class="btn" title="Upload sample audio and send">Test Voice</button>
                 </div>
               </div>
               <div style="margin-top:8px;display:flex;gap:12px;align-items:center;justify-content:flex-start">
@@ -441,6 +444,8 @@ Content-Type: application/json
         const map = L.map(elId);
         map.setView([parseFloat(centerLat), parseFloat(centerLon)], zoom);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
+        // Leaflet needs a resize after being inserted in the layout; ensure map renders correctly on mobile/layout changes
+        setTimeout(()=>{ try{ map.invalidateSize(); }catch(e){} }, 200);
         if (elId === 'map') _mainMap = map; else _miniMap = map;
         return map;
       }
@@ -451,14 +456,16 @@ Content-Type: application/json
         for (const r of locs){
           try{
             const marker = L.marker([parseFloat(r.lat), parseFloat(r.lon)]).addTo(m);
-            marker.bindPopup(`<div><b>${r.source}</b><br>${r.created_at}<br>${parseFloat(r.lat).toFixed(5)}, ${parseFloat(r.lon).toFixed(5)}</div>`);
+            const addr = (r.address && (r.address.city || r.address.display_name)) ? (r.address.city || r.address.display_name) : '';
+            marker.bindPopup(`<div><b>${r.source}</b><br>${r.created_at}<br>${parseFloat(r.lat).toFixed(5)}, ${parseFloat(r.lon).toFixed(5)}<br>${addr}</div>`);
           }catch(e){}
         }
         try{
           const mm = makeMap('miniMap', c.lat, c.lon, 11);
           for (const r of locs.slice(0,8)){
             const cm = L.circleMarker([parseFloat(r.lat), parseFloat(r.lon)], { radius:6 }).addTo(mm);
-            cm.bindPopup(`<div><b>${r.source}</b><br>${r.created_at}<br>${parseFloat(r.lat).toFixed(5)}, ${parseFloat(r.lon).toFixed(5)}</div>`);
+            const addr = (r.address && (r.address.city || r.address.display_name)) ? (r.address.city || r.address.display_name) : '';
+            cm.bindPopup(`<div><b>${r.source}</b><br>${r.created_at}<br>${parseFloat(r.lat).toFixed(5)}, ${parseFloat(r.lon).toFixed(5)}<br>${addr}</div>`);
           }
         }catch(e){}
       }
@@ -478,7 +485,8 @@ Content-Type: application/json
             for (const r of locs) {
               const tr = document.createElement('tr'); tr.setAttribute('data-id', r.id);
               tr.className = 'new';
-              tr.innerHTML = `<td>${(r.created_at||'')}</td><td>${r.lat}</td><td>${r.lon}</td><td>${r.source||''}</td><td><button class="btn secondary focusLocationBtn" data-id="${r.id}">Focus</button></td>`;
+              const addrText = (r.address && (r.address.city || r.address.display_name)) ? (r.address.city || r.address.display_name) : '';
+              tr.innerHTML = `<td>${(r.created_at||'')}</td><td>${addrText}</td><td>${r.lat}</td><td>${r.lon}</td><td>${r.source||''}</td><td><button class="btn secondary focusLocationBtn" data-id="${r.id}">Focus</button></td>`;
               tbody.appendChild(tr);
               // remove 'new' class after animation
               setTimeout(()=>{ try{ tr.classList.remove('new'); }catch(e){} }, 1000);
@@ -713,6 +721,9 @@ Content-Type: application/json
       startLocationPolling();
       startLocationPoster();
 
+      // Ensure maps resize on layout changes (e.g., mobile nav open/close)
+      window.addEventListener('resize', ()=>{ try{ if (typeof _mainMap !== 'undefined' && _mainMap) _mainMap.invalidateSize(); if (typeof _miniMap !== 'undefined' && _miniMap) _miniMap.invalidateSize(); }catch(e){} });
+
       // Permission change listeners: run wake briefing on geolocation permission grant
       if (navigator.permissions && navigator.permissions.query) {
         try {
@@ -754,7 +765,8 @@ Content-Type: application/json
                     else { const note = document.createElement('div'); note.className='muted'; note.style.marginTop='6px'; note.textContent = 'Uploaded • id: ' + resp.id; note.appendChild(link); if (container) container.appendChild(note); }
                     // Make this uploaded audio available to be sent via the Send button (but auto-send below)
                     window._pendingVoiceToSend = { id: resp.id, transcript: _lastTranscript, contextId: _voiceContextId };
-                    try{ if (sendBtn) { delete sendBtn.dataset.pendingVoice; sendBtn.textContent = 'Send'; } }catch(e){}
+                    const sendBtnEl = document.getElementById('sendBtn');
+                    if (sendBtnEl) { sendBtnEl.dataset.pendingVoice = String(resp.id); sendBtnEl.textContent = 'Send (voice)'; }
 
                     // If there's a pending voice command (voice-only mode), send it now with voice_input_id
                     if (_pendingVoiceCmd && _pendingVoiceCmd.text) {
@@ -775,7 +787,10 @@ Content-Type: application/json
                     try{ if (token) fetch('/api/audit', { method:'POST', headers: { 'Content-Type':'application/json', 'Authorization': 'Bearer '+token }, body: JSON.stringify({ action: 'VOICE_UPLOAD_SUCCESS', entity: 'voice', metadata: { id: resp.id, size: blob.size } }) }); }catch(e){}
                   } else {
                     if (statusEl) statusEl.textContent = 'Upload failed';
-                    const note = document.createElement('div'); note.className='muted'; note.style.marginTop='6px'; note.textContent = 'Upload failed'; if (container) container.appendChild(note); try{ if (token) fetch('/api/audit', { method:'POST', headers:{ 'Content-Type':'application/json','Authorization':'Bearer '+token }, body: JSON.stringify({ action: 'VOICE_UPLOAD_FAILED', entity: 'voice' }) }); }catch(e){}
+                    const note = document.createElement('div'); note.className='muted'; note.style.marginTop='6px'; note.textContent = 'Upload failed'; if (container) container.appendChild(note);
+                    // Clear any pending send button flag
+                    try { const sb = document.getElementById('sendBtn'); if (sb && sb.dataset && sb.dataset.pendingVoice) { delete sb.dataset.pendingVoice; sb.textContent = 'Send'; } } catch(e){}
+                    try{ if (token) fetch('/api/audit', { method:'POST', headers:{ 'Content-Type':'application/json','Authorization':'Bearer '+token }, body: JSON.stringify({ action: 'VOICE_UPLOAD_FAILED', entity: 'voice' }) }); }catch(e){}
                   }
                   }
                 } catch(e){ console.warn('upload voice failed',e); const note = document.createElement('div'); note.className='muted'; note.style.marginTop='6px'; note.textContent = 'Upload failed'; if (container) container.appendChild(note); }
@@ -809,6 +824,27 @@ Content-Type: application/json
           return resp.json().catch(()=>null);
         } catch(e){ return null; }
       }
+
+      // Upload a remote sample audio file and auto-send as a voice command (for quick testing)
+      document.getElementById('testVoiceBtn')?.addEventListener('click', async ()=>{
+        try{
+          const sampleUrl = 'https://interactive-examples.mdn.mozilla.net/media/examples/t-rex-roar.mp3';
+          const r = await fetch(sampleUrl);
+          if (!r.ok) { appendMessage('Failed to fetch sample audio', 'jarvis'); return; }
+          const blob = await r.blob();
+          appendMessage('Uploading sample audio...', 'me');
+          const statusNote = document.createElement('div'); statusNote.className='muted'; statusNote.textContent = 'Uploading sample...';
+          const container = appendAudioMessage(blob, 'me', 'Sample audio'); if (container) container.appendChild(statusNote);
+          const resp = await sendAudioBlob(blob, 'Sample audio test', Math.floor((blob.size/16000)), 'sample');
+          if (resp && resp.ok && resp.id) {
+            statusNote.textContent = 'Uploaded • id: '+resp.id;
+            // Auto-send blank text with voice_input_id so server will use transcript
+            await sendCommand('', 'voice', { voice_input_id: resp.id });
+          } else {
+            statusNote.textContent = 'Upload failed';
+          }
+        }catch(e){ console.error('test voice upload failed', e); appendMessage('Test voice upload failed: '+(e && e.message ? e.message : String(e)), 'jarvis'); }
+      });
 
       // Try to initialize Web Speech Recognition if available
       function initRecognition(){
@@ -1035,7 +1071,7 @@ Content-Type: application/json
             // Send an empty text command with voice_input_id to correlate audio on server-side
             await sendCommand('', 'voice', { voice_input_id: pendingId });
             // clear pending flag
-            try{ delete sendBtn.dataset.pendingVoice; sendBtn.textContent = 'Send'; }catch(e){}
+            try{ delete sendBtn.dataset.pendingVoice; sendBtn.textContent = 'Send'; window._pendingVoiceToSend = null; }catch(e){}
             return;
           }
         }catch(e){}

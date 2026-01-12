@@ -74,6 +74,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       jarvis_setting_set($k, $v);
       $notice = 'Updated setting.';
     }
+  } elseif ($action === 'weather_test') {
+    // Test server-side weather fetch for given coords (default NYC)
+    $lat = isset($_POST['test_lat']) ? (float)$_POST['test_lat'] : 40.7128;
+    $lon = isset($_POST['test_lon']) ? (float)$_POST['test_lon'] : -74.0060;
+    $w = null;
+    try {
+      $w = jarvis_fetch_weather($lat, $lon);
+      if (!$w) {
+        $notice = 'Weather fetch failed. Is OPENWEATHER_API_KEY configured?';
+      } else {
+        $notice = 'Weather OK: ' . htmlspecialchars(($w['desc'] ?? '(no desc)') . ' • ' . (($w['temp_c']!==null)?$w['temp_c'].'°C':''));
+      }
+    } catch (Throwable $e) {
+      $notice = 'Weather test error: ' . htmlspecialchars($e->getMessage());
+    }
   } elseif ($action === 'sendgrid_test') {
     $to = trim((string)($_POST['test_email'] ?? ''));
     if (filter_var($to, FILTER_VALIDATE_EMAIL)) {
@@ -130,6 +145,24 @@ if (!jarvis_setting_get('GOOGLE_REDIRECT_URI')) {
 }
 
 $settings = jarvis_setting_list();
+
+// Warn if GOOGLE_REDIRECT_URI is configured but differs from detected site URL
+$siteRedirect = jarvis_site_url() ? jarvis_site_url() . '/public/google_callback.php' : null;
+$googleRedirectConfigured = jarvis_setting_get('GOOGLE_REDIRECT_URI');
+$googleRedirectMismatch = ($googleRedirectConfigured && $siteRedirect && trim($googleRedirectConfigured) !== trim($siteRedirect));
+
+// OAuth diagnostics: fetch recent google oauth-related audit events for troubleshooting
+$oauthAudits = [];
+try {
+  $pdo = jarvis_pdo();
+  if ($pdo) {
+    $q = $pdo->prepare("SELECT id, action, entity, metadata_json, created_at FROM audit_log WHERE entity = 'google' OR action LIKE 'OAUTH_%' ORDER BY id DESC LIMIT 10");
+    $q->execute();
+    $oauthAudits = $q->fetchAll(PDO::FETCH_ASSOC) ?: [];
+  }
+} catch (Throwable $e) {
+  // ignore
+}
 
 // Voice Data Timeline
 $voiceRows = jarvis_list_all_voice_inputs(50);
@@ -257,9 +290,13 @@ $users = jarvis_list_users(50,0, (string)($_GET['q'] ?? ''));
     <section>
       <h2>Existing Settings</h2>
       <p class="muted">Update keys here; changes take effect immediately for the running application (no restart required).</p>
+      <?php if ($googleRedirectMismatch): ?>
+        <p class="muted">⚠️ <b>Redirect mismatch:</b> the configured <code>GOOGLE_REDIRECT_URI</code> (<?= htmlspecialchars($googleRedirectConfigured) ?>) does not match the site-detected default (<?= htmlspecialchars($siteRedirect) ?>). This often causes <code>access_denied</code> / <code>redirect_uri_mismatch</code> errors. Use "Set to current site" to fix it or adjust the Redirect URI in Google Cloud Console to match exactly.</p>
+      <?php endif; ?>
       <?php if (empty($settings)): ?>
         <p>No settings yet.</p>
       <?php else: ?>
+        <tr><td colspan="5"><small class="muted">Tip: When using Google OAuth with access_type=offline you may need to set <code>GOOGLE_REDIRECT_URI</code> to your public URL and use prompt=consent to obtain a refresh token. If users see "access_denied", verify that your OAuth Client in Google Cloud Console has the Redirect URI registered exactly as configured here.</small></td></tr>
         <table>
           <thead><tr><th>Key</th><th>Value (hidden)</th><th>Created</th><th>Updated</th><th>Actions</th></tr></thead>
           <tbody>
@@ -310,11 +347,53 @@ $users = jarvis_list_users(50,0, (string)($_GET['q'] ?? ''));
     </section>
 
     <section>
+      <h2>OAuth Diagnostics (Google)</h2>
+      <p class="muted">Recent Google OAuth events recorded by the application; use this to diagnose <code>access_denied</code>, <code>redirect_uri_mismatch</code>, and token exchange errors.</p>
+      <?php if (empty($oauthAudits)): ?>
+        <p class="muted">No recent Google OAuth audit events.</p>
+      <?php else: ?>
+        <table>
+          <thead><tr><th>When</th><th>Action</th><th>Metadata</th></tr></thead>
+          <tbody>
+            <?php foreach ($oauthAudits as $a): ?>
+              <tr>
+                <td style="white-space:nowrap"><?= htmlspecialchars($a['created_at'] ?? '') ?></td>
+                <td><?= htmlspecialchars($a['action'] ?? '') ?></td>
+                <td>
+                  <?php $m = $a['metadata_json'] ? json_decode($a['metadata_json'], true) : null; ?>
+                  <?php if ($m && is_array($m)): ?>
+                    <div style="font-size:13px;line-height:1.2">
+                      <?php foreach ($m as $mk=>$mv): ?>
+                        <div><b><?= htmlspecialchars($mk) ?></b>: <?= htmlspecialchars(is_scalar($mv) ? (string)$mv : json_encode($mv)) ?></div>
+                      <?php endforeach; ?>
+                    </div>
+                  <?php else: ?>
+                    <div class="muted">No metadata</div>
+                  <?php endif; ?>
+                </td>
+              </tr>
+            <?php endforeach; ?>
+          </tbody>
+        </table>
+      <?php endif; ?>
+    </section>
+
+    <section>
       <h2>Notes</h2>
       <ul>
         <li>Values are visible in the edit box here; avoid pasting secrets you don't intend to keep.</li>
         <li>Consider rotating keys that were previously leaked and removed from history.</li>
       </ul>
+    </section>
+
+    <section>
+      <h2>Weather API</h2>
+      <p class="muted">JARVIS can fetch local weather when `OPENWEATHER_API_KEY` is configured. Use the test below to verify server-side weather lookups.</p>
+      <form method="post" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <input type="hidden" name="action" value="weather_test">
+        <label style="flex:1;min-width:240px">Test coordinates: <input name="test_lat" placeholder="lat" value="40.7128">,<input name="test_lon" placeholder="lon" value="-74.0060"></label>
+        <button class="btn" type="submit">Test Weather</button>
+      </form>
     </section>
 
     <section>

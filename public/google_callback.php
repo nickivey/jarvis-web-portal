@@ -2,6 +2,14 @@
 session_start();
 require_once __DIR__ . '/../db.php';
 
+// If the provider returned an error (user denied consent or other issues), log and surface a helpful message
+if (isset($_GET['error'])) {
+  $err = (string)($_GET['error'] ?? 'error');
+  $errDesc = isset($_GET['error_description']) ? (string)($_GET['error_description']) : null;
+  jarvis_audit(null, 'OAUTH_CONNECT_FAIL', 'google', ['reason'=>'provider_error','error'=>$err,'error_description'=>$errDesc]);
+  header('Location: login.php?error=google_access_denied'); exit;
+}
+
 $state = $_GET['state'] ?? null;
 if (!$state || !isset($_SESSION['google_oauth_state']) || $_SESSION['google_oauth_state'] !== $state) {
   jarvis_audit(null, 'OAUTH_CONNECT_FAIL', 'google', ['reason'=>'invalid_state']);
@@ -10,7 +18,7 @@ if (!$state || !isset($_SESSION['google_oauth_state']) || $_SESSION['google_oaut
 unset($_SESSION['google_oauth_state']);
 
 $code = $_GET['code'] ?? null;
-if (!$code) { header('Location: login.php?error=no_code'); exit; }
+if (!$code) { jarvis_audit(null, 'OAUTH_CONNECT_FAIL', 'google', ['reason'=>'no_code']); header('Location: login.php?error=no_code'); exit; }
 
 $clientId = jarvis_setting_get('GOOGLE_CLIENT_ID') ?: '';
 $clientSecret = jarvis_setting_get('GOOGLE_CLIENT_SECRET') ?: '';
@@ -39,7 +47,11 @@ $resp = curl_exec($ch);
 $codeHttp = curl_getinfo($ch, CURLINFO_HTTP_CODE);
 curl_close($ch);
 if ($resp === false || $codeHttp < 200 || $codeHttp >= 400) {
-  jarvis_audit(null, 'OAUTH_CONNECT_FAIL', 'google', ['reason'=>'token_exchange_failed','resp'=>$resp]);
+  // Try to decode error for better diagnostics
+  $json = json_decode($resp ?: '', true) ?: null;
+  $err = $json['error'] ?? null;
+  $errDesc = $json['error_description'] ?? null;
+  jarvis_audit(null, 'OAUTH_CONNECT_FAIL', 'google', ['reason'=>'token_exchange_failed','http_code'=>$codeHttp,'error'=>$err,'error_description'=>$errDesc,'raw'=>$resp]);
   header('Location: login.php?error=token_exchange'); exit;
 }
 

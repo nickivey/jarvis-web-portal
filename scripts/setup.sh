@@ -101,6 +101,13 @@ else
       else
         echo "Schema import successful over TCP."
       fi
+
+      # Run optional migrations (ensure geocache exists for reverse geocoding)
+      if [ -f scripts/migrate_add_geocache.php ]; then
+        echo "Ensuring location geocache table exists (scripts/migrate_add_geocache.php)..."
+        php scripts/migrate_add_geocache.php || echo "Geocache migration failed; you can run scripts/migrate_add_geocache.php manually."
+      fi
+
     else
       echo "sql/schema.sql not found; skipping import."
     fi

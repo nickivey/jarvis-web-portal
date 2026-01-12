@@ -526,7 +526,70 @@ function jarvis_recent_locations(int $userId, int $limit=20): array {
   $stmt->bindValue(':u',$userId,PDO::PARAM_INT);
   $stmt->bindValue(':l',$limit,PDO::PARAM_INT);
   $stmt->execute();
-  return $stmt->fetchAll() ?: [];
+  $rows = $stmt->fetchAll() ?: [];
+
+  // Enrich with reverse-geocoded address where possible (uses cache)
+  foreach ($rows as &$r) {
+    try {
+      $addr = jarvis_reverse_geocode((float)$r['lat'], (float)$r['lon']);
+      if ($addr) $r['address'] = $addr;
+    } catch (Throwable $e) {
+      // non-fatal; leave entry without address
+    }
+  }
+  return $rows;
+}
+
+/**
+ * Reverse geocode lat/lon using Nominatim (OpenStreetMap) with a simple cache.
+ * Returns associative array with keys like 'display_name','city','state','country','postcode' or null on failure.
+ */
+function jarvis_reverse_geocode(float $lat, float $lon): ?array {
+  $pdo = jarvis_pdo();
+  if (!$pdo) return null;
+  // Round coords to 3 decimal places (~100m) for cache key
+  $latr = round($lat, 3);
+  $lonr = round($lon, 3);
+
+  $stmt = $pdo->prepare('SELECT address_json FROM location_geocache WHERE lat_round=:la AND lon_round=:lo LIMIT 1');
+  $stmt->execute([':la'=>$latr, ':lo'=>$lonr]);
+  $row = $stmt->fetch();
+  if ($row && !empty($row['address_json'])) {
+    return json_decode($row['address_json'], true) ?: null;
+  }
+
+  // Query Nominatim reverse endpoint (respectful usage headers)
+  $url = 'https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=' . urlencode((string)$lat) . '&lon=' . urlencode((string)$lon) . '&addressdetails=1';
+  $ch = curl_init($url);
+  curl_setopt_array($ch, [
+    CURLOPT_RETURNTRANSFER => true,
+    CURLOPT_FOLLOWLOCATION => true,
+    CURLOPT_TIMEOUT => 5,
+    CURLOPT_USERAGENT => 'Jarvis/1.0 (+https://example.org)'
+  ]);
+  $resp = curl_exec($ch);
+  $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+  curl_close($ch);
+  $data = json_decode($resp ?: '', true);
+  if (!is_array($data) || $code !== 200) return null;
+
+  $addr = [];
+  $addr['display_name'] = (string)($data['display_name'] ?? '');
+  $ad = (array)($data['address'] ?? []);
+  $addr['city'] = (string)($ad['city'] ?? $ad['town'] ?? $ad['village'] ?? $ad['hamlet'] ?? '');
+  $addr['state'] = (string)($ad['state'] ?? $ad['region'] ?? '');
+  $addr['country'] = (string)($ad['country'] ?? '');
+  $addr['postcode'] = (string)($ad['postcode'] ?? '');
+
+  // Store in cache (best-effort)
+  try {
+    $q = $pdo->prepare('INSERT IGNORE INTO location_geocache (lat_round, lon_round, address_json) VALUES (:la, :lo, :aj)');
+    $q->execute([':la'=>$latr, ':lo'=>$lonr, ':aj'=>json_encode($addr)]);
+  } catch (Throwable $e) {
+    // ignore caching errors
+  }
+
+  return $addr;
 }
 
 function jarvis_get_location_by_id(int $id): ?array {
@@ -535,6 +598,12 @@ function jarvis_get_location_by_id(int $id): ?array {
   $stmt = $pdo->prepare('SELECT id,user_id,lat,lon,accuracy_m,source,created_at FROM location_logs WHERE id=:id LIMIT 1');
   $stmt->execute([':id'=>$id]);
   $row = $stmt->fetch();
+  if ($row) {
+    try {
+      $addr = jarvis_reverse_geocode((float)$row['lat'], (float)$row['lon']);
+      if ($addr) $row['address'] = $addr;
+    } catch (Throwable $e) { /* ignore */ }
+  }
   return $row ? $row : null;
 }
 

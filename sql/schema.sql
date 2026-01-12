@@ -155,6 +155,17 @@ CREATE TABLE IF NOT EXISTS location_logs (
   CONSTRAINT fk_loc_user FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- Simple geocode cache to avoid repeated reverse lookups for nearby coordinates
+CREATE TABLE IF NOT EXISTS location_geocache (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  lat_round DOUBLE NOT NULL,
+  lon_round DOUBLE NOT NULL,
+  address_json JSON NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY(id),
+  UNIQUE KEY ux_latlon_round(lat_round, lon_round)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 -- Per-user imported Google Calendar events
 CREATE TABLE IF NOT EXISTS user_calendar_events (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,

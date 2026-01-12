@@ -6,6 +6,10 @@ if (!isset($_SESSION['username'])) { header('Location: login.php'); exit; }
 $userId = (int)($_SESSION['user_id'] ?? 0);
 if (!$userId) { session_destroy(); header('Location: login.php'); exit; }
 $locations = jarvis_recent_locations($userId, 200);
+// JWT for browser-side API calls (location, command sync, etc.)
+$webJwt = null;
+try { $webJwt = jarvis_jwt_issue($userId, $_SESSION['username'], 3600); } catch (Throwable $e) { $webJwt = null; }
+
 $focus = isset($_GET['focus']) ? (int)$_GET['focus'] : 0;
 $focusLocation = null;
 if ($focus > 0) {
@@ -55,11 +59,12 @@ $focusLon = isset($_GET['lon']) ? (float)$_GET['lon'] : null;
     <div id="no-locs" class="muted" style="display:none">No location entries yet.</div>
     <div id="map" style="height:320px;border:1px solid #ddd;margin-bottom:12px"></div>
     <table style="width:100%">
-      <thead><tr><th>When</th><th>Lat</th><th>Lon</th><th>Accuracy</th><th>Source</th><th></th></tr></thead>
+      <thead><tr><th>When</th><th>Location</th><th>Lat</th><th>Lon</th><th>Accuracy</th><th>Source</th><th></th></tr></thead>
       <tbody id="locationTableBody">
       <?php foreach($locations as $l): ?>
         <tr data-id="<?php echo (int)$l['id']; ?>">
           <td><?php echo htmlspecialchars($l['created_at']); ?></td>
+          <td><?php echo htmlspecialchars($l['address']['city'] ?? ($l['address']['display_name'] ?? '')); ?></td>
           <td><?php echo htmlspecialchars($l['lat']); ?></td>
           <td><?php echo htmlspecialchars($l['lon']); ?></td>
           <td><?php echo htmlspecialchars($l['accuracy_m']); ?></td>
@@ -85,7 +90,8 @@ $focusLon = isset($_GET['lon']) ? (float)$_GET['lon'] : null;
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(_map);
         for (const r of locs){
           const marker = L.marker([parseFloat(r.lat), parseFloat(r.lon)]).addTo(_map);
-          marker.bindPopup(`<div><b>${r.source}</b><br>${r.created_at}<br>${parseFloat(r.lat).toFixed(5)}, ${parseFloat(r.lon).toFixed(5)}</div>`);
+          const addr = (r.address && (r.address.city || r.address.display_name)) ? (r.address.city || r.address.display_name) : '';
+          marker.bindPopup(`<div><b>${r.source}</b><br>${r.created_at}<br>${parseFloat(r.lat).toFixed(5)}, ${parseFloat(r.lon).toFixed(5)}<br>${addr}</div>`);
         }
       }
 
@@ -102,7 +108,8 @@ $focusLon = isset($_GET['lon']) ? (float)$_GET['lon'] : null;
           locs.forEach((r, i)=>{
             const tr = document.createElement('tr'); tr.setAttribute('data-id', r.id);
             tr.className = 'new';
-            tr.innerHTML = `<td>${r.created_at}</td><td>${r.lat}</td><td>${r.lon}</td><td>${r.accuracy_m || ''}</td><td>${r.source || ''}</td><td><button class="btn secondary focusLocationBtn" data-id="${r.id}">Focus</button></td>`;
+            const addrText = (r.address && (r.address.city || r.address.display_name)) ? (r.address.city || r.address.display_name) : '';
+            tr.innerHTML = `<td>${r.created_at}</td><td>${addrText}</td><td>${r.lat}</td><td>${r.lon}</td><td>${r.accuracy_m || ''}</td><td>${r.source || ''}</td><td><button class="btn secondary focusLocationBtn" data-id="${r.id}">Focus</button></td>`;
             tbody.appendChild(tr);
             setTimeout(()=>{ try{ tr.classList.remove('new'); }catch(e){} }, 1000 + (i*40));
           });

@@ -153,6 +153,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
           <div style="display:flex;gap:10px;flex-wrap:wrap">
             <?php if (!$googleToken): ?>
               <a class="btn" href="connect_google.php">Connect / Sign in with Google</a>
+              <?php if (isset($_GET['error']) && $_GET['error'] === 'google_access_denied'): ?>
+                <div class="muted" style="margin-top:8px">Google access was denied or blocked. Check your Google account consent screen or ensure the OAuth credentials and redirect URI configured in Admin > Settings are correct.</div>
+              <?php endif; ?>
             <?php else: ?>
               <a class="btn" href="disconnect_google.php">Disconnect Google</a>
             <?php endif; ?>

@@ -4,8 +4,22 @@ require_once __DIR__ . '/../db.php';
 if (isset($_SESSION['username'])) { header('Location: home.php'); exit; }
 
 $errors=[];
+$externalErrors = [];
 $showResendPrompt = false;
 $resendEmail = '';
+
+// Surface OAuth/provider errors when redirected back (e.g., access_denied, token_exchange failures)
+if (isset($_GET['error'])) {
+  $err = $_GET['error'];
+  if ($err === 'google_access_denied') {
+    $externalErrors[] = 'Google access was denied or blocked. Check OAuth settings and Redirect URI in Admin > Settings.';
+  } elseif ($err === 'token_exchange') {
+    $externalErrors[] = 'OAuth token exchange failed. Check client secret and redirect URI.';
+  } else {
+    $externalErrors[] = 'Authentication error: ' . htmlspecialchars($err);
+  }
+}
+
 if ($_SERVER['REQUEST_METHOD']==='POST') {
   $u=trim((string)($_POST['email']??''));
   $p=(string)($_POST['password']??'');
@@ -74,6 +88,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
       <h2>Login</h2>
       <p class="muted" style="margin-top:-4px">If you just registered, confirm your email to activate access.</p>
       <?php if($errors):?><div class="error"><?php foreach($errors as $e){echo '<p>'.htmlspecialchars($e).'</p>';}?></div><?php endif;?>
+      <?php if(!empty($externalErrors)):?><div class="error"><?php foreach($externalErrors as $e){echo '<p>'.htmlspecialchars($e).'</p>';}?></div><?php endif;?>
       <form method="post" id="loginForm">
         <label>Email</label>
         <input name="email" required value="<?php echo htmlspecialchars($u ?? '', ENT_QUOTES); ?>" />

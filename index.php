@@ -9,6 +9,8 @@ require_once __DIR__ . '/briefing.php';
 
 $path = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/';
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
+// Debugging: log incoming requests to help diagnose route mismatches (temporary)
+@file_put_contents('/tmp/jarvis_req.log', json_encode(['ts'=>time(),'path'=>$path,'method'=>$method,'headers'=>getallheaders()]) . PHP_EOL, FILE_APPEND);
 
 if ($path !== '/' && substr($path, -1) === '/') $path = rtrim($path, '/');
 
@@ -175,6 +177,78 @@ if ($path === '/api/audit') {
 }
 
 // ----------------------------
+// Voice inputs (top-level handler) - ensure this is available outside of command block
+if ($path === '/api/voice') {
+  if ($method === 'POST') {
+    // debug: log files/post content
+    @file_put_contents('/tmp/jarvis_req.log', json_encode(['ts'=>time(),'voice_post_files'=>array_keys($_FILES),'post_keys'=>array_keys($_POST)]) . PHP_EOL, FILE_APPEND);
+    [$userId, $u] = require_jwt_user();
+    $uploadedFile = $_FILES['file'] ?? null;
+    if (!$uploadedFile || ($uploadedFile['error'] ?? 1) !== 0) jarvis_respond(400, ['error'=>'no file uploaded']);
+    $baseDir = __DIR__ . '/storage/voice/' . (int)$userId;
+    if (!is_dir($baseDir)) @mkdir($baseDir, 0770, true);
+    $ext = pathinfo($uploadedFile['name'] ?? 'blob', PATHINFO_EXTENSION) ?: 'webm';
+    $fname = sprintf('%s_%s.%s', (int)$userId, bin2hex(random_bytes(6)), $ext);
+    $dest = $baseDir . '/' . $fname;
+    if (!move_uploaded_file($uploadedFile['tmp_name'], $dest)) jarvis_respond(500, ['error'=>'failed to save file']);
+
+    $transcript = isset($_POST['transcript']) ? trim((string)$_POST['transcript']) : null;
+    $duration = isset($_POST['duration']) ? (int)$_POST['duration'] : null;
+    $meta = [];
+    if (isset($_POST['meta'])) $meta = json_decode((string)$_POST['meta'], true) ?: [];
+
+    $filePathForDb = 'storage/voice/' . (int)$userId . '/' . $fname;
+    $vid = jarvis_save_voice_input($userId, $filePathForDb, $transcript, $duration, $meta);
+    jarvis_audit($userId, 'VOICE_INPUT', 'voice', ['voice_id'=>$vid,'filename'=>$filePathForDb,'duration_ms'=>$duration,'transcript'=>substr($transcript?:'',0,512)]);
+    jarvis_pnut_log($userId, 'voice', ['voice_id'=>$vid,'filename'=>$filePathForDb,'duration_ms'=>$duration,'transcript'=>$transcript,'meta'=>$meta]);
+    jarvis_respond(200, ['ok'=>true,'id'=>$vid,'filename'=>$filePathForDb]);
+  }
+  if ($method === 'GET') {
+    [$userId, $u] = require_jwt_user();
+    $limit = isset($_GET['limit']) ? min(200, (int)$_GET['limit']) : 20;
+    $items = jarvis_recent_voice_inputs($userId, $limit);
+    jarvis_respond(200, ['ok'=>true,'count'=>count($items),'voice'=>$items]);
+  }
+  jarvis_respond(405, ['error'=>'Method not allowed']);
+}
+
+// Download a recorded voice blob (authenticated via JWT or Session for Admin UI) - TOP-LEVEL
+if (preg_match('#^/api/voice/([0-9]+)/download$#', $path, $m)) {
+  $userId = 0;
+  $isAdmin = false;
+  $token = jarvis_bearer_token();
+  if ($token) {
+    $payload = jarvis_jwt_verify($token);
+    if ($payload && !empty($payload['sub'])) {
+      $userId = (int)$payload['sub'];
+      $u = jarvis_user_by_id($userId);
+      if ($u && ($u['role']??'')==='admin') $isAdmin = true;
+    }
+  } else {
+    if (session_status() === PHP_SESSION_NONE) session_start();
+    if (isset($_SESSION['user_id'])) {
+      $userId = (int)$_SESSION['user_id'];
+      $u = jarvis_user_by_id($userId);
+      if ($u && ($u['role']??'')==='admin') $isAdmin = true;
+    }
+  }
+
+  if ($userId <= 0) jarvis_respond(401, ['error'=>'Unauthorized']);
+
+  $vid = (int)$m[1];
+  $v = jarvis_voice_input_by_id($vid);
+  if (!$v) jarvis_respond(404, ['error'=>'not found']);
+  if ((int)$v['user_id'] !== (int)$userId && !$isAdmin) jarvis_respond(403, ['error'=>'forbidden']);
+  $f = __DIR__ . '/' . $v['filename'];
+  if (!is_file($f)) jarvis_respond(404, ['error'=>'file not found']);
+  $mime = mime_content_type($f) ?: 'application/octet-stream';
+  header('Content-Type: ' . $mime);
+  header('Content-Disposition: attachment; filename="' . basename($f) . '"');
+  readfile($f);
+  exit;
+}
+
+// ----------------------------
 // Command
 // ----------------------------
 
@@ -204,12 +278,24 @@ if ($path === '/api/command') {
   }
 
   // Response metadata to include voice linkage when applicable
-  $respMeta = $voiceId ? array_filter(['voice_input_id' => $voiceId, 'voice_transcript' => ($clientMeta['voice_transcript'] ?? null)]) : [];
+  $respMeta = [];
+  if ($voiceId) {
+    $respMeta['voice_input_id'] = $voiceId;
+    if (!empty($clientMeta['voice_transcript'])) {
+      $respMeta['voice_transcript'] = (string)$clientMeta['voice_transcript'];
+    } else {
+      try {
+        $vv = jarvis_voice_input_by_id($voiceId);
+        if ($vv && !empty($vv['transcript'])) $respMeta['voice_transcript'] = (string)$vv['transcript'];
+      } catch (Throwable $e) { /* ignore */ }
+    }
+  }
 
 // ----------------------------
 // Voice inputs: save audio blobs + transcript for deep dictation analysis
 // ----------------------------
 if ($path === '/api/voice') {
+  @file_put_contents('/tmp/jarvis_req.log', json_encode(['ts'=>time(),'enter_voice_handler'=>true,'method'=>$method]) . PHP_EOL, FILE_APPEND);
   if ($method === 'POST') {
     [$userId, $u] = require_jwt_user();
     // Accept multipart/form-data with 'file', 'transcript', 'duration'
@@ -253,44 +339,7 @@ if ($path === '/api/voice') {
 
 // Download a recorded voice blob (authenticated via JWT or Session for Admin UI)
 if (preg_match('#^/api/voice/([0-9]+)/download$#', $path, $m)) {
-  $userId = 0;
-  $isAdmin = false;
-  $token = jarvis_bearer_token();
-  
-  if ($token) {
-    $payload = jarvis_jwt_verify($token);
-    if ($payload && !empty($payload['sub'])) {
-      $userId = (int)$payload['sub'];
-      $u = jarvis_user_by_id($userId);
-      if ($u && ($u['role']??'')==='admin') $isAdmin = true;
-    }
-  } else {
-    // Fallback to session (e.g. from Admin UI audio player)
-    if (session_status() === PHP_SESSION_NONE) session_start();
-    if (isset($_SESSION['user_id'])) {
-      $userId = (int)$_SESSION['user_id'];
-      $u = jarvis_user_by_id($userId);
-      if ($u && ($u['role']??'')==='admin') $isAdmin = true;
-    }
-  }
-
-  if ($userId <= 0) jarvis_respond(401, ['error'=>'Unauthorized']);
-
-  $vid = (int)$m[1];
-  $v = jarvis_voice_input_by_id($vid);
-  if (!$v) jarvis_respond(404, ['error'=>'not found']);
-  
-  // Access control: Owner OR Admin
-  if ((int)$v['user_id'] !== (int)$userId && !$isAdmin) jarvis_respond(403, ['error'=>'forbidden']);
-  
-  $f = __DIR__ . '/' . $v['filename'];
-  if (!is_file($f)) jarvis_respond(404, ['error'=>'file not found']);
-  // stream file
-  $mime = mime_content_type($f) ?: 'application/octet-stream';
-  header('Content-Type: ' . $mime);
-  header('Content-Disposition: attachment; filename="' . basename($f) . '"');
-  readfile($f);
-  exit;
+  // Download handler moved to top-level to support direct GET/HEAD requests
 }
 
   $prefs = jarvis_preferences($userId);
@@ -542,9 +591,19 @@ if ($path === '/api/location') {
 
   $meta = ['lat'=>$lat,'lon'=>$lon,'accuracy'=>$acc,'location_id'=>$locId];
   if ($weather) $meta['weather'] = $weather;
+
+  // Enrich with reverse-geocode information (city/state/country) when available
+  try {
+    $addr = jarvis_reverse_geocode((float)$lat, (float)$lon);
+    if ($addr) {
+      $meta['address'] = $addr;
+    }
+  } catch (Throwable $e) { /* non-fatal */ }
+
   jarvis_audit($userId, 'LOCATION_UPDATE', 'location', $meta);
 
   $resp = ['ok'=>true, 'lat'=>$lat, 'lon'=>$lon, 'weather'=>$weather, 'location_id'=>$locId];
+  if (!empty($addr)) $resp['address'] = $addr;
   jarvis_log_api_request($userId, 'web', $path, $method, $in, $resp, 200);
   jarvis_respond(200, $resp);
 }

@@ -11,6 +11,8 @@ if (!$clientId || !$redirect) {
 
 $state = bin2hex(random_bytes(16));
 $_SESSION['google_oauth_state'] = $state;
+// Audit connect start with client id (not secret) and redirect to help debug redirect_uri_mismatch
+jarvis_audit(null, 'OAUTH_CONNECT_STARTED', 'google', ['client_id'=>$clientId, 'redirect_uri'=>$redirect]);
 
 $params = http_build_query([
   'client_id' => $clientId,
@@ -19,7 +21,8 @@ $params = http_build_query([
   'scope' => 'openid email profile https://www.googleapis.com/auth/calendar.readonly',
   'state' => $state,
   'access_type' => 'offline',
-  'prompt' => 'select_account'
+  // Use prompt=consent to ensure a refresh_token is returned (offline access)
+  'prompt' => 'consent'
 ]);
 
 $authUrl = 'https://accounts.google.com/o/oauth2/v2/auth?' . $params;
