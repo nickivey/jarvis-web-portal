@@ -63,6 +63,14 @@ test('Home permissions & simple voice flow smoke test', async ({ page, context }
     await expect(j.jarvis_response).toContain('@');
   }
 
+  // --- Weather command: ensure we have a recent location then query weather via API
+  const tokenVal = await page.evaluate(()=>window.jarvisJwt);
+  await page.request.post('/api/location', { data: { lat: 37.7749, lon: -122.4194, accuracy: 100 }, headers: { 'Authorization': 'Bearer ' + tokenVal } });
+  const wresp = await page.request.post('/api/command', { data: { text: 'weather' }, headers: { 'Authorization': 'Bearer ' + tokenVal } });
+  const wj = await wresp.json();
+  expect(wj && typeof wj.jarvis_response === 'string' && wj.jarvis_response.length > 0).toBeTruthy();
+
+
   // Simulate an audio blob upload (as if recorded) and confirm it's saved via /api/voice
   await page.evaluate(async ()=>{
     if (!window.jarvisJwt) return; // shouldn't happen

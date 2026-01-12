@@ -119,7 +119,7 @@ JARVIS uses SendGrid for email delivery (account confirmation, password resets, 
 php scripts/set-secret.php OPENWEATHER_API_KEY "<your-key>"
 ```
 
-The app will fetch weather for the most recent location and show a short summary on the Home dashboard.
+The app will fetch weather for the most recent location and show a short summary on the Home dashboard. If `OPENWEATHER_API_KEY` is not configured, you can set `OPENWEATHER_API_KEY_DEFAULT` in your environment as a failsafe key; otherwise Jarvis will return a harmless demo/fallback message.
 ## REST endpoints
 
 ### Auth

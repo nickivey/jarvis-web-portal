@@ -422,6 +422,43 @@ if (preg_match('#^/api/voice/([0-9]+)/download$#', $path, $m)) {
         jarvis_respond(200, array_merge(['jarvis_response'=>$response], $respMeta));
     }
   }
+
+  // Weather query (new): if user asks about weather, try to fetch weather for most recent location
+  if (strpos($lower, 'weather') !== false) {
+    // Attempt to get last known location
+    $locs = jarvis_recent_locations($userId, 1);
+    $lat = null; $lon = null;
+    if (!empty($locs) && isset($locs[0]['lat']) && isset($locs[0]['lon'])) {
+      $lat = (float)$locs[0]['lat']; $lon = (float)$locs[0]['lon'];
+    }
+    if ($lat === null || $lon === null) {
+      $response = 'No recent location found. Please share your location to get local weather.';
+      jarvis_log_command($userId, 'weather', $text, $response, $clientMeta);
+      jarvis_audit($userId, 'COMMAND_WEATHER_NO_LOCATION', 'command', $auditMeta(['answer'=>$response]));
+      jarvis_respond(200, array_merge(['jarvis_response'=>$response], $respMeta));
+    }
+
+    $weather = null;
+    try { $weather = jarvis_fetch_weather($lat, $lon); } catch (Throwable $e) { $weather = null; }
+    if (!$weather) {
+      $response = 'Unable to fetch weather for your location at this time.';
+      jarvis_log_command($userId, 'weather', $text, $response, $clientMeta);
+      jarvis_audit($userId, 'COMMAND_WEATHER_FAIL', 'command', $auditMeta(['answer'=>$response]));
+      jarvis_respond(200, array_merge(['jarvis_response'=>$response], $respMeta));
+    }
+
+    // Build a user-friendly message
+    if (!empty($weather['demo'])) {
+      $response = 'Weather (demo): ' . ($weather['desc'] ?? 'n/a');
+    } else {
+      $temp = isset($weather['temp_c']) && $weather['temp_c'] !== null ? round($weather['temp_c']) . '°C' : 'N/A';
+      $response = 'Weather: ' . ($weather['desc'] ?? 'unknown') . ' • ' . $temp;
+    }
+    jarvis_log_command($userId, 'weather', $text, $response, array_merge($clientMeta, ['weather'=>$weather]));
+    jarvis_audit($userId, 'COMMAND_WEATHER', 'command', $auditMeta(['answer'=>$response]));
+    jarvis_log_api_request($userId, 'desktop', $path, $method, $in, ['jarvis_response'=>$response,'weather'=>$weather], 200);
+    jarvis_respond(200, array_merge(['jarvis_response'=>$response, 'cards'=>['weather'=>$weather]], $respMeta));
+  }
   
   // Calendar Check
   if (strpos($lower, 'calendar') !== false || strpos($lower, 'schedule') !== false || strpos($lower, 'appointments') !== false) {
