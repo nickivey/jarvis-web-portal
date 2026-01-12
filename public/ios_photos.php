@@ -32,7 +32,7 @@ if (isset($_GET['token']) && $_GET['token'] === '1' && ($u['role'] ?? '') === 'a
     <li>Set the request to <em>Form</em> and add a field <code>file</code> with the file variable. Add a header <code>Authorization: Bearer &lt;YOUR_JWT&gt;</code>.</li>
   </ol>
   <p>Full guide with screenshots and implementation notes is available in the <a href="/docs/ios-photo-upload.md">project docs</a>.</p>
-  <p><a href="/public/ios_upload_setup.php" class="btn">Create a device upload token & install shortcut</a></p>
+  <p><a href="/ios_upload_setup.php" class="btn">Create a device upload token & install shortcut</a></p>
   <?php if ($token): ?>
     <div class="alert alert-info">Generated token (expires in 1 hour): <code><?= htmlspecialchars($token) ?></code></div>
   <?php endif; ?>

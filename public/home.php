@@ -285,23 +285,39 @@ $phone = (string)($dbUser['phone_e164'] ?? '');
         </div>
       </div>
 
-      <div class="card" id="weatherCard">
-        <h3>Weather</h3>
-        <div id="weatherSummary">
-          <?php if ($lastWeather): ?>
-            <?php
-              $weatherCity = '';
-              $weatherState = '';
-              if (!empty($recentLocations[0]['address'])) {
-                $addr = $recentLocations[0]['address'];
-                $weatherCity = $addr['city'] ?? '';
-                $weatherState = $addr['state'] ?? '';
-              }
-              $locationStr = trim($weatherCity . ($weatherCity && $weatherState ? ', ' : '') . $weatherState);
-              $animClass = $lastWeather['icon_anim'] ?? 'cloudy';
-            ?>
-            <div class="weather-widget">
-              <div class="weather-main">
+      <?php
+        // Determine weather condition class for dynamic background
+        $weatherCondition = 'default';
+        if ($lastWeather) {
+          $anim = $lastWeather['icon_anim'] ?? 'cloudy';
+          if (in_array($anim, ['sunny'])) $weatherCondition = 'sunny';
+          elseif (in_array($anim, ['moon'])) $weatherCondition = 'night';
+          elseif (in_array($anim, ['partly-cloudy'])) $weatherCondition = 'partly-cloudy';
+          elseif (in_array($anim, ['cloudy', 'foggy'])) $weatherCondition = 'cloudy';
+          elseif (in_array($anim, ['rainy', 'stormy'])) $weatherCondition = 'rainy';
+          elseif (in_array($anim, ['thunderstorm'])) $weatherCondition = 'stormy';
+          elseif (in_array($anim, ['snowy'])) $weatherCondition = 'snowy';
+        }
+      ?>
+      <div class="card weather-card-featured <?php echo htmlspecialchars($weatherCondition); ?>" id="weatherCard">
+        <div class="weather-bg-effects">
+          <div class="weather-bg-gradient"></div>
+          <?php if ($weatherCondition === 'sunny'): ?>
+            <div class="sun-rays-bg"></div>
+          <?php elseif ($weatherCondition === 'night'): ?>
+            <div class="stars-bg"></div>
+          <?php elseif ($weatherCondition === 'rainy' || $weatherCondition === 'stormy'): ?>
+            <div class="rain-bg"></div>
+          <?php elseif ($weatherCondition === 'snowy'): ?>
+            <div class="snow-bg"></div>
+          <?php endif; ?>
+        </div>
+        
+        <div class="weather-header">
+          <div class="weather-header-left">
+            <div class="weather-icon-wrapper">
+              <?php if ($lastWeather): ?>
+                <?php $animClass = $lastWeather['icon_anim'] ?? 'cloudy'; ?>
                 <div class="weather-icon-animated <?php echo htmlspecialchars($animClass); ?>">
                   <?php if ($animClass === 'sunny'): ?>
                     <div class="sun"><div class="sun-rays"></div></div>
@@ -332,91 +348,325 @@ $phone = (string)($dbUser['phone_e164'] ?? '');
                     <div class="rain heavy"><div class="drop"></div><div class="drop d2"></div><div class="drop d3"></div></div>
                   <?php endif; ?>
                 </div>
-                <div class="weather-temp">
-                  <span class="temp-current"><?php echo ($lastWeather['temp_c'] !== null) ? round($lastWeather['temp_c']) : '--'; ?>°</span>
-                  <span class="temp-unit">C</span>
+              <?php else: ?>
+                <div class="weather-icon-placeholder">🌤️</div>
+              <?php endif; ?>
+            </div>
+            <div class="weather-title-block">
+              <h3>⛅ Weather</h3>
+              <p class="weather-subtitle">Current conditions & forecast</p>
+            </div>
+          </div>
+          <?php if ($lastWeather): ?>
+          <div class="weather-status-badge">
+            <span class="status-dot"></span>
+            <span>Live Data</span>
+          </div>
+          <?php endif; ?>
+        </div>
+
+        <div id="weatherSummary" class="weather-content">
+          <?php if ($lastWeather): ?>
+            <?php
+              $weatherCity = '';
+              $weatherState = '';
+              if (!empty($recentLocations[0]['address'])) {
+                $addr = $recentLocations[0]['address'];
+                $weatherCity = $addr['city'] ?? '';
+                $weatherState = $addr['state'] ?? '';
+              }
+              $locationStr = trim($weatherCity . ($weatherCity && $weatherState ? ', ' : '') . $weatherState);
+            ?>
+            
+            <div class="weather-hero">
+              <div class="weather-hero-content">
+                <div class="weather-current-label">CURRENT CONDITIONS</div>
+                <div class="weather-temp-display">
+                  <span class="temp-value"><?php echo ($lastWeather['temp_c'] !== null) ? round($lastWeather['temp_c']) : '--'; ?></span>
+                  <span class="temp-degree">°C</span>
                 </div>
-              </div>
-              <div class="weather-details">
-                <div class="weather-condition"><?php echo htmlspecialchars($lastWeather['desc'] ?? ''); ?></div>
+                <div class="weather-condition-text"><?php echo htmlspecialchars($lastWeather['desc'] ?? 'Unknown'); ?></div>
                 <?php if ($locationStr): ?>
-                  <div class="weather-location">📍 <?php echo htmlspecialchars($locationStr); ?></div>
+                  <div class="weather-location-text">📍 <?php echo htmlspecialchars($locationStr); ?></div>
                 <?php endif; ?>
+              </div>
+              
+              <div class="weather-meta-panel">
                 <?php if ($lastWeather['high_c'] !== null && $lastWeather['low_c'] !== null): ?>
-                  <div class="weather-highlow">
-                    <span class="weather-high">↑ <?php echo round($lastWeather['high_c']); ?>°</span>
-                    <span class="weather-low">↓ <?php echo round($lastWeather['low_c']); ?>°</span>
+                <div class="meta-item">
+                  <div class="meta-icon">🌡️</div>
+                  <div class="meta-content">
+                    <div class="meta-label">High / Low</div>
+                    <div class="meta-value"><?php echo round($lastWeather['high_c']); ?>° / <?php echo round($lastWeather['low_c']); ?>°</div>
                   </div>
-                <?php endif; ?>
-                <div class="weather-stats">
-                  <?php if (isset($lastWeather['humidity'])): ?>
-                    <span title="Humidity">💧 <?php echo (int)$lastWeather['humidity']; ?>%</span>
-                  <?php endif; ?>
-                  <?php if (isset($lastWeather['wind_speed'])): ?>
-                    <span title="Wind speed">💨 <?php echo round($lastWeather['wind_speed']); ?> km/h</span>
-                  <?php endif; ?>
                 </div>
+                <?php endif; ?>
+                <?php if (isset($lastWeather['humidity'])): ?>
+                <div class="meta-item">
+                  <div class="meta-icon">💧</div>
+                  <div class="meta-content">
+                    <div class="meta-label">Humidity</div>
+                    <div class="meta-value"><?php echo (int)$lastWeather['humidity']; ?>%</div>
+                  </div>
+                </div>
+                <?php endif; ?>
+                <?php if (isset($lastWeather['wind_speed'])): ?>
+                <div class="meta-item">
+                  <div class="meta-icon">💨</div>
+                  <div class="meta-content">
+                    <div class="meta-label">Wind Speed</div>
+                    <div class="meta-value"><?php echo round($lastWeather['wind_speed']); ?> km/h</div>
+                  </div>
+                </div>
+                <?php endif; ?>
+                <?php if (isset($lastWeather['feels_like_c'])): ?>
+                <div class="meta-item">
+                  <div class="meta-icon">🤒</div>
+                  <div class="meta-content">
+                    <div class="meta-label">Feels Like</div>
+                    <div class="meta-value"><?php echo round($lastWeather['feels_like_c']); ?>°C</div>
+                  </div>
+                </div>
+                <?php endif; ?>
               </div>
             </div>
+
             <?php if (!empty($lastWeather['forecast'])): ?>
-              <div class="weather-forecast">
-                <div class="forecast-title">7-Day Forecast</div>
-                <div class="forecast-days">
-                  <?php foreach ($lastWeather['forecast'] as $day): ?>
-                    <div class="forecast-day">
-                      <div class="forecast-day-name"><?php echo htmlspecialchars($day['day']); ?></div>
-                      <div class="forecast-day-icon"><?php echo $day['icon']; ?></div>
-                      <div class="forecast-day-temps">
-                        <span class="forecast-high"><?php echo round($day['high_c']); ?>°</span>
-                        <span class="forecast-low"><?php echo round($day['low_c']); ?>°</span>
-                      </div>
-                    </div>
-                  <?php endforeach; ?>
-                </div>
+            <div class="weather-forecast-section">
+              <div class="forecast-header">
+                <h4>📅 7-Day Forecast</h4>
               </div>
+              <div class="forecast-grid">
+                <?php foreach ($lastWeather['forecast'] as $day): ?>
+                  <div class="forecast-card">
+                    <div class="forecast-day-name"><?php echo htmlspecialchars($day['day']); ?></div>
+                    <div class="forecast-icon"><?php echo $day['icon']; ?></div>
+                    <div class="forecast-temps">
+                      <span class="forecast-high"><?php echo round($day['high_c']); ?>°</span>
+                      <span class="forecast-low"><?php echo round($day['low_c']); ?>°</span>
+                    </div>
+                  </div>
+                <?php endforeach; ?>
+              </div>
+            </div>
             <?php endif; ?>
           <?php else: ?>
-            <p class="muted">Weather data will appear here once location is detected.</p>
+            <div class="weather-empty-state">
+              <div class="empty-icon">🌤️</div>
+              <p>Weather data will appear here once location is detected.</p>
+            </div>
           <?php endif; ?>
         </div>
       </div>
 
-      <div class="card" id="locationCard">
-        <h3>Location History</h3>
-        <div class="location-panel">
-          <div id="map" style="height:240px;border:1px solid #ddd;margin-bottom:8px;flex:1"></div>
-          <div id="miniMap" class="location-map" aria-hidden="true" title="Mini location map"></div>
+      <div class="card location-card-featured" id="locationCard">
+        <div class="location-header">
+          <div class="location-header-left">
+            <div class="location-icon-wrapper">
+              <div class="location-pin-animated">
+                <div class="pin-head"></div>
+                <div class="pin-body"></div>
+                <div class="pin-pulse"></div>
+                <div class="pin-pulse p2"></div>
+              </div>
+            </div>
+            <div class="location-title-block">
+              <h3>📍 Location Tracker</h3>
+              <p class="location-subtitle">Real-time location monitoring & history</p>
+            </div>
+          </div>
+          <div class="location-status-badge <?php echo !empty($recentLocations) ? 'active' : 'inactive'; ?>">
+            <span class="status-dot"></span>
+            <span><?php echo !empty($recentLocations) ? 'Tracking Active' : 'Awaiting Location'; ?></span>
+          </div>
         </div>
-        <details <?php echo !empty($recentLocations) ? 'open' : ''; ?>>
-          <summary>Recent locations (latest first)</summary>
-          <table style="width:100%;margin-top:8px">
-            <thead><tr><th>When</th><th>Location</th><th>Lat</th><th>Lon</th><th>Source</th><th></th></tr></thead>
-            <tbody id="recentLocationsTbody">
-              <?php foreach($recentLocations as $loc): ?>
-                <tr data-id="<?php echo (int)$loc['id']; ?>">
-                  <td><?php echo htmlspecialchars($loc['created_at']); ?></td>
-                  <td><?php echo htmlspecialchars($loc['address']['city'] ?? ($loc['address']['display_name'] ?? '')); ?></td>
-                  <td><?php echo htmlspecialchars($loc['lat']); ?></td>
-                  <td><?php echo htmlspecialchars($loc['lon']); ?></td>
-                  <td><?php echo htmlspecialchars($loc['source']); ?></td>
-                  <td><button class="btn secondary focusLocationBtn" data-id="<?php echo (int)$loc['id']; ?>">Focus</button></td>
-                </tr>
-              <?php endforeach; ?>
-            </tbody>
-          </table>
-          <div style="margin-top:8px"><a href="location_history.php">View full history</a></div>
-        </details>
-        <?php if(empty($recentLocations)): ?>
-          <p class="muted" id="noLocMsg" style="margin-top:8px">No location data yet. Enable location logging in Preferences and allow location access in your browser.</p>
-        <?php endif; ?>
+
+        <?php
+          $currentLocation = !empty($recentLocations) ? $recentLocations[0] : null;
+          $currentCity = $currentLocation['address']['city'] ?? '';
+          $currentState = $currentLocation['address']['state'] ?? '';
+          $currentCountry = $currentLocation['address']['country'] ?? '';
+          $currentDisplay = trim($currentCity . ($currentCity && $currentState ? ', ' : '') . $currentState);
+          $clientIP = $_SERVER['HTTP_X_FORWARDED_FOR'] ?? $_SERVER['REMOTE_ADDR'] ?? 'Unknown';
+          if (strpos($clientIP, ',') !== false) $clientIP = trim(explode(',', $clientIP)[0]);
+        ?>
+
+        <div class="location-main-display">
+          <!-- Current Location Hero -->
+          <div class="location-hero">
+            <div class="location-hero-content">
+              <div class="current-location-label">CURRENT LOCATION</div>
+              <div class="current-location-city"><?php echo htmlspecialchars($currentCity ?: 'Detecting...'); ?></div>
+              <?php if ($currentState): ?>
+                <div class="current-location-state"><?php echo htmlspecialchars($currentState); ?><?php echo $currentCountry ? ', ' . htmlspecialchars($currentCountry) : ''; ?></div>
+              <?php endif; ?>
+              
+              <div class="location-coords">
+                <?php if ($currentLocation): ?>
+                  <div class="coord-item">
+                    <span class="coord-label">LAT</span>
+                    <span class="coord-value"><?php echo number_format((float)$currentLocation['lat'], 6); ?></span>
+                  </div>
+                  <div class="coord-divider">|</div>
+                  <div class="coord-item">
+                    <span class="coord-label">LON</span>
+                    <span class="coord-value"><?php echo number_format((float)$currentLocation['lon'], 6); ?></span>
+                  </div>
+                <?php else: ?>
+                  <div class="coord-item"><span class="muted">Coordinates pending...</span></div>
+                <?php endif; ?>
+              </div>
+            </div>
+            
+            <div class="location-meta-panel">
+              <div class="meta-item">
+                <div class="meta-icon">🌐</div>
+                <div class="meta-content">
+                  <div class="meta-label">IP Address</div>
+                  <div class="meta-value ip-address"><?php echo htmlspecialchars($clientIP); ?></div>
+                </div>
+              </div>
+              <div class="meta-item">
+                <div class="meta-icon">📡</div>
+                <div class="meta-content">
+                  <div class="meta-label">Source</div>
+                  <div class="meta-value"><?php echo htmlspecialchars($currentLocation['source'] ?? 'Pending'); ?></div>
+                </div>
+              </div>
+              <div class="meta-item">
+                <div class="meta-icon">🕐</div>
+                <div class="meta-content">
+                  <div class="meta-label">Last Update</div>
+                  <div class="meta-value"><?php echo $currentLocation ? htmlspecialchars(date('M j, g:i A', strtotime($currentLocation['created_at']))) : 'N/A'; ?></div>
+                </div>
+              </div>
+              <?php if ($currentLocation && isset($currentLocation['accuracy_m'])): ?>
+              <div class="meta-item">
+                <div class="meta-icon">🎯</div>
+                <div class="meta-content">
+                  <div class="meta-label">Accuracy</div>
+                  <div class="meta-value"><?php echo round((float)$currentLocation['accuracy_m']); ?>m</div>
+                </div>
+              </div>
+              <?php endif; ?>
+            </div>
+          </div>
+
+          <!-- Interactive Map -->
+          <div class="location-map-container">
+            <div class="map-header">
+              <span class="map-title">🗺️ Live Map View</span>
+              <div class="map-controls">
+                <button type="button" class="map-control-btn" id="refreshMapBtn" title="Refresh Map">🔄</button>
+                <button type="button" class="map-control-btn" id="centerMapBtn" title="Center on Location">🎯</button>
+              </div>
+            </div>
+            <div id="map" class="location-map-view"></div>
+            <div class="map-legend">
+              <div class="legend-item"><span class="legend-dot current"></span> Current</div>
+              <div class="legend-item"><span class="legend-dot history"></span> History</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Location History Timeline -->
+        <div class="location-history-section">
+          <div class="history-header">
+            <h4>📜 Location Timeline</h4>
+            <a href="location_history.php" class="btn btn-sm secondary">View Full History →</a>
+          </div>
+          
+          <?php if (!empty($recentLocations)): ?>
+          <div class="location-timeline">
+            <?php foreach(array_slice($recentLocations, 0, 6) as $idx => $loc): ?>
+              <div class="timeline-item <?php echo $idx === 0 ? 'current' : ''; ?>" data-lat="<?php echo htmlspecialchars($loc['lat']); ?>" data-lon="<?php echo htmlspecialchars($loc['lon']); ?>">
+                <div class="timeline-marker">
+                  <div class="marker-dot"></div>
+                  <?php if ($idx < 5): ?><div class="marker-line"></div><?php endif; ?>
+                </div>
+                <div class="timeline-content">
+                  <div class="timeline-location">
+                    <?php 
+                      $locCity = $loc['address']['city'] ?? '';
+                      $locState = $loc['address']['state'] ?? '';
+                      $locDisplay = $locCity ?: ($loc['address']['display_name'] ?? 'Unknown location');
+                      if ($locCity && $locState) $locDisplay = $locCity . ', ' . $locState;
+                    ?>
+                    <strong><?php echo htmlspecialchars($locDisplay); ?></strong>
+                  </div>
+                  <div class="timeline-meta">
+                    <span class="timeline-time"><?php echo htmlspecialchars(date('M j, g:i A', strtotime($loc['created_at']))); ?></span>
+                    <span class="timeline-source"><?php echo htmlspecialchars($loc['source']); ?></span>
+                  </div>
+                  <div class="timeline-coords">
+                    <?php echo htmlspecialchars(number_format((float)$loc['lat'], 4)); ?>, <?php echo htmlspecialchars(number_format((float)$loc['lon'], 4)); ?>
+                  </div>
+                </div>
+                <button class="timeline-focus-btn" data-lat="<?php echo htmlspecialchars($loc['lat']); ?>" data-lon="<?php echo htmlspecialchars($loc['lon']); ?>">
+                  <span>👁️</span>
+                </button>
+              </div>
+            <?php endforeach; ?>
+          </div>
+          <?php else: ?>
+          <div class="no-location-data">
+            <div class="no-data-icon">📍</div>
+            <p>No location data yet.</p>
+            <p class="muted">Enable location logging in <a href="preferences.php">Preferences</a> and allow location access in your browser.</p>
+          </div>
+          <?php endif; ?>
+        </div>
       </div>
 
-      <!-- 2 -->
+      <!-- 2 - Photos Gallery -->
 
-      <div class="card" id="photosCard">
-        <h3>Photos</h3>
-        <div id="photoPreview" style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-start"></div>
-        <div style="margin-top:8px"><a href="/public/photos.php">Open photo gallery</a> • <a href="/public/ios_photos.php">iOS setup</a></div>
+      <div class="card photos-card-featured" id="photosCard">
+        <div class="photos-header">
+          <div class="photos-header-left">
+            <div class="photos-icon-wrapper">
+              <span class="photos-icon">📸</span>
+            </div>
+            <div class="photos-title-block">
+              <h3>Photo Gallery</h3>
+              <p class="photos-subtitle">Your uploaded memories</p>
+            </div>
+          </div>
+          <div class="photos-actions">
+            <a href="/ios_upload_setup.php" class="btn btn-sm photos-upload-btn" title="Upload from iOS">
+              <span>📱</span> iOS Upload
+            </a>
+          </div>
+        </div>
+        
+        <div class="photos-gallery-grid" id="photoPreview">
+          <div class="photos-loading">
+            <div class="photo-skeleton"></div>
+            <div class="photo-skeleton"></div>
+            <div class="photo-skeleton"></div>
+            <div class="photo-skeleton"></div>
+            <div class="photo-skeleton"></div>
+            <div class="photo-skeleton"></div>
+          </div>
+        </div>
+        
+        <div class="photos-empty" id="photosEmptyState" style="display:none;">
+          <div class="photos-empty-icon">🖼️</div>
+          <p>No photos yet</p>
+          <p class="muted">Upload photos from your iPhone using iOS Shortcuts</p>
+          <a href="/ios_upload_setup.php" class="btn secondary">Set up iOS Photo Upload</a>
+        </div>
+        
+        <div class="photos-footer">
+          <div class="photos-stats" id="photosStats"></div>
+          <div class="photos-links">
+            <a href="/public/photos.php" class="photos-link-btn">
+              <span>🖼️</span> Full Gallery
+            </a>
+            <a href="/public/ios_photos.php" class="photos-link-btn">
+              <span>📲</span> iOS Setup
+            </a>
+          </div>
+        </div>
       </div>
 
 
@@ -479,6 +729,18 @@ Content-Type: application/json
         <?php endif; ?>
       </div>
     </div>
+  </div>
+
+  <!-- iOS Photo Upload Quick Access -->
+  <div class="container">
+    <a href="/ios_upload_setup.php" class="ios-photo-quick-link">
+      <div class="ios-link-icon">📱</div>
+      <div class="ios-link-content">
+        <strong>iOS Photo Upload</strong>
+        <span>Set up automatic photo uploads from your iPhone using Shortcuts</span>
+      </div>
+      <div class="ios-link-arrow">→</div>
+    </a>
   </div>
 
   <div class="container">
@@ -742,29 +1004,75 @@ Content-Type: application/json
         if (elId === 'map') _mainMap = 'embed'; else _miniMap = 'embed';
         return true;
       }
+
+      // Store current locations globally for focus buttons
+      let _currentLocations = [];
+
       function renderLocationsOnMaps(locs){
         if (!locs || !locs.length) return;
+        _currentLocations = locs;
         const c = locs[0];
         makeEmbedMap('map', c.lat, c.lon, 13);
-        try{
-          const mmEl = document.getElementById('miniMap');
-          if (mmEl) {
-            mmEl.innerHTML = '';
-            for (const r of locs.slice(0,8)){
-              const row = document.createElement('div');
-              row.className = 'miniMapEntry';
-              const addr = (r.address && (r.address.city || r.address.display_name)) ? (r.address.city || r.address.display_name) : '';
-              row.innerHTML = `<div style="padding:6px;border-bottom:1px solid #eee"><b>${r.source}</b> <span class="muted">${r.created_at}</span><br>${addr}<br><a class="miniMapOpen" data-lat="${r.lat}" data-lon="${r.lon}" href="#">Open</a></div>`;
-              mmEl.appendChild(row);
-            }
-            mmEl.querySelectorAll('.miniMapOpen').forEach(a=>a.addEventListener('click', (ev)=>{
-              ev.preventDefault();
-              const lat = a.getAttribute('data-lat'), lon = a.getAttribute('data-lon');
-              makeEmbedMap('map', lat, lon, 13);
-            }));
-          }
-        }catch(e){}
       }
+
+      // Initialize timeline focus buttons and map controls
+      function initLocationControls(){
+        // Timeline focus buttons
+        document.querySelectorAll('.timeline-focus-btn').forEach(btn => {
+          btn.addEventListener('click', (ev) => {
+            ev.preventDefault();
+            const lat = btn.getAttribute('data-lat');
+            const lon = btn.getAttribute('data-lon');
+            if (lat && lon) {
+              makeEmbedMap('map', lat, lon, 14);
+              // Scroll to map on mobile
+              const mapContainer = document.querySelector('.location-map-container');
+              if (mapContainer && window.innerWidth < 900) {
+                mapContainer.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              }
+            }
+          });
+        });
+
+        // Refresh map button
+        const refreshBtn = document.getElementById('refreshMapBtn');
+        if (refreshBtn) {
+          refreshBtn.addEventListener('click', (ev) => {
+            ev.preventDefault();
+            if (_currentLocations.length > 0) {
+              const c = _currentLocations[0];
+              makeEmbedMap('map', c.lat, c.lon, 13);
+            }
+            refreshBtn.style.transform = 'rotate(360deg)';
+            setTimeout(() => { refreshBtn.style.transform = ''; }, 300);
+          });
+        }
+
+        // Center map button
+        const centerBtn = document.getElementById('centerMapBtn');
+        if (centerBtn) {
+          centerBtn.addEventListener('click', (ev) => {
+            ev.preventDefault();
+            if (_currentLocations.length > 0) {
+              const c = _currentLocations[0];
+              makeEmbedMap('map', c.lat, c.lon, 15);
+            }
+          });
+        }
+      }
+
+      // Initialize the location map on page load with PHP data
+      (function initLocationMapFromPHP(){
+        <?php if (!empty($recentLocations)): ?>
+        const serverLocs = <?php echo json_encode($recentLocations); ?>;
+        if (serverLocs && serverLocs.length > 0) {
+          _currentLocations = serverLocs;
+          makeEmbedMap('map', serverLocs[0].lat, serverLocs[0].lon, 13);
+        }
+        <?php endif; ?>
+        // Initialize controls after a short delay
+        setTimeout(initLocationControls, 100);
+      })();
 
       async function refreshLocations(){
         if (!window.jarvisApi) return;
@@ -1758,6 +2066,8 @@ Content-Type: application/json
       // Fetch recent photos for preview
       (async function(){
         const el = document.getElementById('photoPreview');
+        const emptyState = document.getElementById('photosEmptyState');
+        const statsEl = document.getElementById('photosStats');
 
         // Also load channels activity preview (small recent messages + audit)
         try{
@@ -1777,37 +2087,111 @@ Content-Type: application/json
 
         if (!el || typeof window.jarvisJwt === 'undefined') return;
         try {
-          const r = await fetch('/api/photos?limit=6', { headers: { 'Authorization': 'Bearer ' + window.jarvisJwt } });
+          const r = await fetch('/api/photos?limit=8', { headers: { 'Authorization': 'Bearer ' + window.jarvisJwt } });
           const j = await r.json().catch(()=>null);
-          if (!j || !Array.isArray(j.photos)) return;
-          j.photos.forEach(p => {
+          
+          // Clear loading skeletons
+          el.innerHTML = '';
+          
+          if (!j || !Array.isArray(j.photos) || j.photos.length === 0) {
+            if (emptyState) emptyState.style.display = 'flex';
+            return;
+          }
+          
+          // Update stats
+          if (statsEl) {
+            const gpsCount = j.photos.filter(p => p.metadata && p.metadata.exif_gps).length;
+            statsEl.innerHTML = `<span class="photos-stat">📷 ${j.count || j.photos.length} photos</span>` +
+              (gpsCount > 0 ? `<span class="photos-stat">📍 ${gpsCount} with GPS</span>` : '');
+          }
+          
+          j.photos.forEach((p, idx) => {
+            const photoItem = document.createElement('div');
+            photoItem.className = 'photo-gallery-item' + (idx === 0 ? ' featured' : '');
+            
             const img = document.createElement('img');
             img.src = '/api/photos/' + p.id + '/download?thumb=1';
-            img.style.width = '120px'; img.style.height = '120px'; img.style.objectFit = 'cover'; img.style.borderRadius = '12px'; img.style.filter = 'grayscale(40%) contrast(0.95)'; img.style.cursor = 'pointer';
-            img.title = p.original_filename || '';
-            img.addEventListener('click', ()=>{
-              openPhotoModal(p.id, p.original_filename);
+            img.alt = p.original_filename || 'Photo';
+            img.loading = 'lazy';
+            
+            const overlay = document.createElement('div');
+            overlay.className = 'photo-overlay';
+            
+            let overlayContent = '';
+            if (p.metadata && p.metadata.exif_datetime) {
+              overlayContent += `<span class="photo-date">${new Date(p.metadata.exif_datetime.replace(/:/g, '-').replace(' ', 'T')).toLocaleDateString()}</span>`;
+            }
+            if (p.metadata && p.metadata.exif_gps) {
+              overlayContent += '<span class="photo-gps">📍</span>';
+            }
+            overlay.innerHTML = overlayContent;
+            
+            photoItem.appendChild(img);
+            photoItem.appendChild(overlay);
+            
+            photoItem.addEventListener('click', ()=>{
+              openPhotoModal(p.id, p.original_filename, p.metadata);
             });
-            el.appendChild(img);
+            
+            el.appendChild(photoItem);
           });
-        } catch(e) { /* ignore */ }
+        } catch(e) { 
+          console.error('Photo load error:', e);
+          el.innerHTML = '';
+          if (emptyState) emptyState.style.display = 'flex';
+        }
       })();
 
-      function openPhotoModal(id, title){
+      function openPhotoModal(id, title, metadata){
         let modal = document.getElementById('photoModal');
         if (!modal) {
-          modal = document.createElement('div'); modal.id='photoModal'; modal.style.position='fixed'; modal.style.inset='0'; modal.style.display='flex'; modal.style.alignItems='center'; modal.style.justifyContent='center'; modal.style.background='rgba(10,12,14,0.86)'; modal.style.zIndex=9999; modal.style.padding='24px';
-          const img = document.createElement('img'); img.id='photoModalImg'; img.style.maxWidth='90%'; img.style.maxHeight='90%'; img.style.borderRadius='12px'; img.style.boxShadow='0 28px 80px rgba(0,0,0,.6)';
-          const caption = document.createElement('div'); caption.id='photoModalCaption'; caption.style.color='var(--muted)'; caption.style.marginTop='12px'; caption.style.textAlign='center'; caption.style.fontSize='13px';
-          const wrap = document.createElement('div'); wrap.style.display='flex'; wrap.style.flexDirection='column'; wrap.style.alignItems='center'; wrap.appendChild(img); wrap.appendChild(caption);
-          modal.appendChild(wrap);
+          modal = document.createElement('div'); 
+          modal.id='photoModal'; 
+          modal.className = 'photo-modal';
+          modal.innerHTML = `
+            <div class="photo-modal-content">
+              <button class="photo-modal-close" title="Close">&times;</button>
+              <img id="photoModalImg" class="photo-modal-img" />
+              <div class="photo-modal-info">
+                <div id="photoModalCaption" class="photo-modal-caption"></div>
+                <div id="photoModalMeta" class="photo-modal-meta"></div>
+              </div>
+              <div class="photo-modal-actions">
+                <a id="photoModalDownload" href="#" download class="btn secondary">⬇️ Download</a>
+                <a id="photoModalLocation" href="#" class="btn secondary" style="display:none">📍 View Location</a>
+              </div>
+            </div>
+          `;
           modal.addEventListener('click', (e)=>{ if (e.target === modal) modal.remove(); });
+          modal.querySelector('.photo-modal-close').addEventListener('click', ()=>modal.remove());
           document.body.appendChild(modal);
         }
         const imgEl = document.getElementById('photoModalImg');
         const capEl = document.getElementById('photoModalCaption');
+        const metaEl = document.getElementById('photoModalMeta');
+        const downloadEl = document.getElementById('photoModalDownload');
+        const locationEl = document.getElementById('photoModalLocation');
+        
         imgEl.src = '/api/photos/' + id + '/download';
-        capEl.textContent = title || '';
+        capEl.textContent = title || 'Photo';
+        downloadEl.href = '/api/photos/' + id + '/download';
+        
+        let metaHtml = '';
+        if (metadata) {
+          if (metadata.exif_datetime) {
+            metaHtml += `<span>📅 ${metadata.exif_datetime}</span>`;
+          }
+          if (metadata.exif_gps) {
+            metaHtml += `<span>📍 ${metadata.exif_gps.lat.toFixed(4)}, ${metadata.exif_gps.lon.toFixed(4)}</span>`;
+            locationEl.href = '/public/location_history.php?lat=' + metadata.exif_gps.lat + '&lon=' + metadata.exif_gps.lon;
+            locationEl.style.display = 'inline-flex';
+          } else {
+            locationEl.style.display = 'none';
+          }
+        } else {
+          locationEl.style.display = 'none';
+        }
+        metaEl.innerHTML = metaHtml;
       }
     });
 

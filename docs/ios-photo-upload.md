@@ -2,22 +2,98 @@
 
 This document explains how to automatically or manually upload photos from an iPhone/iPad to your JARVIS instance using the iOS Shortcuts app (Personal Automations and Shortcuts). It includes recommended server request formats, examples, and notes about iOS automation limitations and privacy.
 
+## Quick Start
+
+1. **Navigate to Setup Page**: Go to `/ios_upload_setup.php` in your JARVIS portal
+2. **Generate a Device Token**: Click "Generate New Token" to create an authentication token
+3. **Copy & Configure**: Use the provided token and endpoint URL in your iOS Shortcut
+4. **Test Upload**: Run your Shortcut to verify photos upload correctly
+
 ## Summary
 
 - Two common approaches:
   - Share Sheet / Shortcut (manual) — user selects one or more photos and runs the Shortcut from the Share sheet.
   - Personal Automation (semi-automatic) — trigger via NFC tag, Back Tap, or manual shortcut run. *Note:* many personal automations (for example, "When I take a photo") still prompt to confirm before running; see Limitations below.
-- Shortcut flow sends the image as a multipart/form-data POST to your JARVIS server using a Bearer JWT for auth.
+- Shortcut flow sends the image as a multipart/form-data POST to your JARVIS server using a Bearer token for auth.
 
 ## Requirements
 
 - A reachable JARVIS server over HTTPS (recommended): e.g. https://jarvis.example.com
-- A valid JWT token for the user that the Shortcut will upload as (you can generate a test JWT with `php scripts/get-jwt.php` when running locally).
-- iOS device with Shortcuts app (built-in) and permission to access Photos.
+- A valid device token (generated via the iOS Upload Setup page or API)
+- iOS device with Shortcuts app (built-in) and permission to access Photos
 
 > Tip: Use a browser-accessible, secure URL and HTTPS certificates for reliable uploads. If you plan to upload large image files frequently, test on Wi‑Fi and consider limiting uploads on cellular.
 
-## Recommended server request
+## Web-Based Setup (Recommended)
+
+The easiest way to configure iOS photo uploads is through the web interface:
+
+### Step 1: Access the Setup Page
+Navigate to `/ios_upload_setup.php` after logging in to JARVIS.
+
+### Step 2: Generate a Device Token
+Click the "Generate New Token" button. This creates a secure, long-lived token specifically for your iOS device.
+
+### Step 3: Copy Your Credentials
+The page displays:
+- **API Endpoint**: The URL to use in your Shortcut (e.g., `https://your-domain.com/api/photos`)
+- **Device Token**: Your authentication token (click to copy)
+
+### Step 4: Configure iOS Shortcut
+Follow the step-by-step guide on the setup page to create your Shortcut.
+
+### Step 5: Test & Verify
+Run your Shortcut to upload a test photo, then check the Photos gallery to confirm it appears.
+
+## API Reference
+
+### Upload Endpoint
+**POST** `/api/photos`
+
+**Headers:**
+```
+Authorization: Bearer <DEVICE_TOKEN>
+Content-Type: multipart/form-data
+```
+
+**Form Fields:**
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `file` | File | Yes | The image file to upload (JPEG, PNG, HEIC) |
+| `meta` | JSON String | No | Optional metadata (e.g., `{"source":"ios-shortcut","album":"Vacation"}`) |
+
+**Success Response:**
+```json
+{
+  "ok": true,
+  "id": 123,
+  "url": "/storage/photos/2/abc123.jpg"
+}
+```
+
+**Error Response:**
+```json
+{
+  "ok": false,
+  "error": "Invalid token"
+}
+```
+
+### Device Token Management
+**POST** `/api/device_tokens` — Create a new device token (requires authenticated session)
+
+**GET** `/api/device_tokens` — List your device tokens
+
+**DELETE** `/api/device_tokens/:id` — Revoke a token
+
+### Photo Retrieval
+**GET** `/api/photos` — List all photos with metadata (requires auth)
+
+**GET** `/api/photos/:id/download` — Download full-resolution photo
+
+**GET** `/api/photos/:id/download?thumb=1` — Download thumbnail
+
+## Recommended Server Request
 
 Endpoint (recommended): POST https://YOUR-SITE/api/photos
 
@@ -31,7 +107,7 @@ Headers:
 - Authorization: Bearer <JWT>  (or use a per-device upload token; see below)
 
 Device tokens & Install Page:
-- You can create a short-lived per-device upload token via `POST /api/device_tokens` (authenticated as the user), or use the web setup page at `/public/ios_upload_setup.php` to generate and manage tokens easily. Tokens should be used as `Authorization: Bearer <DEVICE_TOKEN>` in the Shortcut.
+- You can create a short-lived per-device upload token via `POST /api/device_tokens` (authenticated as the user), or use the web setup page at `/ios_upload_setup.php` to generate and manage tokens easily. Tokens should be used as `Authorization: Bearer <DEVICE_TOKEN>` in the Shortcut.
 
 Response (example):
 {
@@ -41,6 +117,33 @@ Response (example):
 }
 
 > Note: This project doesn't include a `/api/photos` endpoint by default. If you want server-side support, see Implementation Notes below.
+
+## Automation Triggers
+
+JARVIS supports several automation triggers for hands-free photo uploads:
+
+### 🏷️ NFC Tag (Recommended)
+Place an NFC sticker near your camera area. Tap your iPhone after taking photos to trigger upload.
+- **Pros**: Most reliable, runs without confirmation
+- **Setup**: Shortcuts → Automation → Create Personal Automation → NFC
+
+### 👆 Back Tap
+Double or triple tap the back of your iPhone to upload recent photos.
+- **Pros**: No additional hardware needed
+- **Setup**: Settings → Accessibility → Touch → Back Tap
+
+### 🔌 When Connected to Charger
+Automatically upload photos when you plug in your iPhone.
+- **Pros**: Great for daily backups
+- **Setup**: Shortcuts → Automation → When Charger is Connected
+
+### ⏰ Time of Day
+Schedule photo uploads at specific times.
+- **Pros**: Predictable, low-maintenance
+- **Setup**: Shortcuts → Automation → Time of Day
+
+### ❌ "When I Take a Photo" (Not Recommended)
+iOS requires confirmation for this trigger, making it impractical.
 
 ## Shortcut: Share Sheet (manual) — step by step
 
@@ -126,6 +229,35 @@ Gallery map & timeline
 - Offer a pre-built `.shortcut` file or iCloud Link that users can tap to install a ready-made Shortcut.
 - Allow photo uploads via email (inbox-address per-user) or third-party integrations (Dropbox, Google Photos) as alternate sources.
 
+## Related Pages
+
+- **iOS Upload Setup**: `/ios_upload_setup.php` — Web-based token generation and setup guide
+- **Photo Gallery**: `/public/photos.php` — View all uploaded photos with map, timeline, and grid views
+- **Home Dashboard**: `/public/home.php` — Quick access photo card on the main dashboard
+
+## Troubleshooting
+
+### Photos not appearing in gallery
+1. Check the Shortcut ran successfully (look for success notification)
+2. Verify the device token is valid (regenerate if needed)
+3. Ensure the server URL is correct and accessible
+4. Check server logs for upload errors
+
+### "Invalid token" error
+- Your device token may have been revoked
+- Generate a new token from the iOS Upload Setup page
+- Update your Shortcut with the new token
+
+### Large photos failing to upload
+- iOS may timeout on large uploads over cellular
+- Try uploading on Wi-Fi
+- Consider enabling "Convert" in the Shortcut to reduce file size
+
+### EXIF location not appearing on map
+- Ensure Location Services is enabled for Camera
+- Photos must have GPS EXIF data embedded at capture time
+- Run `scripts/photo_reprocess.php` to re-extract EXIF from existing photos
+
 ---
 
-If you'd like, I can add a simple `POST /api/photos` endpoint and a web UI page (`/public/ios_photos.php`) that shows a one-click "create token" helper and the above setup instructions in-app. Which would you prefer next?
+Last updated: Based on JARVIS photo system improvements including the iOS Upload Setup page, enhanced photo gallery with map/timeline views, and device token authentication.
