@@ -226,7 +226,7 @@ $phone = (string)($dbUser['phone_e164'] ?? '');
       <div class="card">
         <h3>JARVIS Chat</h3>
         <div class="chatbox">
-          <form method="post" class="chatinput" id="chatForm">
+          <form class="chatinput" id="chatForm">
             <div style="display:flex;flex-direction:column;gap:8px;">
               <textarea name="message" id="messageInput" placeholder="Type a message to JARVIS..." style="flex:1;min-height:56px"></textarea>
               <div style="display:flex;gap:8px;align-items:center;justify-content:space-between;margin-top:6px">
@@ -708,7 +708,7 @@ Content-Type: application/json
         const sendBtn = document.getElementById('sendBtn');
         msgInput.disabled = true; if (sendBtn) sendBtn.disabled = true;
         // if (window.jarvisShowLoader) jarvisShowLoader();
-        window.jarvisEmit('command.sent', { text: msg, type });
+        if (window.jarvisEmit) window.jarvisEmit('command.sent', { text: msg, type });
         // Show status in chat log
         const processingMsg = document.createElement('div');
         processingMsg.className = 'msg jarvis processing';
