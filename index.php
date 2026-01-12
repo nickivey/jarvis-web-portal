@@ -185,7 +185,18 @@ if ($path === '/api/command') {
   $text = trim((string)($in['text'] ?? ''));
   $inputType = trim((string)($in['type'] ?? 'text')); // text or voice
   $clientMeta = isset($in['meta']) && is_array($in['meta']) ? $in['meta'] : [];
-  $voiceId = $clientMeta['voice_input_id'] ?? null;
+  $voiceId = isset($clientMeta['voice_input_id']) ? (int)$clientMeta['voice_input_id'] : null;
+  // If a voice input id is supplied but no text, prefer the transcript from the stored voice input so
+  // voice submissions are processed like normal text commands and return the typical dialoged response.
+  if ($voiceId && $text === '') {
+    $v = jarvis_voice_input_by_id($voiceId);
+    if ($v) {
+      $text = (string)($v['transcript'] ?? '') ?: $text;
+      // add original voice meta to client meta so later logging will include it
+      $clientMeta['voice_input_id'] = $voiceId;
+      $clientMeta['voice_transcript'] = (string)($v['transcript'] ?? '');
+    }
+  }
   if ($text === '' && !$voiceId) jarvis_respond(400, ['error'=>'text required']);
   if ($voiceId) {
     // Record an audit that a voice command was submitted and tie to the voice input id
