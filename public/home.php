@@ -213,9 +213,17 @@ $phone = (string)($dbUser['phone_e164'] ?? '');
             <?php else: ?>
               <?php foreach($recent as $m): ?>
                 <div class="msg me">
-                      <form method="post" class="chatinput" id="chatForm" style="margin-bottom:10px">
+                  <div class="bubble">
+                    <div><?php echo htmlspecialchars($m['message_text']); ?></div>
+                    <div class="meta"><?php echo htmlspecialchars($m['created_at']); ?> • <?php echo htmlspecialchars($m['channel_id'] ?? ''); ?></div>
+                  </div>
+                </div>
+              <?php endforeach; ?>
+            <?php endif; ?>
+          </div>
+          <form method="post" class="chatinput" id="chatForm">
             <div style="display:flex;gap:8px;align-items:flex-end;">
-              <textarea name="message" id="messageInput" placeholder="Type a message to JARVIS..." style="flex:1"></textarea>
+              <textarea name="message" id="messageInput" placeholder="Type a message to Slack..." style="flex:1"></textarea>
               <div style="display:flex;flex-direction:column;gap:8px;">
                 <button type="button" id="micBtn" class="btn" title="Start/Stop voice input">🎤</button>
                 <button type="button" id="voiceCmdBtn" class="btn" title="Voice-only command">🎙️ Voice Cmd</button>
@@ -228,23 +236,7 @@ $phone = (string)($dbUser['phone_e164'] ?? '');
               <label style="font-size:13px"><input type="checkbox" id="voiceOnlyMode" /> Voice-only mode</label>
             </div>
           </form>
-
-          <div class="bubble">
-            <div id="jarvisChatLog" class="chatlog" style="max-height:420px;overflow:auto;padding:12px;border-radius:14px;background:rgba(2,7,18,.35);border:1px solid rgba(30,120,255,.18);">
-              <?php if(!$messages): ?>
-                <p class="muted">No messages yet.</p>
-              <?php else: ?>
-                <?php foreach($messages as $m): ?>
-                  <div class="msg">
-                    <div class="bubble">
-                      <div><?php echo htmlspecialchars($m['message_text']); ?></div>
-                      <div class="meta"><?php echo htmlspecialchars($m['created_at']); ?> • <?php echo htmlspecialchars($m['channel_id'] ?? ''); ?></div>
-                    </div>
-                  </div>
-                <?php endforeach; ?>
-              <?php endif; ?>
-            </div>
-          </div>
+        </div>
       </div>
 
       <!-- 3 -->
@@ -305,7 +297,7 @@ Content-Type: application/json
 
         <div class="terminal" style="margin-top:10px">
           <div class="term-title">Recent Audit Events</div>
-          <div class="term-body audit" id="auditList" style="max-height:140px; overflow:auto">
+          <div class="term-body" style="max-height:140px; overflow:auto">
             <?php if(!$auditItems): ?>
               <p class="muted">No audit events yet.</p>
             <?php else: ?>
@@ -457,16 +449,6 @@ Content-Type: application/json
         return r;
       }
 
-      // Ensure microphone permission is requested when needed
-      async function ensureMicrophonePermission(){
-        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return true;
-        try {
-          const s = await navigator.mediaDevices.getUserMedia({ audio: true });
-          s.getTracks().forEach(t=>t.stop());
-          return true;
-        } catch(e){ return false; }
-      }
-
       // When user types, mark type as text
       msgInput.addEventListener('input', ()=>{ lastInputType = 'text'; });
 
@@ -476,13 +458,15 @@ Content-Type: application/json
           recognizing = false; micBtn.classList.remove('active');
           return;
         }
-        // Create recognition if needed
-        if (!recognition) recognition = initRecognition();
-
-        // Ensure microphone permissions
-        const ok = await ensureMicrophonePermission();
-        if (!ok) { alert('Microphone not available or permission denied. Please allow microphone access in your browser.'); return; }
-
+        // ask for microphone by starting recognition/getUserMedia
+        if (!recognition) {
+          recognition = initRecognition();
+        }
+        if (!recognition) {
+          // Fallback: prompt for getUserMedia permission so user can record externally
+          try { await navigator.mediaDevices.getUserMedia({audio:true}); }
+          catch(e){ alert('Microphone not available or permission denied.'); return; }
+        }
         try {
           if (recognition) recognition.start();
           recognizing = true; micBtn.classList.add('active');
@@ -494,11 +478,6 @@ Content-Type: application/json
       if (voiceCmdBtn) voiceCmdBtn.addEventListener('click', async ()=>{
         if (!recognition) recognition = initRecognition();
         if (!recognition) { alert('Voice recognition not supported in this browser.'); return; }
-
-        // Ensure microphone permission first
-        const ok = await ensureMicrophonePermission();
-        if (!ok) { alert('Microphone not available or permission denied. Please allow microphone access in your browser.'); return; }
-
         recognition.onresult = async (evt) => {
           const text = evt.results[0][0].transcript || '';
           if (!text.trim()) return;
@@ -514,14 +493,15 @@ Content-Type: application/json
               showNotification(data.jarvis_response);
               window.jarvisEmit && window.jarvisEmit('command.response', data);
               if (window.jarvisInvalidateNotifications) window.jarvisInvalidateNotifications();
-              if (window.jarvisInvalidateAudit) window.jarvisInvalidateAudit();
             }
           } catch(e) {}
           finally { if (window.jarvisHideLoader) jarvisHideLoader(); }
-        };
-        try { recognition.start(); recognizing = true; voiceCmdBtn.classList.add('active'); }
-        catch(e){ recognizing=false; voiceCmdBtn.classList.remove('active'); }
-      });
+        const content = document.createElement('div'); content.textContent = text;
+        const meta = document.createElement('div'); meta.className='meta';
+        const now = new Date(); meta.textContent = now.toISOString().replace('T',' ').replace('Z',' UTC');
+        bubble.appendChild(content); bubble.appendChild(meta); wrapper.appendChild(bubble);
+        if (chatLog) chatLog.appendChild(wrapper);
+        // scroll
         if (chatLog) chatLog.parentNode.scrollTop = chatLog.parentNode.scrollHeight;
       }
 
@@ -577,9 +557,8 @@ Content-Type: application/json
             speakText(data.jarvis_response);
             showNotification(data.jarvis_response);
             window.jarvisEmit('command.response', data);
-            // Invalidate notifications & audit list and fetch fresh
+            // Invalidate notifications list and fetch fresh
             if (window.jarvisInvalidateNotifications) window.jarvisInvalidateNotifications();
-            if (window.jarvisInvalidateAudit) window.jarvisInvalidateAudit();
             return;
           }
         } catch(e){
