@@ -273,6 +273,29 @@ function jarvis_oauth_delete(int $userId, string $provider): void {
   $pdo->prepare('DELETE FROM oauth_tokens WHERE user_id=:u AND provider=:p')->execute([':u'=>$userId, ':p'=>$provider]);
 }
 
+/**
+ * Simple settings table accessor (key-value store). Keys are case-sensitive.
+ */
+function jarvis_setting_get(string $key): ?string {
+  $pdo = jarvis_pdo();
+  if (!$pdo) return getenv($key) ?: null;
+  try {
+    $stmt = $pdo->prepare('SELECT `value` FROM settings WHERE `key` = :k LIMIT 1');
+    $stmt->execute([':k' => $key]);
+    $row = $stmt->fetch();
+    if ($row) return $row['value'];
+  } catch (Throwable $e) {
+    // ignore if table doesn't exist yet
+  }
+  return getenv($key) ?: null;
+}
+
+function jarvis_setting_set(string $key, string $value): void {
+  $pdo = jarvis_pdo();
+  if (!$pdo) throw new RuntimeException('DB not configured');
+  $pdo->prepare('INSERT INTO settings (`key`,`value`) VALUES (:k,:v) ON DUPLICATE KEY UPDATE `value`=VALUES(`value`)')->execute([':k'=>$key, ':v'=>$value]);
+}
+
 function jarvis_register_device(int $userId, string $deviceUuid, string $platform, ?string $pushToken=null, ?string $pushProvider=null, ?array $meta=null): int {
   $pdo = jarvis_pdo();
   if (!$pdo) throw new RuntimeException('DB not configured');

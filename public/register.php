@@ -3,7 +3,7 @@ session_start();
 require_once __DIR__ . '/../helpers.php';
 require_once __DIR__ . '/../db.php';
 
-$googleConfigured = (bool)(getenv('GOOGLE_CLIENT_ID') && getenv('GOOGLE_CLIENT_SECRET'));
+$googleConfigured = (bool)(jarvis_setting_get('GOOGLE_CLIENT_ID') && jarvis_setting_get('GOOGLE_CLIENT_SECRET')) || (bool)(getenv('GOOGLE_CLIENT_ID') && getenv('GOOGLE_CLIENT_SECRET'));
 
 if (isset($_SESSION['username'])) { header('Location: home.php'); exit; }
 

@@ -60,7 +60,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
         <button class="btn" type="submit">Enter JARVIS</button>
       </form>
 
-      <?php $googleConfigured = (bool)(getenv('GOOGLE_CLIENT_ID') && getenv('GOOGLE_CLIENT_SECRET')); ?>
+      <?php $googleConfigured = (bool)(jarvis_setting_get('GOOGLE_CLIENT_ID') && jarvis_setting_get('GOOGLE_CLIENT_SECRET')) || (bool)(getenv('GOOGLE_CLIENT_ID') && getenv('GOOGLE_CLIENT_SECRET')); ?>
       <div style="margin-top:12px;text-align:center;">
         <?php if ($googleConfigured): ?>
         <a href="connect_google.php" style="display:inline-block;padding:8px 12px;border-radius:6px;border:1px solid #ddd;background:#fff;color:#222;text-decoration:none;font-weight:600;">

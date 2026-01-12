@@ -151,3 +151,12 @@ CREATE TABLE IF NOT EXISTS location_logs (
   KEY ix_loc_user(user_id),
   CONSTRAINT fk_loc_user FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Application settings / secrets (key-value store)
+CREATE TABLE IF NOT EXISTS settings (
+  `key` VARCHAR(128) NOT NULL,
+  `value` TEXT NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY(`key`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
