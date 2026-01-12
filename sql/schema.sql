@@ -180,3 +180,7 @@ CREATE TABLE IF NOT EXISTS settings (
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY(`key`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Ensure legacy columns exist when migrating from older installs
+ALTER TABLE users ADD COLUMN IF NOT EXISTS password_reset_token VARCHAR(128) NULL;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS password_reset_expires_at DATETIME NULL;
