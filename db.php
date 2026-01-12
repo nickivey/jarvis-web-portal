@@ -296,6 +296,25 @@ function jarvis_setting_set(string $key, string $value): void {
   $pdo->prepare('INSERT INTO settings (`key`,`value`) VALUES (:k,:v) ON DUPLICATE KEY UPDATE `value`=VALUES(`value`)')->execute([':k'=>$key, ':v'=>$value]);
 }
 
+function jarvis_setting_list(string $prefix = ''): array {
+  $pdo = jarvis_pdo();
+  if (!$pdo) return [];
+  if ($prefix === '') {
+    $stmt = $pdo->prepare('SELECT `key`,`value`,`created_at`,`updated_at` FROM settings ORDER BY `key` ASC');
+    $stmt->execute();
+  } else {
+    $stmt = $pdo->prepare('SELECT `key`,`value`,`created_at`,`updated_at` FROM settings WHERE `key` LIKE :p ORDER BY `key` ASC');
+    $stmt->execute([':p'=>$prefix.'%']);
+  }
+  return $stmt->fetchAll() ?: [];
+}
+
+function jarvis_setting_delete(string $key): void {
+  $pdo = jarvis_pdo();
+  if (!$pdo) throw new RuntimeException('DB not configured');
+  $pdo->prepare('DELETE FROM settings WHERE `key` = :k')->execute([':k'=>$key]);
+}
+
 function jarvis_register_device(int $userId, string $deviceUuid, string $platform, ?string $pushToken=null, ?string $pushProvider=null, ?array $meta=null): int {
   $pdo = jarvis_pdo();
   if (!$pdo) throw new RuntimeException('DB not configured');

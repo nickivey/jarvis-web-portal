@@ -71,6 +71,20 @@ Notes:
 * The script will append a generated `JWT_SECRET` to `.env` if absent.
 * Installing the MySQL client requires `apt` and appropriate permissions; the script will try `default-mysql-client` then `mariadb-client`.
 * You can still run the SQL in `sql/schema.sql` manually if you prefer.
+
+**Admin UI (Settings management)**
+
+An authenticated Admin UI is available at `public/admin.php` (visit `/admin.php`) and requires a user with the `admin` role.
+
+- To create or promote an admin user from the command line:
+
+```bash
+php scripts/create-admin.php <email> [<display_name>]
+```
+
+- The Admin UI lets you list, add, update, and delete settings stored in the `settings` table used for secrets (e.g., `SENDGRID_API_KEY`, `TWILIO_SID`).
+
+**Security note:** Values are editable in the Admin UI for convenience; avoid pasting secrets you don't want persisted in plain text and rotate keys that may have been leaked.
 ## REST endpoints
 
 ### Auth
