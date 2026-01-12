@@ -74,6 +74,43 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       jarvis_setting_set($k, $v);
       $notice = 'Updated setting.';
     }
+  } elseif ($action === 'sendgrid_test') {
+    $to = trim((string)($_POST['test_email'] ?? ''));
+    if (filter_var($to, FILTER_VALIDATE_EMAIL)) {
+      $apiKey = jarvis_setting_get('SENDGRID_API_KEY') ?: getenv('SENDGRID_API_KEY') ?: '';
+      $from = jarvis_mail_from();
+      if (!$apiKey) { $notice = 'SendGrid API key not configured.'; }
+      else {
+        $payload = [
+          'personalizations' => [[ 'to' => [[ 'email' => $to ]] ]],
+          'from' => ['email' => $from],
+          'subject' => 'JARVIS Admin SendGrid Test',
+          'content' => [[ 'type' => 'text/plain', 'value' => 'This is a test email from JARVIS (admin test).' ]]
+        ];
+        $ch = curl_init('https://api.sendgrid.com/v3/mail/send');
+        curl_setopt_array($ch, [
+          CURLOPT_RETURNTRANSFER => true,
+          CURLOPT_POST => true,
+          CURLOPT_POSTFIELDS => json_encode($payload),
+          CURLOPT_HTTPHEADER => [
+            'Authorization: Bearer ' . $apiKey,
+            'Content-Type: application/json'
+          ],
+          CURLOPT_TIMEOUT => 10,
+        ]);
+        $resp = curl_exec($ch);
+        $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $curlErr = curl_error($ch);
+        curl_close($ch);
+        if ($resp === false) {
+          $notice = 'cURL error: ' . $curlErr;
+        } elseif ($code < 200 || $code >= 300) {
+          $notice = 'SendGrid API error: HTTP ' . $code . ' — ' . htmlspecialchars(substr($resp,0,512));
+        } else {
+          $notice = 'SendGrid test email sent successfully to ' . htmlspecialchars($to);
+        }
+      }
+    } else { $notice = 'Provide a valid email address to test.'; }
   }
 }
 
@@ -185,6 +222,16 @@ $users = jarvis_list_users(50,0, (string)($_GET['q'] ?? ''));
         <li>Values are visible in the edit box here; avoid pasting secrets you don't intend to keep.</li>
         <li>Consider rotating keys that were previously leaked and removed from history.</li>
       </ul>
+    </section>
+
+    <section>
+      <h2>SendGrid Diagnostic</h2>
+      <p class="muted">If you're not receiving email, verify your sender identity in SendGrid and use the test below to see API responses.</p>
+      <form method="post" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <input type="hidden" name="action" value="sendgrid_test">
+        <label style="flex:1;min-width:240px">Test recipient: <input name="test_email" placeholder="you@example.com"></label>
+        <button class="btn" type="submit">Send test email</button>
+      </form>
     </section>
   </main>
 </body>
