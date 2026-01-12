@@ -228,10 +228,22 @@ $phone = (string)($dbUser['phone_e164'] ?? '');
         <h3>Weather Conditions</h3>
         <div id="weatherSummary" style="font-size:18px; line-height:1.4">
           <?php if ($lastWeather): ?>
+            <?php
+              $weatherCity = '';
+              $weatherState = '';
+              if (!empty($recentLocations[0]['address'])) {
+                $addr = $recentLocations[0]['address'];
+                $weatherCity = $addr['city'] ?? '';
+                $weatherState = $addr['state'] ?? '';
+              }
+            ?>
             <div style="display:flex;align-items:center;gap:12px;margin-top:8px">
               <div style="font-size:32px"><?php echo ($lastWeather['temp_c'] !== null) ? htmlspecialchars(round($lastWeather['temp_c']).'°') : '--'; ?></div>
               <div>
                 <div style="font-weight:700"><?php echo htmlspecialchars($lastWeather['desc'] ?? ''); ?></div>
+                <?php if ($weatherCity || $weatherState): ?>
+                  <div style="font-size:14px;margin-bottom:2px"><?php echo htmlspecialchars(trim($weatherCity . ($weatherCity && $weatherState ? ', ' : '') . $weatherState)); ?></div>
+                <?php endif; ?>
                 <div class="muted">
                   <?php if (isset($lastWeather['humidity'])): ?>Humidity: <?php echo (int)$lastWeather['humidity']; ?>%<?php endif; ?>
                   <?php if (isset($lastWeather['wind_speed'])): ?> • Wind: <?php echo round($lastWeather['wind_speed']); ?> km/h<?php endif; ?>
