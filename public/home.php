@@ -707,12 +707,24 @@ Content-Type: application/json
         if (!msg || !(msg||'').trim()) return null;
         const sendBtn = document.getElementById('sendBtn');
         msgInput.disabled = true; if (sendBtn) sendBtn.disabled = true;
-        if (window.jarvisShowLoader) jarvisShowLoader();
+        // if (window.jarvisShowLoader) jarvisShowLoader();
         window.jarvisEmit('command.sent', { text: msg, type });
+        // Show status in chat log
+        const processingMsg = document.createElement('div');
+        processingMsg.className = 'msg jarvis processing';
+        processingMsg.innerHTML = '<div class="bubble"><div class="loader-dots"><span></span><span></span><span></span></div> Processing...</div>';
+        if (chatLog) {
+            chatLog.appendChild(processingMsg);
+            chatLog.parentNode.scrollTop = chatLog.parentNode.scrollHeight;
+        }
+        
         try {
           const isBrief = (msg || '').trim().toLowerCase() === 'briefing' || (msg || '').trim().toLowerCase() === '/brief';
           const payload = { text: msg, type, meta };
           const data = await (window.jarvisApi ? window.jarvisApi.post('/api/command', payload, { cacheTTL: isBrief ? 30000 : null }) : (async ()=>{ const r=await fetch('/api/command',{method:'POST',headers:{'Content-Type':'application/json','Authorization': token? 'Bearer '+token : ''},body:JSON.stringify(payload)}); return r.json(); })());
+
+          // Remove processing indicator
+          if (processingMsg && processingMsg.parentNode) processingMsg.parentNode.removeChild(processingMsg);
 
           if (data && typeof data.jarvis_response === 'string' && data.jarvis_response.trim() !== ''){
             appendMessage(data.jarvis_response, 'jarvis');
@@ -746,6 +758,10 @@ Content-Type: application/json
 
           // Fallback: Slack messaging endpoint
           const data2 = await (window.jarvisApi ? window.jarvisApi.post('/api/messages', { message: msg }) : (async ()=>{ const r2=await fetch('/api/messages',{method:'POST',headers:{'Content-Type':'application/json','Authorization': token? 'Bearer '+token : ''},body:JSON.stringify({message:msg})}); return r2.json(); })());
+          
+          // Remove processing indicator
+          if (processingMsg && processingMsg.parentNode) processingMsg.parentNode.removeChild(processingMsg);
+          
           if (data2 && data2.ok) {
             appendMessage('Sent to Slack (default channel)', 'jarvis');
             if (enableNotif && enableNotif.checked && Notification.permission === 'granted') showNotification('Slack message sent: '+msg);
@@ -756,6 +772,8 @@ Content-Type: application/json
           appendMessage('Failed to send message', 'jarvis');
           return null;
         } catch(e){
+          // Remove processing indicator
+          if (processingMsg && processingMsg.parentNode) processingMsg.parentNode.removeChild(processingMsg);
           appendMessage('Failed to process command', 'jarvis');
           return null;
         } finally {
