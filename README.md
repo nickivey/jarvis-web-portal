@@ -193,6 +193,14 @@ Server-side TTS
 - A simple server-side endpoint at `/tts.php` proxies a TTS service and returns an MP3 audio stream. For production, consider installing a robust PHP TTS library or using a cloud TTS provider.
 - Example libraries (optional): `stichoza/google-tts-php` (Google Translate TTS wrapper) or official cloud SDKs (Google Cloud Text-to-Speech, Amazon Polly). After installing, update `/tts.php` to use the library for higher quality and auth support.
 
+Voice recordings & deep dictation analysis
+
+- The portal now optionally **captures and stores raw audio** for every voice input. When users use the microphone, the client records the audio (MediaRecorder) and uploads it to `/api/voice` alongside the recognized transcript and metadata. Recordings are stored under `storage/voice/<user_id>/` and indexed in the `voice_inputs` table for later analysis.
+- A lightweight 'pnut' log table (`pnut_logs`) stores payloads for offline/deep analysis workflows.
+- Admins and engineers should be mindful of privacy and retention. Audio is stored in the project `storage/voice` directory (not publicly exposed). Use the authenticated download endpoint `/api/voice/:id/download` to fetch recordings as needed.
+- To audit or inspect voice inputs, use `GET /api/voice?limit=20` (authenticated) to list recent recordings for the current user.
+- **Important**: Ensure your deployment has appropriate access controls and retention policies before enabling voice retention in production.
+
 E2E (Playwright) tests
 
 - A minimal Playwright test scaffold is included to smoke test the Home permission flow and a simple voice command. To run locally:
