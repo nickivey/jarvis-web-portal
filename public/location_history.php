@@ -89,7 +89,15 @@ $focusLon = isset($_GET['lon']) ? (float)$_GET['lon'] : null;
         const el = document.getElementById('map');
         if (!el) return;
         const src = osmEmbedUrl(centerLat, centerLon, zoom);
-        el.innerHTML = `<iframe class="embedMapIframe" src="${src}" style="width:100%;height:100%;border:0;" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>`;
+        el.innerHTML = `<div class="embedMapWrap" data-src="${src}"><iframe class="embedMapIframe" src="${src}" style="width:100%;height:100%;border:0;" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe><div class="embedFallback" style="display:none;margin-top:8px;font-size:13px"><a class="openOsm" href="${src.replace('/export/embed.html','/')}" target="_blank">Open in OpenStreetMap</a> • <a class="reloadMap" href="#">Reload map</a></div></div>`;
+        const iframe = el.querySelector('iframe');
+        const fallback = el.querySelector('.embedFallback');
+        if (iframe) {
+          let loaded = false;
+          iframe.addEventListener('load', ()=>{ loaded = true; if (fallback) fallback.style.display = 'none'; });
+          setTimeout(()=>{ try{ if (!loaded && fallback) fallback.style.display = 'block'; }catch(e){} }, 3000);
+          const rl = el.querySelector('.reloadMap'); if (rl) rl.addEventListener('click',(ev)=>{ ev.preventDefault(); try{ iframe.src = iframe.src; if (fallback) fallback.style.display='none'; }catch(e){} });
+        }
         _map = 'embed';
       }
 

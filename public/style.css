@@ -332,4 +332,10 @@ tr.new{animation:rowFlash .9s ease forwards}
 .miniMapEntry{padding:6px;border-bottom:1px solid rgba(255,255,255,.03);font-size:13px}
 .miniMapEntry .muted{font-size:12px;color:var(--muted);display:inline-block;margin-left:6px}
 
+/* Fallback helpers for embedded map */
+.embedMapWrap{width:100%;height:100%;position:relative}
+.embedMapWrap .embedFallback{color:var(--muted)}
+.embedMapWrap .openOsm{color:var(--blue2);text-decoration:underline}
+.embedMapWrap .reloadMap{color:var(--blue);margin-left:8px;text-decoration:underline}
+
 
