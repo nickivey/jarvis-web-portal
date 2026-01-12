@@ -105,7 +105,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($resp === false) {
           $notice = 'cURL error: ' . $curlErr;
         } elseif ($code < 200 || $code >= 300) {
-          $notice = 'SendGrid API error: HTTP ' . $code . ' — ' . htmlspecialchars(substr($resp,0,512));
+          // Provide a clearer actionable message for common SendGrid 403 sender identity issues
+          $short = htmlspecialchars(substr($resp,0,512));
+          if ($code === 403 && stripos($short, 'from address') !== false) {
+            $notice = 'SendGrid rejected the message: your MAIL_FROM is not a verified Sender Identity. Current MAIL_FROM: ' . htmlspecialchars($from) . '. Verify the sender identity in SendGrid or set MAIL_FROM to a verified address (see SENDGRID_SETUP.md).';
+          } else {
+            $notice = 'SendGrid API error: HTTP ' . $code . ' — ' . $short;
+          }
         } else {
           $notice = 'SendGrid test email sent successfully to ' . htmlspecialchars($to);
         }
@@ -214,6 +220,17 @@ $users = jarvis_list_users(50,0, (string)($_GET['q'] ?? ''));
           </tbody>
         </table>
       <?php endif; ?>
+    </section>
+
+    <section>
+      <h2>Mail SEND From</h2>
+      <p class="muted">The value below is used as the "From" address for outgoing email. It can be set here or via the environment variable <code>MAIL_FROM</code>.</p>
+      <form method="post" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <input type="hidden" name="action" value="update">
+        <label style="flex:1;min-width:240px">MAIL_FROM: <input name="value" value="<?= htmlspecialchars(jarvis_mail_from()) ?>" placeholder="jarvis@yourdomain.com"></label>
+        <input type="hidden" name="key" value="MAIL_FROM">
+        <button class="btn" type="submit">Save MAIL_FROM</button>
+      </form>
     </section>
 
     <section>

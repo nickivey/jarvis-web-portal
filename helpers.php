@@ -6,6 +6,9 @@ function jarvis_site_url(): string {
 }
 
 function jarvis_mail_from(): string {
+  // Prefer DB-configured setting, fallback to env, then default
+  $from = jarvis_setting_get('MAIL_FROM');
+  if ($from && is_string($from) && trim($from) !== '') return trim($from);
   return getenv('MAIL_FROM') ?: 'jarvis@nickivey.com';
 }
 
