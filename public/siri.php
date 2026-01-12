@@ -21,6 +21,7 @@ $base = $scheme . '://' . $host;
       <span class="dot" aria-hidden="true"></span>
       <span>JARVIS</span>
     </div>
+    <button class="nav-toggle" id="navToggle" aria-label="Open menu">☰</button>
     <nav>
       <a href="home.php">Home</a>
       <a href="siri.php">Add to Siri</a>
@@ -84,4 +85,5 @@ $base = $scheme . '://' . $host;
       <p class="muted">If your server is remote, set <code>SITE_URL</code> to your public domain so confirmation emails and Siri links are correct.</p>
     </div>
   </div>
+  <script src="navbar.js"></script>
 </body></html>

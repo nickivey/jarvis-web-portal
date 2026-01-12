@@ -94,77 +94,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
     }
     $success = 'Phone number saved.';
   }
-
-  if (isset($_POST['save_channel'])) {
-    $chan = trim($_POST['default_channel'] ?? '');
-    jarvis_update_preferences($userId, ['default_slack_channel'=>$chan ?: null]);
-    jarvis_audit($userId, 'PREF_UPDATE', 'slack', ['default_slack_channel'=>$chan]);
-    $prefs = jarvis_preferences($userId);
-    $success = 'Default channel saved.';
-  }
-
-  if (isset($_POST['send_chat'])) {
-    $msg = trim($_POST['message'] ?? '');
-    $chan = trim($_POST['channel'] ?? ($prefs['default_slack_channel'] ?? ''));
-    if ($msg === '') {
-      $error = 'Type a message first.';
-    } else {
-      // Local JARVIS commands
-      $lower = strtolower($msg);
-      if ($lower === 'briefing' || $lower === '/brief') {
-        $out = jarvis_compose_briefing($userId, 'briefing');
-        $jarvis = (string)$out['text'];
-        $cards = (array)($out['cards'] ?? []);
-        jarvis_log_command($userId, 'briefing', $msg, $jarvis, $cards);
-        jarvis_audit($userId, 'COMMAND', 'briefing', null);
-        $success = 'Briefing generated.';
-        // Do not forward to Slack
-        goto after_send_chat;
-      }
-
-      if ($lower === 'check ig' || $lower === '/ig') {
-        $ig = jarvis_instagram_check_media_updates($userId);
-        if (!empty($ig['ok'])) {
-          $watch = '@' . ltrim((string)($ig['watch'] ?? ''), '@');
-          $jarvis = "Instagram check complete for {$watch}. New media since last check: " . (int)($ig['new_count'] ?? 0) . ".\nStories: not available in Basic Display.";
-        } else {
-          $jarvis = "Instagram check: " . (string)($ig['note'] ?? 'unable to check');
-        }
-        $cards = ['instagram'=>$ig];
-        jarvis_log_command($userId, 'integration', $msg, $jarvis, $cards);
-        jarvis_audit($userId, 'COMMAND', 'instagram_check', ['ok'=>(bool)($ig['ok'] ?? false)]);
-        $success = 'Instagram check requested.';
-        goto after_send_chat;
-      }
-
-      $token = jarvis_setting_get('SLACK_BOT_TOKEN') ?: jarvis_setting_get('SLACK_APP_TOKEN') ?: getenv('SLACK_BOT_TOKEN') ?: getenv('SLACK_APP_TOKEN');
-      $fallbackChan = jarvis_setting_get('SLACK_CHANNEL_ID') ?: getenv('SLACK_CHANNEL_ID') ?: '';
-      $useChan = $chan ?: $fallbackChan;
-      if (!$token) {
-        $error = 'Slack is not configured. Ask an admin to set SLACK_APP_TOKEN or SLACK_BOT_TOKEN.';
-      } elseif ($useChan === '') {
-        $error = 'Set a channel or SLACK_CHANNEL_ID.';
-      } else {
-        $resp = slack_post_message_portal($token, $useChan, $msg);
-        jarvis_log_slack_message($userId, $useChan, $msg, $resp);
-        jarvis_audit($userId, 'SLACK_SEND', 'slack', ['channel'=>$useChan, 'ok'=>(bool)($resp['ok'] ?? false)]);
-        if (!empty($resp['ok'])) {
-          $success = 'Message sent.';
-          if (!empty($prefs['notif_inapp'])) {
-            jarvis_notify($userId, 'success', 'Slack message sent', $msg, ['channel'=>$useChan]);
-          }
-          if (!empty($dbUser['phone_e164']) && !empty($prefs['notif_sms'])) {
-            jarvis_send_sms($dbUser['phone_e164'], "JARVIS → Slack: {$msg}");
-          }
-        } else {
-          $error = 'Slack error: ' . htmlspecialchars((string)($resp['error'] ?? 'unknown'));
-        }
-      }
-    }
-  }
 }
-
-after_send_chat:
 
 // recent chat messages
 $recent = jarvis_fetch_messages($userId, 50);
@@ -303,6 +233,7 @@ $phone = (string)($dbUser['phone_e164'] ?? '');
             <div style="margin-top:8px;display:flex;gap:12px;align-items:center;">
               <label style="font-size:13px"><input type="checkbox" id="enableTTS" checked /> Speak responses</label>
               <label style="font-size:13px"><input type="checkbox" id="enableNotif" checked /> Show notifications</label>
+              <label style="font-size:13px"><input type="checkbox" id="voiceOnlyMode" /> Voice-only mode</label>
             </div>
           </form>
         </div>
@@ -462,6 +393,7 @@ Content-Type: application/json
       const micBtn = document.getElementById('micBtn');
       const enableTTS = document.getElementById('enableTTS');
       const enableNotif = document.getElementById('enableNotif');
+      const voiceOnlyMode = document.getElementById('voiceOnlyMode');
       let recognizing = false;
       let recognition = null;
       let lastInputType = 'text';
@@ -484,10 +416,26 @@ Content-Type: application/json
         r.lang = navigator.language || 'en-US';
         r.interimResults = false;
         r.maxAlternatives = 1;
-        r.onresult = (evt) => {
+        r.onresult = async (evt) => {
           const text = evt.results[0][0].transcript || '';
-          msgInput.value = text;
           lastInputType = 'voice';
+          if (voiceOnlyMode && voiceOnlyMode.checked) {
+            if (!text.trim()) return;
+            appendMessage(text, 'me');
+            try {
+              const r = await fetch('/api/command', {
+                method: 'POST', headers: { 'Content-Type':'application/json', 'Authorization': token ? 'Bearer '+token : '' }, body: JSON.stringify({ text, type: 'voice' })
+              });
+              const data = await r.json().catch(()=>null);
+              if (data && typeof data.jarvis_response === 'string' && data.jarvis_response.trim() !== ''){
+                appendMessage(data.jarvis_response, 'jarvis');
+                speakText(data.jarvis_response);
+                showNotification(data.jarvis_response);
+              }
+            } catch(e) {}
+          } else {
+            msgInput.value = text;
+          }
         };
         r.onend = () => { recognizing = false; micBtn.classList.remove('active'); };
         r.onerror = () => { recognizing = false; micBtn.classList.remove('active'); };
