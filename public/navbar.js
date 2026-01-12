@@ -111,15 +111,22 @@
             if (ttl && data !== null) setCache(key, data, ttl);
             return data;
           },
-          async post(url, body, { asJson=true }={}){
+          async post(url, body, { asJson=true, cacheTTL=null }={}){
             const headers = authHeaders({});
             if (asJson) headers['Content-Type'] = 'application/json';
+            // Support optional caching for idempotent-looking POSTs when cacheTTL is provided
+            const cacheKeyPost = cacheKey(url + '::' + (asJson ? JSON.stringify(body) : body));
+            if (cacheTTL) {
+              const c = getCache(cacheKeyPost);
+              if (c !== null) return c;
+            }
             const resp = await fetch(url, { method:'POST', headers, body: asJson ? JSON.stringify(body) : body });
             const data = await resp.json().catch(()=>null);
             if (!resp.ok) {
               const err = new Error('HTTP ' + resp.status);
               err.response = data; throw err;
             }
+            if (cacheTTL && data !== null) setCache(cacheKeyPost, data, cacheTTL);
             return data;
           },
           invalidate(url){ const key = cacheKey(url); cache.delete(key); try{ localStorage.removeItem('jarvis_cache_' + key); }catch(e){} }

@@ -429,7 +429,8 @@ Content-Type: application/json
             appendMessage(text, 'me');
             try {
               if (window.jarvisShowLoader) jarvisShowLoader();
-              const data = await (window.jarvisApi ? window.jarvisApi.post('/api/command', { text, type: 'voice' }) : (async ()=>{ const r=await fetch('/api/command',{method:'POST',headers:{'Content-Type':'application/json','Authorization': token ? 'Bearer '+token : ''},body:JSON.stringify({text,type:'voice'})}); return r.json(); })());
+              const isBrief = (text || '').trim().toLowerCase() === 'briefing' || (text || '').trim().toLowerCase() === '/brief';
+              const data = await (window.jarvisApi ? window.jarvisApi.post('/api/command', { text, type: 'voice' }, { cacheTTL: isBrief ? 30000 : null }) : (async ()=>{ const r=await fetch('/api/command',{method:'POST',headers:{'Content-Type':'application/json','Authorization': token ? 'Bearer '+token : ''},body:JSON.stringify({text,type:'voice'})}); return r.json(); })());
               if (data && typeof data.jarvis_response === 'string' && data.jarvis_response.trim() !== ''){
                 appendMessage(data.jarvis_response, 'jarvis');
                 speakText(data.jarvis_response);
@@ -484,7 +485,8 @@ Content-Type: application/json
           lastInputType = 'voice';
           try {
             if (window.jarvisShowLoader) jarvisShowLoader();
-            const data = await (window.jarvisApi ? window.jarvisApi.post('/api/command', { text, type: 'voice' }) : (async ()=>{ const r=await fetch('/api/command',{method:'POST',headers:{'Content-Type':'application/json','Authorization': token? 'Bearer '+token : ''},body:JSON.stringify({text,type:'voice'})}); return r.json(); })());
+            const isBrief = (text || '').trim().toLowerCase() === 'briefing' || (text || '').trim().toLowerCase() === '/brief';
+            const data = await (window.jarvisApi ? window.jarvisApi.post('/api/command', { text, type: 'voice' }, { cacheTTL: isBrief ? 30000 : null }) : (async ()=>{ const r=await fetch('/api/command',{method:'POST',headers:{'Content-Type':'application/json','Authorization': token? 'Bearer '+token : ''},body:JSON.stringify({text,type:'voice'})}); return r.json(); })());
             if (data && typeof data.jarvis_response === 'string' && data.jarvis_response.trim() !== ''){
               appendMessage(data.jarvis_response, 'jarvis');
               speakText(data.jarvis_response);
@@ -547,7 +549,8 @@ Content-Type: application/json
         try {
           // Prefer the Command API
           window.jarvisEmit('command.sent', { text: msg, type: lastInputType });
-          const data = await (window.jarvisApi ? window.jarvisApi.post('/api/command', { text: msg, type: lastInputType }) : (async ()=>{ const r=await fetch('/api/command',{method:'POST',headers:{'Content-Type':'application/json','Authorization': token? 'Bearer '+token : ''},body:JSON.stringify({text:msg,type:lastInputType})}); return r.json(); })());
+          const isBrief = (msg || '').trim().toLowerCase() === 'briefing' || (msg || '').trim().toLowerCase() === '/brief';
+          const data = await (window.jarvisApi ? window.jarvisApi.post('/api/command', { text: msg, type: lastInputType }, { cacheTTL: isBrief ? 30000 : null }) : (async ()=>{ const r=await fetch('/api/command',{method:'POST',headers:{'Content-Type':'application/json','Authorization': token? 'Bearer '+token : ''},body:JSON.stringify({text:msg,type:lastInputType})}); return r.json(); })());
 
           if (data && typeof data.jarvis_response === 'string' && data.jarvis_response.trim() !== ''){
             appendMessage(data.jarvis_response, 'jarvis');
