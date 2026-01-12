@@ -231,6 +231,23 @@ if ($path === '/api/voice') {
   jarvis_respond(405, ['error'=>'Method not allowed']);
 }
 
+// Download a recorded voice blob (authenticated)
+if (preg_match('#^/api/voice/([0-9]+)/download$#', $path, $m)) {
+  [$userId, $u] = require_jwt_user();
+  $vid = (int)$m[1];
+  $v = jarvis_voice_input_by_id($vid);
+  if (!$v) jarvis_respond(404, ['error'=>'not found']);
+  if ((int)$v['user_id'] !== (int)$userId) jarvis_respond(403, ['error'=>'forbidden']);
+  $f = __DIR__ . '/' . $v['filename'];
+  if (!is_file($f)) jarvis_respond(404, ['error'=>'file not found']);
+  // stream file
+  $mime = mime_content_type($f) ?: 'application/octet-stream';
+  header('Content-Type: ' . $mime);
+  header('Content-Disposition: attachment; filename="' . basename($f) . '"');
+  readfile($f);
+  exit;
+}
+
   $prefs = jarvis_preferences($userId);
   $lower = strtolower($text);
   $cards = [];

@@ -387,6 +387,14 @@ function jarvis_pnut_log(?int $userId, string $source, array $payload): int {
   $stmt->execute([':u'=>$userId, ':s'=>$source, ':p'=>json_encode($payload)]);
   return (int)$pdo->lastInsertId();
 }
+
+function jarvis_voice_input_by_id(int $id): ?array {
+  $pdo = jarvis_pdo(); if (!$pdo) return null;
+  $stmt = $pdo->prepare('SELECT id,user_id,filename,transcript,duration_ms,metadata_json,created_at FROM voice_inputs WHERE id=:id LIMIT 1');
+  $stmt->execute([':id'=>$id]);
+  $row = $stmt->fetch();
+  return $row ?: null;
+}
   $pdo->prepare('INSERT INTO devices (user_id, device_uuid, platform, push_provider, push_token, metadata_json, last_seen_at) VALUES (:u,:du,:p,:pp,:pt,:m,:ls) ON DUPLICATE KEY UPDATE platform=VALUES(platform), push_provider=VALUES(push_provider), push_token=VALUES(push_token), metadata_json=VALUES(metadata_json), last_seen_at=VALUES(last_seen_at)')
       ->execute([':u'=>$userId, ':du'=>$deviceUuid, ':p'=>$platform, ':pp'=>$pushProvider, ':pt'=>$pushToken, ':m'=>$metaJson, ':ls'=>$now]);
   $stmt = $pdo->prepare('SELECT id FROM devices WHERE user_id=:u AND device_uuid=:du LIMIT 1');
