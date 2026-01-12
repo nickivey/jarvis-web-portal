@@ -233,8 +233,8 @@ $phone = (string)($dbUser['phone_e164'] ?? '');
         <div style="margin-top:8px"><a href="/public/photos.php">Open photo gallery</a> • <a href="/public/ios_photos.php">iOS setup</a></div>
       </div>
 
-      <div class="card">
-        <h3>JARVIS Chat</h3>
+      <div class="card overlay-card" id="commandCenterCard">
+        <h3>Command Center</h3>
         <div class="chatbox">
           <form class="chatinput" id="chatForm">
             <div style="display:flex;flex-direction:column;gap:8px;">
@@ -275,21 +275,7 @@ $phone = (string)($dbUser['phone_e164'] ?? '');
         </div>
       </div>
 
-      <!-- 3 -->
-      <div class="card">
-        <h3>REST for .NET Desktop</h3>
-        <p class="muted">Use these endpoints from a desktop app:</p>
-        <pre><code>POST /api/auth/login
-POST /api/command
-POST /api/messages
-POST /api/location
-
-Example: send a Slack message
-Content-Type: application/json
-{
-  "message": "Hello from .NET"
-}</code></pre>
-      </div>
+      <!-- 3 (Removed .NET Desktop tile per request) -->
 
       <!-- 4 -->
       <div class="card">

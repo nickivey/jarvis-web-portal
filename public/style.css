@@ -26,6 +26,21 @@ body{
   mix-blend-mode:screen;
 }
 
+/* Fullscreen command center overlay */
+.overlay-card{
+  position:fixed; left:0; right:0; bottom:0; top:64px; /* below sticky navbar */
+  margin:0; border-radius:0; z-index:6;
+  background:var(--panel);
+  border:1px solid rgba(30,120,255,.28);
+  box-shadow:none;
+  padding:18px;
+  overflow:auto;
+  display:flex; flex-direction:column;
+}
+.overlay-card h3{margin-top:0}
+.overlay-card .chatbox{flex:1; height:auto; min-height:0}
+.overlay-card .chatlog{height:auto; min-height:0}
+
 /* Ambient HUD grid layer */
 body::before{
   content:"";
