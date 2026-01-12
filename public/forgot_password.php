@@ -13,27 +13,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   if ($email === '') {
     $error = 'Enter your email address.';
   } else {
-    $token = jarvis_initiate_password_reset($email);
-    if ($token) {
-      // Log this password reset request
-      $user = jarvis_pdo() ? jarvis_pdo()->prepare('SELECT id FROM users WHERE email=:e LIMIT 1') : null;
-      if ($user) {
-        $user->execute([':e'=>$email]);
-        $row = $user->fetch();
-        if ($row) {
-          $userId = (int)$row['id'];
-          jarvis_audit($userId, 'PASSWORD_RESET_REQUESTED', 'auth', ['email'=>$email]);
+    try {
+      $token = jarvis_initiate_password_reset($email);
+      if ($token) {
+        // Log this password reset request
+        $user = jarvis_pdo() ? jarvis_pdo()->prepare('SELECT id FROM users WHERE email=:e LIMIT 1') : null;
+        if ($user) {
+          $user->execute([':e'=>$email]);
+          $row = $user->fetch();
+          if ($row) {
+            $userId = (int)$row['id'];
+            jarvis_audit($userId, 'PASSWORD_RESET_REQUESTED', 'auth', ['email'=>$email]);
+          }
         }
+        $resetUrl = jarvis_site_url() . '/public/reset_password.php?token=' . urlencode($token);
+        $subject = 'Reset your JARVIS password';
+        $bodyText = "Click here to reset your password:\n$resetUrl\n\nThis link expires in 1 hour.";
+        $bodyHtml = "<p>Click here to reset your password: <a href=\"$resetUrl\">Reset Password</a></p><p>This link expires in 1 hour.</p>";
+        $sent = jarvis_send_email($email, $subject, $bodyText, $bodyHtml);
+        if (!$sent) error_log('Forgot password: failed to send reset email to ' . $email);
+        $message = 'Password reset link has been sent to your email. Check your inbox.';
+      } else {
+        // Don't reveal whether email exists (security)
+        $message = 'If an account exists with that email, a password reset link has been sent.';
       }
-      $resetUrl = jarvis_site_url() . '/public/reset_password.php?token=' . urlencode($token);
-      $subject = 'Reset your JARVIS password';
-      $bodyText = "Click here to reset your password:\n$resetUrl\n\nThis link expires in 1 hour.";
-      $bodyHtml = "<p>Click here to reset your password: <a href=\"$resetUrl\">Reset Password</a></p><p>This link expires in 1 hour.</p>";
-      jarvis_send_email($email, $subject, $bodyText, $bodyHtml);
-      $message = 'Password reset link has been sent to your email. Check your inbox.';
-    } else {
-      // Don't reveal whether email exists (security)
-      $message = 'If an account exists with that email, a password reset link has been sent.';
+    } catch (Throwable $e) {
+      error_log('Forgot password error: ' . $e->getMessage());
+      $error = 'An error occurred while processing your request. Please try again later.';
     }
   }
 }
