@@ -59,7 +59,7 @@ try {
 $success = ''; $error = '';
 $recentLocations = jarvis_recent_locations($userId, 20);
 $lastWeather = null;
-$weatherConfigured = (bool)(jarvis_setting_get('OPENWEATHER_API_KEY') ?: getenv('OPENWEATHER_API_KEY'));
+$weatherConfigured = (bool)(jarvis_setting_get('OPENWEATHER_API_KEY') ?: getenv('OPENWEATHER_API_KEY') ?: getenv('OPENWEATHER_API_KEY_DEFAULT'));
 if (!empty($recentLocations) && isset($recentLocations[0]['lat']) && isset($recentLocations[0]['lon'])) {
   try { $lastWeather = jarvis_fetch_weather((float)$recentLocations[0]['lat'], (float)$recentLocations[0]['lon']); } catch (Throwable $e) { $lastWeather = null; }
 }
