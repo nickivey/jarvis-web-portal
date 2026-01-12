@@ -16,6 +16,10 @@ $stmt->bindValue(':l',$limit,PDO::PARAM_INT);
 $stmt->execute();
 $rows = $stmt->fetchAll() ?: [];
 ?>
+<?php
+// Fetch voice inputs for the timeline
+$voiceInputs = jarvis_recent_voice_inputs($userId, 50);
+?>
 <!doctype html>
 <html lang="en"><head>
   <meta charset="utf-8" />
@@ -78,6 +82,33 @@ $rows = $stmt->fetchAll() ?: [];
                     <div><code><?php echo htmlspecialchars(json_encode($meta)); ?></code></div>
                   <?php else: ?>
                     <code><?php echo htmlspecialchars((string)($r['metadata_json'] ?? '')); ?></code>
+                  <?php endif; ?>
+                </td>
+              </tr>
+            <?php endforeach; ?>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Voice Timeline Section -->
+    <div class="card" style="margin-top:20px">
+      <h3>Voice Session Timeline</h3>
+      <p class="muted">Recent raw audio inputs and dictations.</p>
+      <div style="overflow-x:auto">
+        <table class="table">
+          <thead><tr><th>Time</th><th>Transcript</th><th>Audio</th><th>Metadata</th></tr></thead>
+          <tbody>
+            <?php foreach($voiceInputs as $v): $vm = json_decode($v['metadata_json']??'{}',true); ?>
+              <tr>
+                <td><?php echo htmlspecialchars($v['created_at']); ?></td>
+                <td><?php echo htmlspecialchars($v['transcript'] ?? '(no text)'); ?></td>
+                <td>
+                  <audio controls src="/api/voice/<?php echo (int)$v['id']; ?>/download" style="height:32px; width:240px"></audio>
+                </td>
+                <td>
+                  <?php if (!empty($vm)): ?>
+                     <code><?php echo htmlspecialchars(json_encode($vm)); ?></code>
                   <?php endif; ?>
                 </td>
               </tr>

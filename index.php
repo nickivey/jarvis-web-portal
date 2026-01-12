@@ -184,6 +184,7 @@ if ($path === '/api/command') {
   $in = jarvis_json_input();
   $text = trim((string)($in['text'] ?? ''));
   $inputType = trim((string)($in['type'] ?? 'text')); // text or voice
+  $clientMeta = isset($in['meta']) && is_array($in['meta']) ? $in['meta'] : [];
   if ($text === '') jarvis_respond(400, ['error'=>'text required']);
 
 // ----------------------------
@@ -278,21 +279,25 @@ if (preg_match('#^/api/voice/([0-9]+)/download$#', $path, $m)) {
   $cards = [];
   $commandType = 'user_command';
 
+  $auditMeta = function(array $m=[]) use ($clientMeta, $inputType, $text) {
+    return array_merge($clientMeta, $m, ['type'=>$inputType, 'question'=>$text]);
+  };
+
   // ------------------
   // Simple automated responses
   // ------------------
   if (in_array($lower, ['whoami','who am i'])) {
     $response = "You are " . $u['username'] . " (" . $u['email'] . ")";
-    jarvis_log_command($userId, 'system', $text, $response, null);
-    jarvis_audit($userId, 'COMMAND_WHOAMI', 'command', ['question'=>$text,'answer'=>$response]);
+    jarvis_log_command($userId, 'system', $text, $response, $clientMeta);
+    jarvis_audit($userId, 'COMMAND_WHOAMI', 'command', $auditMeta(['answer'=>$response]));
     jarvis_log_api_request($userId, 'desktop', $path, $method, $in, ['jarvis_response'=>$response], 200);
     jarvis_respond(200, ['jarvis_response'=>$response]);
   }
 
   if ($lower === 'last login' || $lower === 'when did i last login' || $lower === 'last login time') {
     $response = 'Last login: ' . ($u['last_login_at'] ?: 'Never');
-    jarvis_log_command($userId, 'system', $text, $response, null);
-    jarvis_audit($userId, 'COMMAND_LAST_LOGIN', 'command', ['question'=>$text,'answer'=>$response]);
+    jarvis_log_command($userId, 'system', $text, $response, $clientMeta);
+    jarvis_audit($userId, 'COMMAND_LAST_LOGIN', 'command', $auditMeta(['answer'=>$response]));
     jarvis_log_api_request($userId, 'desktop', $path, $method, $in, ['jarvis_response'=>$response], 200);
     jarvis_respond(200, ['jarvis_response'=>$response]);
   }
@@ -300,8 +305,35 @@ if (preg_match('#^/api/voice/([0-9]+)/download$#', $path, $m)) {
   if ($lower === 'notifications' || $lower === 'unread notifications') {
     $count = jarvis_unread_notifications_count($userId);
     $response = 'You have ' . (int)$count . ' unread notifications.';
-    jarvis_log_command($userId, 'system', $text, $response, null);
-    jarvis_audit($userId, 'COMMAND_NOTIF_COUNT', 'command', ['question'=>$text,'answer'=>$response,'count'=>$count]);
+    jarvis_log_command($userId, 'system', $text, $response, $clientMeta);
+    jarvis_audit($userId, 'COMMAND_NOTIF_COUNT', 'command', $auditMeta(['answer'=>$response,'count'=>$count]));
+    jarvis_log_api_request($userId, 'desktop', $path, $method, $in, ['jarvis_response'=>$response], 200);
+    jarvis_respond(200, ['jarvis_response'=>$response]);
+  }
+
+  // General conversational responses
+  $hello = ['hello', 'hi', 'hey', 'greetings', 'hello jarvis', 'hi jarvis', 'hey jarvis'];
+  if (in_array($lower, $hello)) {
+    $r = ["Hello, sir.", "Greetings.", "Online and ready.", "Hello. How can I help?", "At your service."];
+    $response = $r[array_rand($r)];
+    jarvis_log_command($userId, 'system', $text, $response, $clientMeta);
+    jarvis_audit($userId, 'COMMAND_CHAT', 'command', $auditMeta(['answer'=>$response]));
+    jarvis_log_api_request($userId, 'desktop', $path, $method, $in, ['jarvis_response'=>$response], 200);
+    jarvis_respond(200, ['jarvis_response'=>$response]);
+  }
+
+  if (strpos($lower, 'how are you') !== false) {
+    $response = "I am functioning within normal parameters. Ready to assist.";
+    jarvis_log_command($userId, 'system', $text, $response, $clientMeta);
+    jarvis_audit($userId, 'COMMAND_CHAT', 'command', $auditMeta(['answer'=>$response]));
+    jarvis_log_api_request($userId, 'desktop', $path, $method, $in, ['jarvis_response'=>$response], 200);
+    jarvis_respond(200, ['jarvis_response'=>$response]);
+  }
+  
+  if (strpos($lower, 'thank you') !== false || strpos($lower, 'thanks') !== false) {
+    $response = "You are welcome.";
+    jarvis_log_command($userId, 'system', $text, $response, $clientMeta);
+    jarvis_audit($userId, 'COMMAND_CHAT', 'command', $auditMeta(['answer'=>$response]));
     jarvis_log_api_request($userId, 'desktop', $path, $method, $in, ['jarvis_response'=>$response], 200);
     jarvis_respond(200, ['jarvis_response'=>$response]);
   }
@@ -312,8 +344,8 @@ if (preg_match('#^/api/voice/([0-9]+)/download$#', $path, $m)) {
     $response = (string)$out['text'];
     $cards = (array)($out['cards'] ?? []);
     $commandType = 'briefing';
-    jarvis_log_command($userId, 'briefing', $text, $response, $cards);
-    jarvis_audit($userId, 'COMMAND_BRIEFING', 'command', ['type'=>$inputType, 'question'=>$text, 'answer'=>$response]);
+    jarvis_log_command($userId, 'briefing', $text, $response, array_merge($clientMeta, ['cards'=>$cards]));
+    jarvis_audit($userId, 'COMMAND_BRIEFING', 'command', $auditMeta(['answer'=>$response]));
     jarvis_log_api_request($userId, 'desktop', $path, $method, $in, ['jarvis_response'=>$response,'cards'=>$cards], 200);
     jarvis_respond(200, ['jarvis_response'=>$response, 'cards'=>$cards]);
   }
@@ -324,8 +356,8 @@ if (preg_match('#^/api/voice/([0-9]+)/download$#', $path, $m)) {
     $response = (string)$out['text'];
     $cards = (array)($out['cards'] ?? []);
     $commandType = 'wake';
-    jarvis_log_command($userId, 'wake', $text, $response, $cards);
-    jarvis_audit($userId, 'COMMAND_WAKE', 'command', ['type'=>$inputType, 'question'=>$text, 'answer'=>$response]);
+    jarvis_log_command($userId, 'wake', $text, $response, array_merge($clientMeta, ['cards'=>$cards]));
+    jarvis_audit($userId, 'COMMAND_WAKE', 'command', $auditMeta(['answer'=>$response]));
     jarvis_log_api_request($userId, 'desktop', $path, $method, $in, ['jarvis_response'=>$response,'cards'=>$cards], 200);
     jarvis_respond(200, ['jarvis_response'=>$response, 'cards'=>$cards]);
   }
@@ -348,8 +380,8 @@ if (preg_match('#^/api/voice/([0-9]+)/download$#', $path, $m)) {
 
   $response = "Command not recognized. Try: briefing, check ig.";
   $commandType = 'unrecognized';
-  jarvis_log_command($userId, 'system', $text, $response, null);
-  jarvis_audit($userId, 'COMMAND_UNRECOGNIZED', 'command', ['type'=>$inputType, 'question'=>$text, 'answer'=>$response]);
+  jarvis_log_command($userId, 'system', $text, $response, $clientMeta);
+  jarvis_audit($userId, 'COMMAND_UNRECOGNIZED', 'command', $auditMeta(['answer'=>$response]));
   jarvis_log_api_request($userId, 'desktop', $path, $method, $in, ['jarvis_response'=>$response], 200);
   jarvis_respond(200, ['jarvis_response'=>$response]);
 }

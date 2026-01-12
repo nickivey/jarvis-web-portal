@@ -178,38 +178,37 @@ $phone = (string)($dbUser['phone_e164'] ?? '');
 
       <div class="card" id="locationCard">
         <h3>Location & Weather</h3>
-        <?php if (empty($recentLocations)): ?>
-          <p class="muted">No location data yet. Enable location logging in Preferences and allow location access in your browser.</p>
-        <?php else: ?>
-          <div class="location-panel">
-            <div id="map" style="height:240px;border:1px solid #ddd;margin-bottom:8px;flex:1"></div>
-            <div id="miniMap" class="location-map" aria-hidden="true" title="Mini location map"></div>
-          </div>
-          <div id="weatherSummary">
-            <?php if ($lastWeather): ?>
-              <p><strong><?php echo htmlspecialchars($lastWeather['desc'] ?? ''); ?></strong> — <?php echo ($lastWeather['temp_c'] !== null) ? htmlspecialchars($lastWeather['temp_c'].'°C') : ''; ?></p>
-            <?php else: ?>
-              <p class="muted">Weather data not available for last known location (configure OPENWEATHER_API_KEY in DB or env).</p>
-            <?php endif; ?>
-          </div>
-          <details>
-            <summary>Recent locations (latest first)</summary>
-            <table style="width:100%;margin-top:8px">
-              <thead><tr><th>When</th><th>Lat</th><th>Lon</th><th>Source</th><th></th></tr></thead>
-              <tbody id="recentLocationsTbody">
-                <?php foreach($recentLocations as $loc): ?>
-                  <tr data-id="<?php echo (int)$loc['id']; ?>">
-                    <td><?php echo htmlspecialchars($loc['created_at']); ?></td>
-                    <td><?php echo htmlspecialchars($loc['lat']); ?></td>
-                    <td><?php echo htmlspecialchars($loc['lon']); ?></td>
-                    <td><?php echo htmlspecialchars($loc['source']); ?></td>
-                    <td><button class="btn secondary focusLocationBtn" data-id="<?php echo (int)$loc['id']; ?>">Focus</button></td>
-                  </tr>
-                <?php endforeach; ?>
-              </tbody>
-            </table>
-            <div style="margin-top:8px"><a href="location_history.php">View full history</a></div>
-          </details>
+        <div class="location-panel">
+          <div id="map" style="height:240px;border:1px solid #ddd;margin-bottom:8px;flex:1"></div>
+          <div id="miniMap" class="location-map" aria-hidden="true" title="Mini location map"></div>
+        </div>
+        <div id="weatherSummary">
+          <?php if ($lastWeather): ?>
+            <p><strong><?php echo htmlspecialchars($lastWeather['desc'] ?? ''); ?></strong> — <?php echo ($lastWeather['temp_c'] !== null) ? htmlspecialchars($lastWeather['temp_c'].'°C') : ''; ?></p>
+          <?php else: ?>
+            <p class="muted">Weather data will appear here once location is detected.</p>
+          <?php endif; ?>
+        </div>
+        <details <?php echo !empty($recentLocations) ? 'open' : ''; ?>>
+          <summary>Recent locations (latest first)</summary>
+          <table style="width:100%;margin-top:8px">
+            <thead><tr><th>When</th><th>Lat</th><th>Lon</th><th>Source</th><th></th></tr></thead>
+            <tbody id="recentLocationsTbody">
+              <?php foreach($recentLocations as $loc): ?>
+                <tr data-id="<?php echo (int)$loc['id']; ?>">
+                  <td><?php echo htmlspecialchars($loc['created_at']); ?></td>
+                  <td><?php echo htmlspecialchars($loc['lat']); ?></td>
+                  <td><?php echo htmlspecialchars($loc['lon']); ?></td>
+                  <td><?php echo htmlspecialchars($loc['source']); ?></td>
+                  <td><button class="btn secondary focusLocationBtn" data-id="<?php echo (int)$loc['id']; ?>">Focus</button></td>
+                </tr>
+              <?php endforeach; ?>
+            </tbody>
+          </table>
+          <div style="margin-top:8px"><a href="location_history.php">View full history</a></div>
+        </details>
+        <?php if(empty($recentLocations)): ?>
+          <p class="muted" id="noLocMsg" style="margin-top:8px">No location data yet. Enable location logging in Preferences and allow location access in your browser.</p>
         <?php endif; ?>
       </div>
 
@@ -393,6 +392,8 @@ Content-Type: application/json
           const data = await window.jarvisApi.get('/api/locations?limit=8', { ttl:0, force:true });
           if (!data || !data.ok) return;
           const locs = data.locations || [];
+          // Hide no-location message if we have data
+          if (locs.length > 0) { const msg = document.getElementById('noLocMsg'); if(msg) msg.style.display='none'; }
           // update table
           const tbody = document.getElementById('recentLocationsTbody');
           if (tbody) {
@@ -541,7 +542,7 @@ Content-Type: application/json
 
 
       // MediaRecorder helpers to capture raw audio and upload to the server
-      let _mediaStream = null, _mediaRecorder = null, _audioChunks = [], _lastTranscript = null;
+      let _mediaStream = null, _mediaRecorder = null, _audioChunks = [], _lastTranscript = null, _voiceContextId = null;
       async function startRecorder(){
         if (_mediaRecorder && _mediaRecorder.state !== 'inactive') return true;
         if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return false;
@@ -550,15 +551,16 @@ Content-Type: application/json
           try { _mediaRecorder = new MediaRecorder(_mediaStream); } catch(e) { _mediaRecorder = null; }
           if (!_mediaRecorder) { _mediaStream.getTracks().forEach(t=>t.stop()); _mediaStream=null; return false; }
           _audioChunks = [];
+          _voiceContextId = crypto.randomUUID ? crypto.randomUUID() : ('vc-'+Date.now()+'-'+Math.random());
           _mediaRecorder.ondataavailable = (evt)=>{ if (evt && evt.data) _audioChunks.push(evt.data); };
           _mediaRecorder.onstop = async ()=>{
             try{
               const blob = new Blob(_audioChunks, { type: _audioChunks[0] ? _audioChunks[0].type || 'audio/webm' : 'audio/webm' });
               // send blob to server with transcript (if present)
-              try { await sendAudioBlob(blob, _lastTranscript, Math.floor((blob.size/16000))); } catch(e){ console.warn('upload voice failed',e); }
+              try { await sendAudioBlob(blob, _lastTranscript, Math.floor((blob.size/16000)), _voiceContextId); } catch(e){ console.warn('upload voice failed',e); }
             }catch(e){}
             try{ if (_mediaStream) { _mediaStream.getTracks().forEach(t=>t.stop()); _mediaStream=null; } }catch(e){}
-            _mediaRecorder = null; _audioChunks=[]; _lastTranscript=null;
+            _mediaRecorder = null; _audioChunks=[]; _lastTranscript=null; _voiceContextId=null;
           };
           _mediaRecorder.start();
           return true;
@@ -567,7 +569,7 @@ Content-Type: application/json
       function stopRecorder(){ try{ if (_mediaRecorder && _mediaRecorder.state !== 'inactive') _mediaRecorder.stop(); }catch(e){} }
 
       // POST audio blob + transcript to /api/voice
-      async function sendAudioBlob(blob, transcript, durationMs){
+      async function sendAudioBlob(blob, transcript, durationMs, contextId){
         if (!blob) return null;
         try {
           const fd = new FormData();
@@ -576,6 +578,7 @@ Content-Type: application/json
           if (typeof durationMs !== 'undefined' && durationMs !== null) fd.append('duration', String(durationMs));
           // meta: include channel/type and location if available
           const meta = { source:'web', input_type:lastInputType };
+          if (contextId) meta.voice_context_id = contextId;
           if (window.jarvisLastLoc) { meta.location = window.jarvisLastLoc; }
           fd.append('meta', JSON.stringify(meta));
           const opts = { method: 'POST', body: fd, headers: {} };
@@ -593,26 +596,52 @@ Content-Type: application/json
         r.lang = navigator.language || 'en-US';
         r.interimResults = false;
         r.maxAlternatives = 1;
+        // Continuous to simulate "waiting" for keyword
+        r.continuous = true; 
         r.onresult = async (evt) => {
-          const text = evt.results[0][0].transcript || '';
-          lastInputType = 'voice';
-          _lastTranscript = text;
-          if (voiceOnlyMode && voiceOnlyMode.checked) {
-            if (!text.trim()) return;
-            appendMessage(text, 'me');
-            try {
-              await sendCommand(text, 'voice');
-            } catch(e) {}
-          } else {
-            msgInput.value = text;
+          // Process latest result
+          const len = evt.results.length;
+          const latest = evt.results[len-1];
+          const text = latest[0].transcript || '';
+          if(!text.trim()) return;
+
+          // Wake word logic: Must contain "jarvis"
+          const lower = text.toLowerCase();
+          if (lower.includes('jarvis')) {
+            // Trigger command processing
+            _lastTranscript = text;
+            lastInputType = 'voice';
+            const cleanText = text.replace(/jarvis/ig, '').trim(); 
+            // If empty after strip, maybe they just said "Jarvis?" - we can still send it or prompt
+            if (voiceOnlyMode && voiceOnlyMode.checked) {
+              appendMessage(text, 'me'); // Show full text with Jarvis
+              try { 
+                await sendCommand(cleanText || text, 'voice', { voice_context_id: _voiceContextId }); 
+              } catch(e) {}
+              // Restarting recorder context if needed happens automatically via onend/start loop if we were truly continuous, 
+              // but here we might want to stop/save this chunk and restart.
+              // Current implementation: One command per session for simplicity in saving files.
+              r.stop(); 
+            } else {
+              if(!msgInput.value) msgInput.value = text;
+              else msgInput.value += ' ' + text;
+            }
           }
         };
         r.onstart = async ()=>{
           // Attempt to start recorder in parallel
           try{ await startRecorder(); }catch(e){}
         };
-        r.onend = () => { recognizing = false; micBtn.classList.remove('active'); try{ stopRecorder(); }catch(e){} };
-        r.onerror = (ev) => { recognizing = false; micBtn.classList.remove('active'); try{ stopRecorder(); }catch(e){} };
+        r.onend = () => { 
+          recognizing = false; 
+          micBtn.classList.remove('active'); 
+          try{ stopRecorder(); }catch(e){} 
+        };
+        r.onerror = (ev) => { 
+          recognizing = false; 
+          micBtn.classList.remove('active'); 
+          try{ stopRecorder(); }catch(e){} 
+        };
         return r;
       }
 
@@ -664,7 +693,7 @@ Content-Type: application/json
       }
 
       // Centralized AJAX command sender used by text + voice
-      async function sendCommand(msg, type='text'){
+      async function sendCommand(msg, type='text', meta={}){
         if (!msg || !(msg||'').trim()) return null;
         const sendBtn = document.getElementById('sendBtn');
         msgInput.disabled = true; if (sendBtn) sendBtn.disabled = true;
@@ -672,7 +701,8 @@ Content-Type: application/json
         window.jarvisEmit('command.sent', { text: msg, type });
         try {
           const isBrief = (msg || '').trim().toLowerCase() === 'briefing' || (msg || '').trim().toLowerCase() === '/brief';
-          const data = await (window.jarvisApi ? window.jarvisApi.post('/api/command', { text: msg, type }, { cacheTTL: isBrief ? 30000 : null }) : (async ()=>{ const r=await fetch('/api/command',{method:'POST',headers:{'Content-Type':'application/json','Authorization': token? 'Bearer '+token : ''},body:JSON.stringify({text:msg,type:type})}); return r.json(); })());
+          const payload = { text: msg, type, meta };
+          const data = await (window.jarvisApi ? window.jarvisApi.post('/api/command', payload, { cacheTTL: isBrief ? 30000 : null }) : (async ()=>{ const r=await fetch('/api/command',{method:'POST',headers:{'Content-Type':'application/json','Authorization': token? 'Bearer '+token : ''},body:JSON.stringify(payload)}); return r.json(); })());
 
           if (data && typeof data.jarvis_response === 'string' && data.jarvis_response.trim() !== ''){
             appendMessage(data.jarvis_response, 'jarvis');
@@ -844,7 +874,12 @@ Content-Type: application/json
 
     document.getElementById('permRequestBtn')?.addEventListener('click', async ()=>{
       // Request mic/cam/geo as before
-      try{ await navigator.mediaDevices.getUserMedia({ audio:true }); }catch(e){}
+      try{ 
+        await navigator.mediaDevices.getUserMedia({ audio:true }); 
+        // Auto-start dictation if permission granted
+        const mb = document.getElementById('micBtn');
+        if(mb && !mb.classList.contains('active')) mb.click();
+      }catch(e){}
       try{ await navigator.mediaDevices.getUserMedia({ video:true }); }catch(e){}
       try{ await new Promise((res)=> navigator.geolocation.getCurrentPosition(()=>res(),()=>res(), {timeout:8000})); }catch(e){}
       // Also request notification permission explicitly (user gesture)
