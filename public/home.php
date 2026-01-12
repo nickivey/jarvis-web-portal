@@ -161,6 +161,49 @@ $phone = (string)($dbUser['phone_e164'] ?? '');
     <?php if($error):?><div class="error"><p><?php echo htmlspecialchars($error); ?></p></div><?php endif;?>
 
     <div class="grid">
+      <!-- JARVIS Chat: full-width first row -->
+      <div class="card wide" id="commandCard">
+        <h3>JARVIS Chat</h3>
+        <div class="chatbox">
+          <form class="chatinput" id="chatForm">
+            <div style="display:flex;flex-direction:column;gap:8px;">
+              <textarea name="message" id="messageInput" placeholder="Type a message to JARVIS..." style="flex:1;min-height:56px"></textarea>
+              <div style="margin-top:6px"><small class="muted">Tip: Press <b>Enter</b> to send. Use <b>Shift+Enter</b> to insert a newline.</small></div>
+              <div style="display:flex;gap:8px;align-items:center;justify-content:space-between;margin-top:6px">
+                <div style="display:flex;gap:8px;align-items:center">
+                  <button type="button" id="micBtn" class="btn" title="Start/Stop voice input">🎤</button>
+                  <button type="button" id="voiceCmdBtn" class="btn" title="Voice-only command">🎙️ Voice Cmd</button>
+                </div>
+                <div style="display:flex;gap:8px;align-items:center">
+                  <button type="submit" name="send_chat" value="1" id="sendBtn" class="btn">Send</button>
+                  <button type="button" id="testVoiceBtn" class="btn" title="Upload sample audio and send">Test Voice</button>
+                </div>
+              </div>
+              <div style="margin-top:8px;display:flex;gap:12px;align-items:center;justify-content:flex-start">
+                <label style="font-size:13px"><input type="checkbox" id="enableTTS" checked /> Speak responses</label>
+                <label style="font-size:13px"><input type="checkbox" id="enableNotif" checked /> Show notifications</label>
+                <label style="font-size:13px"><input type="checkbox" id="voiceOnlyMode" /> Voice-only mode</label>
+              </div>
+            </div>
+          </form>
+
+          <div id="jarvisChatLog" class="chatlog">
+            <?php if(!$recent): ?>
+              <p class="muted">No messages yet. Send your first message below.</p>
+            <?php else: ?>
+              <?php foreach($recent as $m): ?>
+                <div class="msg me">
+                  <div class="bubble">
+                    <div><?php echo htmlspecialchars($m['message_text']); ?></div>
+                    <div class="meta"><?php echo htmlspecialchars($m['created_at']); ?> • <?php echo htmlspecialchars($m['channel_id'] ?? ''); ?></div>
+                  </div>
+                </div>
+              <?php endforeach; ?>
+            <?php endif; ?>
+          </div>
+        </div>
+      </div>
+
       <!-- 1 -->
       <div class="card">
         <h3>Connection Status</h3>
@@ -233,47 +276,6 @@ $phone = (string)($dbUser['phone_e164'] ?? '');
         <div style="margin-top:8px"><a href="/public/photos.php">Open photo gallery</a> • <a href="/public/ios_photos.php">iOS setup</a></div>
       </div>
 
-      <div class="card">
-        <h3>JARVIS Chat</h3>
-        <div class="chatbox">
-          <form class="chatinput" id="chatForm">
-            <div style="display:flex;flex-direction:column;gap:8px;">
-              <textarea name="message" id="messageInput" placeholder="Type a message to JARVIS..." style="flex:1;min-height:56px"></textarea>
-              <div style="margin-top:6px"><small class="muted">Tip: Press <b>Enter</b> to send. Use <b>Shift+Enter</b> to insert a newline.</small></div>
-              <div style="display:flex;gap:8px;align-items:center;justify-content:space-between;margin-top:6px">
-                <div style="display:flex;gap:8px;align-items:center">
-                  <button type="button" id="micBtn" class="btn" title="Start/Stop voice input">🎤</button>
-                  <button type="button" id="voiceCmdBtn" class="btn" title="Voice-only command">🎙️ Voice Cmd</button>
-                </div>
-                <div style="display:flex;gap:8px;align-items:center">
-                  <button type="submit" name="send_chat" value="1" id="sendBtn" class="btn">Send</button>
-                  <button type="button" id="testVoiceBtn" class="btn" title="Upload sample audio and send">Test Voice</button>
-                </div>
-              </div>
-              <div style="margin-top:8px;display:flex;gap:12px;align-items:center;justify-content:flex-start">
-                <label style="font-size:13px"><input type="checkbox" id="enableTTS" checked /> Speak responses</label>
-                <label style="font-size:13px"><input type="checkbox" id="enableNotif" checked /> Show notifications</label>
-                <label style="font-size:13px"><input type="checkbox" id="voiceOnlyMode" /> Voice-only mode</label>
-              </div>
-            </div>
-          </form>
-
-          <div id="jarvisChatLog" class="chatlog">
-            <?php if(!$recent): ?>
-              <p class="muted">No messages yet. Send your first message below.</p>
-            <?php else: ?>
-              <?php foreach($recent as $m): ?>
-                <div class="msg me">
-                  <div class="bubble">
-                    <div><?php echo htmlspecialchars($m['message_text']); ?></div>
-                    <div class="meta"><?php echo htmlspecialchars($m['created_at']); ?> • <?php echo htmlspecialchars($m['channel_id'] ?? ''); ?></div>
-                  </div>
-                </div>
-              <?php endforeach; ?>
-            <?php endif; ?>
-          </div>
-        </div>
-      </div>
 
       <!-- 3 -->
       <div class="card">

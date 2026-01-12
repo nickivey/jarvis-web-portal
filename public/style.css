@@ -26,24 +26,7 @@ body{
   mix-blend-mode:screen;
 }
 
-/* Fullscreen command center overlay */
-.overlay-card{
-  position:fixed; left:0; right:0; bottom:0; top:64px; /* below sticky navbar */
-  margin:0; border-radius:0; z-index:6;
-  background:var(--panel);
-  border:1px solid rgba(30,120,255,.28);
-  box-shadow:none;
-  padding:18px;
-  overflow:auto;
-  display:flex; flex-direction:column;
-}
-.overlay-card h3{margin-top:0}
-.overlay-card .chatbox{flex:1; height:auto; min-height:0}
-.overlay-card .chatlog{height:auto; min-height:0}
-
-/* Hide other tiles and the secondary container when overlay is active */
-body.overlay-active #homeMainGrid .card:not(.overlay-card){display:none}
-body.overlay-active #homeSecondary{display:none}
+/* Fullscreen overlay removed; restore standard grid tiles */
 
 /* Ambient HUD grid layer */
 body::before{
@@ -137,6 +120,8 @@ body::before{
   .navbar .brand{min-width:220px}
   .navbar{padding:12px 24px}
   .grid{grid-template-columns:repeat(3, 1fr)}
+  /* Make a specific card span all columns */
+  .grid .card.wide{grid-column:1 / -1}
   .navbar .brand img{width:32px;height:32px}
 }
 
