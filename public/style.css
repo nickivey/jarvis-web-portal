@@ -56,6 +56,30 @@ body::before{
 .nav-toggle{display:none;background:transparent;border:1px solid rgba(255,255,255,.04);color:var(--txt);padding:6px 8px;border-radius:8px;font-size:18px}
 .navbar .nav-toggle{margin-left:12px}
 
+.navbar .brand{
+  display:flex; gap:10px; align-items:center;
+  font-weight:800; letter-spacing:.08em;
+}
+.brand img{width:28px;height:28px;display:block;filter:drop-shadow(0 0 14px rgba(0,212,255,.35))}
+.dot{width:10px;height:10px;border-radius:999px;background:var(--blue2);box-shadow:0 0 18px rgba(0,212,255,.85)}
+.navbar a{
+  color:var(--txt);
+  text-decoration:none;
+  padding:8px 10px;
+  border-radius:10px;
+  border:1px solid transparent;
+  display:inline-flex;align-items:center;gap:8px
+}
+.navbar a:hover{
+  border-color:rgba(30,120,255,.35);
+  background:rgba(30,120,255,.08);
+}
+.navbar a.active{
+  border-color:rgba(30,120,255,.55);
+  background:rgba(30,120,255,.12);
+  color:#fff;
+}
+
 /* Updated breakpoint to around 700px (699px and down shows mobile nav) */
 @media(max-width:699px){
   .navbar{padding:8px 12px}
@@ -64,6 +88,8 @@ body::before{
   .nav-toggle{display:inline-block}
   .grid{grid-template-columns:1fr}
   .hero h1{font-size:32px}
+  .navbar .brand{font-size:18px}
+  .brand img{width:24px;height:24px}
 }
 /* Desktop nav layout improvements */
 @media(min-width:700px){
@@ -71,6 +97,7 @@ body::before{
   .navbar .brand{min-width:220px}
   .navbar{padding:12px 24px}
   .grid{grid-template-columns:repeat(3, 1fr)}
+  .navbar .brand img{width:32px;height:32px}
 }
 
 .hero{

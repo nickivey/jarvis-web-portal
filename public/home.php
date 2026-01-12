@@ -176,18 +176,28 @@ $phone = (string)($dbUser['phone_e164'] ?? '');
         <?php endif; ?>
       </div>
 
-      <div class="card" id="locationCard">
-        <h3>Location & Weather</h3>
-        <div class="location-panel">
-          <div id="map" style="height:240px;border:1px solid #ddd;margin-bottom:8px;flex:1"></div>
-          <div id="miniMap" class="location-map" aria-hidden="true" title="Mini location map"></div>
-        </div>
-        <div id="weatherSummary">
+      <div class="card" id="weatherCard">
+        <h3>Weather Conditions</h3>
+        <div id="weatherSummary" style="font-size:18px; line-height:1.4">
           <?php if ($lastWeather): ?>
-            <p><strong><?php echo htmlspecialchars($lastWeather['desc'] ?? ''); ?></strong> — <?php echo ($lastWeather['temp_c'] !== null) ? htmlspecialchars($lastWeather['temp_c'].'°C') : ''; ?></p>
+            <div style="display:flex;align-items:center;gap:12px;margin-top:8px">
+              <div style="font-size:32px"><?php echo ($lastWeather['temp_c'] !== null) ? htmlspecialchars($lastWeather['temp_c'].'°') : '--'; ?></div>
+              <div>
+                <div style="font-weight:700"><?php echo htmlspecialchars($lastWeather['desc'] ?? ''); ?></div>
+                <div class="muted">Local weather</div>
+              </div>
+            </div>
           <?php else: ?>
             <p class="muted">Weather data will appear here once location is detected.</p>
           <?php endif; ?>
+        </div>
+      </div>
+
+      <div class="card" id="locationCard">
+        <h3>Location History</h3>
+        <div class="location-panel">
+          <div id="map" style="height:240px;border:1px solid #ddd;margin-bottom:8px;flex:1"></div>
+          <div id="miniMap" class="location-map" aria-hidden="true" title="Mini location map"></div>
         </div>
         <details <?php echo !empty($recentLocations) ? 'open' : ''; ?>>
           <summary>Recent locations (latest first)</summary>
