@@ -399,8 +399,11 @@ Content-Type: application/json
             tbody.innerHTML = '';
             for (const r of locs) {
               const tr = document.createElement('tr'); tr.setAttribute('data-id', r.id);
+              tr.className = 'new';
               tr.innerHTML = `<td>${(r.created_at||'')}</td><td>${r.lat}</td><td>${r.lon}</td><td>${r.source||''}</td><td><button class="btn secondary focusLocationBtn" data-id="${r.id}">Focus</button></td>`;
               tbody.appendChild(tr);
+              // remove 'new' class after animation
+              setTimeout(()=>{ try{ tr.classList.remove('new'); }catch(e){} }, 1000);
             }
             // attach focus handlers
             document.querySelectorAll('.focusLocationBtn').forEach(b=>b.addEventListener('click', (ev)=>{
@@ -469,7 +472,7 @@ Content-Type: application/json
       let recognition = null;
       let lastInputType = 'text';
 
-      // Helper to append a chat message to the output log
+      // Helper to append a chat message to the output log (with animation)
       function appendMessage(text, who='jarvis'){
         if (!chatLog) return;
         const wrapper = document.createElement('div'); wrapper.className = 'msg ' + (who==='me' ? 'me' : 'jarvis');
@@ -478,9 +481,55 @@ Content-Type: application/json
         const meta = document.createElement('div'); meta.className = 'meta';
         const now = new Date(); meta.textContent = now.toISOString().replace('T',' ').replace('Z',' UTC');
         bubble.appendChild(content); bubble.appendChild(meta); wrapper.appendChild(bubble);
+        // mark new for animation
+        wrapper.classList.add('new'); bubble.classList.add('new');
         chatLog.appendChild(wrapper);
+        // remove 'new' class after animation completes
+        setTimeout(()=>{ wrapper.classList.remove('new'); bubble.classList.remove('new'); }, 900);
         // scroll to bottom
         chatLog.parentNode.scrollTop = chatLog.parentNode.scrollHeight;
+      }
+
+      // Touch/click helper to avoid duplicate events on touch devices
+      function attachGesture(elem, handler){
+        if (!elem) return;
+        let recentTouch = 0;
+        elem.addEventListener('touchstart', (ev)=>{ recentTouch = Date.now(); ev.preventDefault(); handler(ev); });
+        elem.addEventListener('click', (ev)=>{ if (Date.now() - recentTouch < 700) return; handler(ev); });
+      }
+
+      // Wire mic/voice buttons to support touch and click and ensure permissions
+      function micStartHandler(){ return async (ev)=>{
+        ev.preventDefault && ev.preventDefault();
+        if (recognizing) { if (recognition) recognition.stop(); recognizing=false; micBtn.classList.remove('active'); return; }
+        if (!recognition) recognition = initRecognition();
+        const ok = await ensureMicrophonePermission();
+        if (!ok) { alert('Microphone not available or permission denied. Please allow microphone access in your browser.'); return; }
+        try { if (recognition) recognition.start(); recognizing=true; micBtn.classList.add('active'); } catch(e){ recognizing=false; micBtn.classList.remove('active'); }
+      }}
+      attachGesture(micBtn, micStartHandler());
+      attachGesture(document.getElementById('voiceCmdBtn'), async (ev)=>{
+        ev.preventDefault && ev.preventDefault();
+        if (!recognition) recognition = initRecognition();
+        if (!recognition) { alert('Voice recognition not supported in this browser.'); return; }
+        const ok = await ensureMicrophonePermission(); if (!ok) { alert('Microphone not available or permission denied.'); return; }
+        recognition.onresult = async (evt) => { const text = evt.results[0][0].transcript || ''; if (!text.trim()) return; appendMessage(text, 'me'); lastInputType='voice'; try{ await sendCommand(text,'voice'); }catch(e){} };
+        try { recognition.start(); } catch(e){}
+      });
+
+      // Polling for locations (auto-refresh)
+      let _locPoll = null;
+      function startLocationPolling(){ if (_locPoll) clearInterval(_locPoll); _locPoll = setInterval(()=>{ try{ if (document.visibilityState==='visible') refreshLocations(); }catch(e){} }, 30000); }
+      function stopLocationPolling(){ if (_locPoll) clearInterval(_locPoll); _locPoll = null; }
+      document.addEventListener('visibilitychange', ()=>{ if (document.visibilityState==='hidden') stopLocationPolling(); else startLocationPolling(); });
+      // start polling when page ready
+      startLocationPolling();
+
+      // Permission change listeners: run wake briefing on geolocation permission grant
+      if (navigator.permissions && navigator.permissions.query) {
+        try {
+          navigator.permissions.query({name:'geolocation'}).then(p=>{ if (p && typeof p.onchange !== 'undefined') { p.onchange = ()=>{ if (p.state === 'granted') try{ postLocationAndRunWake(); }catch(e){} }; } if (p && p.state === 'granted') { try{ postLocationAndRunWake(); }catch(e){} } });
+        } catch(e){}
       }
 
       // Request Notification permission up front (user gesture recommended)
