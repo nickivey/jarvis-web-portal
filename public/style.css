@@ -76,10 +76,17 @@ body::before{
   padding:8px 10px;
   border-radius:10px;
   border:1px solid transparent;
+  display:inline-flex;align-items:center;gap:8px
 }
 .navbar a:hover{
   border-color:rgba(30,120,255,.35);
   background:rgba(30,120,255,.08);
+}
+/* Desktop nav layout improvements */
+@media(min-width:781px){
+  .navbar nav{display:flex;gap:10px;align-items:center}
+  .navbar .brand{min-width:220px}
+  .navbar{padding:12px 24px}
 }
 
 .hero{

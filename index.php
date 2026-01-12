@@ -161,6 +161,20 @@ if (preg_match('#^/api/notifications/([0-9]+)/read$#', $path, $m)) {
 }
 
 // ----------------------------
+// Audit (recent events)
+// ----------------------------
+if ($path === '/api/audit') {
+  [$userId, $u] = require_jwt_user();
+  if ($method === 'GET') {
+    $limit = isset($_GET['limit']) ? min(200, (int)$_GET['limit']) : 20;
+    $items = jarvis_latest_audit($userId, $limit);
+    jarvis_log_api_request($userId, 'desktop', $path, $method, null, ['ok'=>true,'count'=>count($items)], 200);
+    jarvis_respond(200, ['ok'=>true,'count'=>count($items),'audit'=>$items]);
+  }
+  jarvis_respond(405, ['error'=>'Method not allowed']);
+}
+
+// ----------------------------
 // Command
 // ----------------------------
 
@@ -176,7 +190,36 @@ if ($path === '/api/command') {
   $lower = strtolower($text);
   $cards = [];
   $commandType = 'user_command';
-  
+
+  // ------------------
+  // Simple automated responses
+  // ------------------
+  if (in_array($lower, ['whoami','who am i'])) {
+    $response = "You are " . $u['username'] . " (" . $u['email'] . ")";
+    jarvis_log_command($userId, 'system', $text, $response, null);
+    jarvis_audit($userId, 'COMMAND_WHOAMI', 'command', ['question'=>$text,'answer'=>$response]);
+    jarvis_log_api_request($userId, 'desktop', $path, $method, $in, ['jarvis_response'=>$response], 200);
+    jarvis_respond(200, ['jarvis_response'=>$response]);
+  }
+
+  if ($lower === 'last login' || $lower === 'when did i last login' || $lower === 'last login time') {
+    $response = 'Last login: ' . ($u['last_login_at'] ?: 'Never');
+    jarvis_log_command($userId, 'system', $text, $response, null);
+    jarvis_audit($userId, 'COMMAND_LAST_LOGIN', 'command', ['question'=>$text,'answer'=>$response]);
+    jarvis_log_api_request($userId, 'desktop', $path, $method, $in, ['jarvis_response'=>$response], 200);
+    jarvis_respond(200, ['jarvis_response'=>$response]);
+  }
+
+  if ($lower === 'notifications' || $lower === 'unread notifications') {
+    $count = jarvis_unread_notifications_count($userId);
+    $response = 'You have ' . (int)$count . ' unread notifications.';
+    jarvis_log_command($userId, 'system', $text, $response, null);
+    jarvis_audit($userId, 'COMMAND_NOTIF_COUNT', 'command', ['question'=>$text,'answer'=>$response,'count'=>$count]);
+    jarvis_log_api_request($userId, 'desktop', $path, $method, $in, ['jarvis_response'=>$response], 200);
+    jarvis_respond(200, ['jarvis_response'=>$response]);
+  }
+
+  // Existing behaviours
   if ($lower === 'briefing' || $lower === '/brief') {
     $out = jarvis_compose_briefing($userId, 'briefing');
     $response = (string)$out['text'];

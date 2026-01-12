@@ -137,16 +137,21 @@
         async function fetchNotifs(){
           if (!window.jarvisJwt) return;
           try {
-            const data = await window.jarvisApi.get('/api/notifications?limit=20', { ttl: 0, force:true });
-            if (data && data.ok) {
-              window.jarvisEmit('notifications.updated', data);
-              // Update nav badge if present
+            const [nData, aData] = await Promise.all([
+              window.jarvisApi.get('/api/notifications?limit=20', { ttl: 0, force:true }).catch(()=>null),
+              window.jarvisApi.get('/api/audit?limit=20', { ttl: 0, force:true }).catch(()=>null)
+            ]);
+            if (nData && nData.ok) {
+              window.jarvisEmit('notifications.updated', nData);
               const a = document.querySelector('a[href="notifications.php"]');
               if (a) {
                 let badge = a.querySelector('.nav-notif-badge');
                 if (!badge) { badge = document.createElement('span'); badge.className = 'badge nav-notif-badge'; a.appendChild(badge); }
-                badge.textContent = (data.count || 0) > 0 ? (data.count + ' unread') : '';
+                badge.textContent = (nData.count || 0) > 0 ? (nData.count + ' unread') : '';
               }
+            }
+            if (aData && aData.ok) {
+              window.jarvisEmit('audit.updated', aData);
             }
           } catch(e) {}
         }
@@ -159,7 +164,7 @@
         // Watch for token being set later
         window.jarvisOn('auth.token.set', ()=>{ startPolling(); });
 
-        // When notifications are updated, try to update any notification list in the DOM
+        // When notifications are updated, update notification list in the DOM
         window.jarvisOn('notifications.updated', (ev)=>{
           try {
             const data = ev.detail || {};
@@ -196,8 +201,31 @@
           } catch(e){}
         });
 
+        // When audit updated, update audit list
+        window.jarvisOn('audit.updated', (ev)=>{
+          try {
+            const data = ev.detail || {};
+            const listEl = document.querySelector('.term-body.audit');
+            if (listEl && Array.isArray(data.audit)){
+              listEl.innerHTML = '';
+              if (data.audit.length === 0) {
+                listEl.innerHTML = '<p class="muted">No audit events yet.</p>';
+              } else {
+                data.audit.forEach(a=>{
+                  const div = document.createElement('div'); div.className='muted'; div.style.marginBottom='8px';
+                  const b = document.createElement('b'); b.textContent = a.action || '';
+                  const body = document.createElement('div'); body.textContent = a.metadata_json ? JSON.stringify(a.metadata_json) : '';
+                  const meta = document.createElement('div'); meta.className='meta'; meta.textContent = (a.created_at || '') + ' • ' + (a.entity || '');
+                  div.appendChild(b); div.appendChild(body); div.appendChild(meta); listEl.appendChild(div);
+                });
+              }
+            }
+          } catch(e){}
+        });
+
         // Expose small helpers
         window.jarvisInvalidateNotifications = ()=>{ window.jarvisApi.invalidate('/api/notifications?limit=20'); fetchNotifs(); };
+        window.jarvisInvalidateAudit = ()=>{ window.jarvisApi.invalidate('/api/audit?limit=20'); fetchNotifs(); };
       })();
     }
   });
