@@ -644,14 +644,40 @@ Content-Type: application/json
         try { if (recognition) recognition.start(); recognizing=true; micBtn.classList.add('active'); } catch(e){ recognizing=false; micBtn.classList.remove('active'); }
       }}
       attachGesture(micBtn, micStartHandler());
-      attachGesture(document.getElementById('voiceCmdBtn'), async (ev)=>{
-        ev.preventDefault && ev.preventDefault();
-        if (!recognition) recognition = initRecognition();
-        if (!recognition) { alert('Voice recognition not supported in this browser.'); return; }
-        const ok = await ensureMicrophonePermission(); if (!ok) { alert('Microphone not available or permission denied.'); return; }
-        recognition.onresult = async (evt) => { const text = evt.results[0][0].transcript || ''; if (!text.trim()) return; appendMessage(text, 'me'); lastInputType='voice'; try{ await sendCommand(text,'voice'); }catch(e){} };
-        try { recognition.start(); } catch(e){}
-      });
+      // Manual one-shot Voice Command button: record audio, capture transcript, upload but DO NOT auto-send — wait for user to press Send.
+      (function(){
+        const vcBtn = document.getElementById('voiceCmdBtn');
+        let vcActive = false;
+        attachGesture(vcBtn, async (ev)=>{
+          ev.preventDefault && ev.preventDefault();
+          if (!recognition) recognition = initRecognition();
+          if (!recognition) { alert('Voice recognition not supported in this browser.'); return; }
+          const ok = await ensureMicrophonePermission(); if (!ok) { alert('Microphone not available or permission denied.'); return; }
+
+          // Toggle recording state for one-shot command
+          if (!vcActive) {
+            vcActive = true; vcBtn.classList.add('active');
+            // temporary onresult handler that captures transcript and stops recorder
+            recognition.onresult = async (evt) => {
+              const len = evt.results.length; const latest = evt.results[len-1];
+              const text = latest[0].transcript || '';
+              if (!text.trim()) return;
+              _lastTranscript = text;
+              appendMessage(text, 'me'); lastInputType='voice';
+              // Stop recognition & recorder; onstop will upload and set pending-to-send
+              try{ recognition.stop(); }catch(e){}
+              try{ stopRecorder(); }catch(e){}
+            };
+            try { recognition.start(); recognizing=true; vcBtn.classList.add('active'); await startRecorder(); } catch(e){ console.error('voice-cmd start failed', e); vcActive=false; vcBtn.classList.remove('active'); }
+          } else {
+            // User clicked again to cancel/stop
+            vcActive = false; vcBtn.classList.remove('active');
+            try{ recognition.stop(); }catch(e){}
+            try{ stopRecorder(); }catch(e){}
+          }
+        });
+      })();
+
 
       // Toggle / auto-start behavior for Voice-Only mode
       if (voiceOnlyMode) {
@@ -721,13 +747,18 @@ Content-Type: application/json
                     const link = document.createElement('a'); link.href = '/api/voice/' + resp.id + '/download'; link.target='_blank'; link.textContent = 'Download'; link.style.marginLeft='8px';
                     const note = document.createElement('div'); note.className='muted'; note.style.marginTop='6px'; note.textContent = 'Uploaded • id: ' + resp.id; note.appendChild(link);
                     if (container) container.appendChild(note);
+                    // Make this uploaded audio available to be sent via the Send button
+                    window._pendingVoiceToSend = { id: resp.id, transcript: _lastTranscript, contextId: _voiceContextId };
+                    try{ if (sendBtn) { sendBtn.dataset.pendingVoice = resp.id; sendBtn.textContent = 'Send (audio)'; } }catch(e){}
                     // If there's a pending voice command (voice-only mode), send it now with voice_input_id
                     if (_pendingVoiceCmd && _pendingVoiceCmd.text) {
                       try{ await sendCommand(_pendingVoiceCmd.text, 'voice', { voice_input_id: resp.id, voice_context_id: _pendingVoiceCmd.contextId }); }catch(e){ console.error('sendCommand after upload failed', e); }
                       _pendingVoiceCmd = null;
                     }
+                    try{ if (token) fetch('/api/audit', { method:'POST', headers: { 'Content-Type':'application/json', 'Authorization': 'Bearer '+token }, body: JSON.stringify({ action: 'VOICE_UPLOAD_SUCCESS', entity: 'voice', metadata: { id: resp.id, size: blob.size } }) }); }catch(e){}
                   } else {
-                    const note = document.createElement('div'); note.className='muted'; note.style.marginTop='6px'; note.textContent = 'Upload failed'; if (container) container.appendChild(note);
+                    const note = document.createElement('div'); note.className='muted'; note.style.marginTop='6px'; note.textContent = 'Upload failed'; if (container) container.appendChild(note); try{ if (token) fetch('/api/audit', { method:'POST', headers:{ 'Content-Type':'application/json','Authorization':'Bearer '+token }, body: JSON.stringify({ action: 'VOICE_UPLOAD_FAILED', entity: 'voice' }) }); }catch(e){}
+                  }
                   }
                 } catch(e){ console.warn('upload voice failed',e); const note = document.createElement('div'); note.className='muted'; note.style.marginTop='6px'; note.textContent = 'Upload failed'; if (container) container.appendChild(note); }
               }catch(e){}
@@ -961,6 +992,22 @@ Content-Type: application/json
       const chatForm = document.getElementById('chatForm');
       if (chatForm) chatForm.addEventListener('submit', async (ev) => {
         ev.preventDefault();
+        // If there's a pending recorded audio, send that instead of text if present
+        try{
+          if (sendBtn && sendBtn.dataset && sendBtn.dataset.pendingVoice) {
+            const pendingId = sendBtn.dataset.pendingVoice;
+            // send a command with voice_input_id and no text (the server can use transcript or do STT on file)
+            try{ await fetch('/api/voice/'+pendingId+'/download', { method: 'HEAD', headers: sendBtn && token ? { 'Authorization': 'Bearer ' + token } : {} }); }catch(e){}
+            // audit event: user submitted recorded voice
+            try{ if (token) fetch('/api/audit', { method:'POST', headers:{ 'Content-Type':'application/json','Authorization':'Bearer '+token }, body: JSON.stringify({ action: 'VOICE_SUBMIT', entity: 'voice', metadata: { id: pendingId } }) }); }catch(e){}
+            // Send an empty text command with voice_input_id to correlate audio on server-side
+            await sendCommand('', 'voice', { voice_input_id: pendingId });
+            // clear pending flag
+            try{ delete sendBtn.dataset.pendingVoice; sendBtn.textContent = 'Send'; }catch(e){}
+            return;
+          }
+        }catch(e){}
+
         const msg = (msgInput.value || '').trim();
         if (!msg) return;
         appendMessage(msg, 'me');

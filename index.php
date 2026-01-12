@@ -539,6 +539,20 @@ if ($path === '/api/locations') {
   jarvis_respond(200, ['ok'=>true, 'locations'=>$locations]);
 }
 
+// Simple client-driven audit endpoint to record UI-driven events (POST only)
+if ($path === '/api/audit') {
+  if ($method !== 'POST') jarvis_respond(405, ['error' => 'Method not allowed']);
+  [$userId, $u] = require_jwt_user();
+  $in = jarvis_json_input();
+  $action = trim((string)($in['action'] ?? ''));
+  $entity = isset($in['entity']) ? (string)$in['entity'] : null;
+  $meta = isset($in['metadata']) && is_array($in['metadata']) ? $in['metadata'] : null;
+  if ($action === '') jarvis_respond(400, ['error'=>'action required']);
+  jarvis_audit($userId, $action, $entity, $meta);
+  jarvis_log_api_request($userId, 'desktop', $path, $method, $in, ['ok'=>true], 200);
+  jarvis_respond(200, ['ok'=>true]);
+}
+
 // Calendar events endpoint (GET upcoming)
 if ($path === '/api/calendar') {
   if ($method !== 'GET') jarvis_respond(405, ['error' => 'Method not allowed']);
