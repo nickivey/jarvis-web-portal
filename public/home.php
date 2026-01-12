@@ -121,25 +121,7 @@ $phone = (string)($dbUser['phone_e164'] ?? '');
   <!-- Using embedded third-party maps (Google Maps iframe) for location previews -->
 </head>
 <body>
-  <div class="navbar">
-    <div class="brand">
-      <img src="images/logo.svg" alt="JARVIS logo" />
-      <span class="dot" aria-hidden="true"></span>
-      <span>JARVIS</span>
-    </div>
-    <button class="nav-toggle" id="navToggle" aria-label="Open menu">☰</button>
-    <nav>
-      <a href="home.php">Home</a>
-      <a href="preferences.php">Preferences</a>
-      <?php if (!empty($isAdmin)): ?>
-        <a href="admin.php">Admin</a>
-      <?php endif; ?>
-      <a href="audit.php">Audit Log</a>
-      <a href="notifications.php">Notifications</a>
-      <a href="siri.php">Add to Siri</a>
-      <a href="logout.php">Logout</a>
-    </nav>
-  </div>
+  <?php include __DIR__ . '/navbar.php'; ?>
 
   <div class="hero">
     <div class="scanlines" aria-hidden="true"></div>
@@ -650,7 +632,7 @@ Content-Type: application/json
     })();
   </script>
   <!-- No Leaflet required when using embedded maps -->
-    <script src="navbar.js"></script>
+    
     <script>
     // Ambient pixel-dust particles (Pixar-like sparkle swirls)
     (function(){
