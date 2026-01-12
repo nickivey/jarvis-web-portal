@@ -122,6 +122,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 $settings = jarvis_setting_list();
 
+// Voice Data Timeline
+$voiceRows = jarvis_list_all_voice_inputs(50);
+
 // User management defaults
 $users = jarvis_list_users(50,0, (string)($_GET['q'] ?? ''));
 ?>
@@ -131,18 +134,66 @@ $users = jarvis_list_users(50,0, (string)($_GET['q'] ?? ''));
   <meta charset="utf-8" />
   <title>Admin - Settings & Users</title>
   <link rel="stylesheet" href="style.css">
-  <style>table td form{display:inline-block;margin:0}</style>
+  <style>
+    table td form{display:inline-block;margin:0}
+    .term-code { font-family:monospace; font-size:12px; white-space:pre-wrap; max-height:100px; overflow-y:auto; background:#111; color:#0f0; padding:4px; border-radius:4px; }
+    audio { height: 32px; width: 240px; }
+  </style>
 </head>
 <body>
   <nav>
-    <a href="/home.php">Home</a>
-    <a href="/preferences.php">Preferences</a>
-    <a href="/logout.php">Logout</a>
+    <a href="home.php">Home</a>
+    <a href="preferences.php">Preferences</a>
+    <a href="logout.php">Logout</a>
   </nav>
 
   <main>
     <h1>Admin Console</h1>
     <?php if ($notice): ?><p class="notice"><?= htmlspecialchars($notice) ?></p><?php endif; ?>
+
+    <section>
+      <h2>Voice Data Timeline</h2>
+      <p class="muted">Recent voice inputs recorded by clients for deep dictation analysis.</p>
+      <?php if (empty($voiceRows)): ?>
+        <p class="muted">No voice inputs recorded yet.</p>
+      <?php else: ?>
+        <table>
+          <thead><tr><th>Date/Time</th><th>User</th><th>Audio / Transcript</th><th>Metadata & Location</th></tr></thead>
+          <tbody>
+            <?php foreach ($voiceRows as $v): ?>
+              <?php $meta = $v['metadata_json'] ? json_decode($v['metadata_json'], true) : []; ?>
+              <tr>
+                <td style="white-space:nowrap"><?= htmlspecialchars($v['created_at']) ?></td>
+                <td>
+                  <div><b><?= htmlspecialchars($v['username'] ?: 'User #'.$v['user_id']) ?></b></div>
+                  <div class="muted"><?= htmlspecialchars($v['email'] ?? '') ?></div>
+                </td>
+                <td>
+                  <audio controls preload="none">
+                    <source src="/api/voice/<?= (int)$v['id'] ?>/download" type="audio/webm">
+                    Download not supported
+                  </audio>
+                  <div style="margin-top:4px; font-style:italic">"<?= htmlspecialchars($v['transcript'] ?: '(no transcript)') ?>"</div>
+                  <div class="muted" style="font-size:12px">Duration: <?= (int)($v['duration_ms'] ?? 0) ?>ms • <?= htmlspecialchars(basename($v['filename'])) ?></div>
+                </td>
+                <td>
+                  <?php if (!empty($meta['location'])): ?>
+                    <?php $loc = $meta['location']; ?>
+                    <div>Accessed: <a href="https://www.google.com/maps?q=<?= htmlspecialchars($loc['lat']) ?>,<?= htmlspecialchars($loc['lon']) ?>" target="_blank"><?= number_format((float)$loc['lat'],4) ?>, <?= number_format((float)$loc['lon'],4) ?></a></div>
+                    <div class="muted">Acc: <?= (int)($loc['accuracy']??0) ?>m</div>
+                  <?php else: ?>
+                    <div class="muted">No location data</div>
+                  <?php endif; ?>
+                  <?php if (!empty($meta)): ?>
+                     <details><summary>Raw Meta</summary><div class="term-code"><?= htmlspecialchars(json_encode($meta, JSON_PRETTY_PRINT)) ?></div></details>
+                  <?php endif; ?>
+                </td>
+              </tr>
+            <?php endforeach; ?>
+          </tbody>
+        </table>
+      <?php endif; ?>
+    </section>
 
     <section>
       <h2>Manage Users</h2>

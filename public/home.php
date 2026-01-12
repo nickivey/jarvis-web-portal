@@ -425,6 +425,8 @@ Content-Type: application/json
         navigator.geolocation.getCurrentPosition(async (pos)=>{
           try {
             const body = { lat: pos.coords.latitude, lon: pos.coords.longitude, accuracy: pos.coords.accuracy };
+            // Store centrally for other features (voice meta)
+            window.jarvisLastLoc = body;
             const r = await fetch('/api/location', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer '+token },
@@ -572,8 +574,10 @@ Content-Type: application/json
           fd.append('file', blob, 'voice_input.webm');
           if (transcript) fd.append('transcript', transcript);
           if (typeof durationMs !== 'undefined' && durationMs !== null) fd.append('duration', String(durationMs));
-          // meta: include channel/type
-          fd.append('meta', JSON.stringify({source:'web', input_type:lastInputType}));
+          // meta: include channel/type and location if available
+          const meta = { source:'web', input_type:lastInputType };
+          if (window.jarvisLastLoc) { meta.location = window.jarvisLastLoc; }
+          fd.append('meta', JSON.stringify(meta));
           const opts = { method: 'POST', body: fd, headers: {} };
           if (token) opts.headers['Authorization'] = 'Bearer ' + token;
           const resp = await fetch('/api/voice', opts);

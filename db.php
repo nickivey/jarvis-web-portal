@@ -358,6 +358,12 @@ function jarvis_register_device(int $userId, string $deviceUuid, string $platfor
   if (!$pdo) throw new RuntimeException('DB not configured');
   $metaJson = $meta ? json_encode($meta) : null;
   $now = jarvis_now_sql();
+  $pdo->prepare('INSERT INTO devices (user_id, device_uuid, platform, push_provider, push_token, metadata_json, last_seen_at) VALUES (:u,:du,:p,:pp,:pt,:m,:ls) ON DUPLICATE KEY UPDATE platform=VALUES(platform), push_provider=VALUES(push_provider), push_token=VALUES(push_token), metadata_json=VALUES(metadata_json), last_seen_at=VALUES(last_seen_at)')
+      ->execute([':u'=>$userId, ':du'=>$deviceUuid, ':p'=>$platform, ':pp'=>$pushProvider, ':pt'=>$pushToken, ':m'=>$metaJson, ':ls'=>$now]);
+  $stmt = $pdo->prepare('SELECT id FROM devices WHERE user_id=:u AND device_uuid=:du LIMIT 1');
+  $stmt->execute([':u'=>$userId, ':du'=>$deviceUuid]);
+  $row = $stmt->fetch();
+  return (int)($row['id'] ?? 0);
 }
 
 // Save a voice input record (audio file should already be persisted on disk)
@@ -395,12 +401,13 @@ function jarvis_voice_input_by_id(int $id): ?array {
   $row = $stmt->fetch();
   return $row ?: null;
 }
-  $pdo->prepare('INSERT INTO devices (user_id, device_uuid, platform, push_provider, push_token, metadata_json, last_seen_at) VALUES (:u,:du,:p,:pp,:pt,:m,:ls) ON DUPLICATE KEY UPDATE platform=VALUES(platform), push_provider=VALUES(push_provider), push_token=VALUES(push_token), metadata_json=VALUES(metadata_json), last_seen_at=VALUES(last_seen_at)')
-      ->execute([':u'=>$userId, ':du'=>$deviceUuid, ':p'=>$platform, ':pp'=>$pushProvider, ':pt'=>$pushToken, ':m'=>$metaJson, ':ls'=>$now]);
-  $stmt = $pdo->prepare('SELECT id FROM devices WHERE user_id=:u AND device_uuid=:du LIMIT 1');
-  $stmt->execute([':u'=>$userId, ':du'=>$deviceUuid]);
-  $row = $stmt->fetch();
-  return (int)($row['id'] ?? 0);
+
+function jarvis_list_all_voice_inputs(int $limit=50): array {
+  $pdo = jarvis_pdo(); if (!$pdo) return [];
+  $stmt = $pdo->prepare('SELECT v.*, u.username, u.email FROM voice_inputs v LEFT JOIN users u ON v.user_id = u.id ORDER BY v.created_at DESC LIMIT :l');
+  $stmt->bindValue(':l', (int)$limit, PDO::PARAM_INT);
+  $stmt->execute();
+  return $stmt->fetchAll() ?: [];
 }
 
 function jarvis_unregister_device(int $userId, int $deviceId): void {
