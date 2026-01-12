@@ -184,3 +184,29 @@ CREATE TABLE IF NOT EXISTS settings (
 -- Ensure legacy columns exist when migrating from older installs
 ALTER TABLE users ADD COLUMN IF NOT EXISTS password_reset_token VARCHAR(128) NULL;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS password_reset_expires_at DATETIME NULL;
+
+-- Voice input storage for deep dictation analysis
+CREATE TABLE IF NOT EXISTS voice_inputs (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  user_id BIGINT UNSIGNED NOT NULL,
+  filename VARCHAR(255) NOT NULL,
+  transcript TEXT NULL,
+  duration_ms INT NULL,
+  metadata_json JSON NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY(id),
+  KEY ix_voice_user(user_id),
+  CONSTRAINT fk_voice_user FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Lightweight pnut log table for offline / deep analysis
+CREATE TABLE IF NOT EXISTS pnut_logs (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  user_id BIGINT UNSIGNED NULL,
+  source VARCHAR(64) NOT NULL,
+  payload_json JSON NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY(id),
+  KEY ix_pnut_user(user_id),
+  CONSTRAINT fk_pnut_user FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

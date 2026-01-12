@@ -358,6 +358,35 @@ function jarvis_register_device(int $userId, string $deviceUuid, string $platfor
   if (!$pdo) throw new RuntimeException('DB not configured');
   $metaJson = $meta ? json_encode($meta) : null;
   $now = jarvis_now_sql();
+}
+
+// Save a voice input record (audio file should already be persisted on disk)
+function jarvis_save_voice_input(int $userId, string $filename, ?string $transcript=null, ?int $durationMs=null, ?array $meta=null): int {
+  $pdo = jarvis_pdo();
+  if (!$pdo) throw new RuntimeException('DB not configured');
+  $metaJson = $meta ? json_encode($meta) : null;
+  $stmt = $pdo->prepare('INSERT INTO voice_inputs (user_id, filename, transcript, duration_ms, metadata_json, created_at) VALUES (:u,:f,:t,:d,:m,NOW())');
+  $stmt->execute([':u'=>$userId, ':f'=>$filename, ':t'=>$transcript, ':d'=>$durationMs, ':m'=>$metaJson]);
+  return (int)$pdo->lastInsertId();
+}
+
+function jarvis_recent_voice_inputs(int $userId, int $limit=20): array {
+  $pdo = jarvis_pdo(); if (!$pdo) return [];
+  $limit = max(1, min(200, (int)$limit));
+  $stmt = $pdo->prepare('SELECT id, filename, transcript, duration_ms, metadata_json, created_at FROM voice_inputs WHERE user_id=:u ORDER BY id DESC LIMIT :l');
+  $stmt->bindValue(':u', $userId, PDO::PARAM_INT);
+  $stmt->bindValue(':l', $limit, PDO::PARAM_INT);
+  $stmt->execute();
+  return $stmt->fetchAll() ?: [];
+}
+
+// pnut log: store payloads for offline / deep analysis
+function jarvis_pnut_log(?int $userId, string $source, array $payload): int {
+  $pdo = jarvis_pdo(); if (!$pdo) throw new RuntimeException('DB not configured');
+  $stmt = $pdo->prepare('INSERT INTO pnut_logs (user_id, source, payload_json, created_at) VALUES (:u,:s,:p,NOW())');
+  $stmt->execute([':u'=>$userId, ':s'=>$source, ':p'=>json_encode($payload)]);
+  return (int)$pdo->lastInsertId();
+}
   $pdo->prepare('INSERT INTO devices (user_id, device_uuid, platform, push_provider, push_token, metadata_json, last_seen_at) VALUES (:u,:du,:p,:pp,:pt,:m,:ls) ON DUPLICATE KEY UPDATE platform=VALUES(platform), push_provider=VALUES(push_provider), push_token=VALUES(push_token), metadata_json=VALUES(metadata_json), last_seen_at=VALUES(last_seen_at)')
       ->execute([':u'=>$userId, ':du'=>$deviceUuid, ':p'=>$platform, ':pp'=>$pushProvider, ':pt'=>$pushToken, ':m'=>$metaJson, ':ls'=>$now]);
   $stmt = $pdo->prepare('SELECT id FROM devices WHERE user_id=:u AND device_uuid=:du LIMIT 1');

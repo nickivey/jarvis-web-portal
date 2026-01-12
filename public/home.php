@@ -538,6 +538,49 @@ Content-Type: application/json
       // (window.ensureNotificationPermission will be set by the permissions module)
 
 
+      // MediaRecorder helpers to capture raw audio and upload to the server
+      let _mediaStream = null, _mediaRecorder = null, _audioChunks = [], _lastTranscript = null;
+      async function startRecorder(){
+        if (_mediaRecorder && _mediaRecorder.state !== 'inactive') return true;
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return false;
+        try {
+          _mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          try { _mediaRecorder = new MediaRecorder(_mediaStream); } catch(e) { _mediaRecorder = null; }
+          if (!_mediaRecorder) { _mediaStream.getTracks().forEach(t=>t.stop()); _mediaStream=null; return false; }
+          _audioChunks = [];
+          _mediaRecorder.ondataavailable = (evt)=>{ if (evt && evt.data) _audioChunks.push(evt.data); };
+          _mediaRecorder.onstop = async ()=>{
+            try{
+              const blob = new Blob(_audioChunks, { type: _audioChunks[0] ? _audioChunks[0].type || 'audio/webm' : 'audio/webm' });
+              // send blob to server with transcript (if present)
+              try { await sendAudioBlob(blob, _lastTranscript, Math.floor((blob.size/16000))); } catch(e){ console.warn('upload voice failed',e); }
+            }catch(e){}
+            try{ if (_mediaStream) { _mediaStream.getTracks().forEach(t=>t.stop()); _mediaStream=null; } }catch(e){}
+            _mediaRecorder = null; _audioChunks=[]; _lastTranscript=null;
+          };
+          _mediaRecorder.start();
+          return true;
+        } catch(e){ return false; }
+      }
+      function stopRecorder(){ try{ if (_mediaRecorder && _mediaRecorder.state !== 'inactive') _mediaRecorder.stop(); }catch(e){} }
+
+      // POST audio blob + transcript to /api/voice
+      async function sendAudioBlob(blob, transcript, durationMs){
+        if (!blob) return null;
+        try {
+          const fd = new FormData();
+          fd.append('file', blob, 'voice_input.webm');
+          if (transcript) fd.append('transcript', transcript);
+          if (typeof durationMs !== 'undefined' && durationMs !== null) fd.append('duration', String(durationMs));
+          // meta: include channel/type
+          fd.append('meta', JSON.stringify({source:'web', input_type:lastInputType}));
+          const opts = { method: 'POST', body: fd, headers: {} };
+          if (token) opts.headers['Authorization'] = 'Bearer ' + token;
+          const resp = await fetch('/api/voice', opts);
+          return resp.json().catch(()=>null);
+        } catch(e){ return null; }
+      }
+
       // Try to initialize Web Speech Recognition if available
       function initRecognition(){
         const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition || null;
@@ -549,6 +592,7 @@ Content-Type: application/json
         r.onresult = async (evt) => {
           const text = evt.results[0][0].transcript || '';
           lastInputType = 'voice';
+          _lastTranscript = text;
           if (voiceOnlyMode && voiceOnlyMode.checked) {
             if (!text.trim()) return;
             appendMessage(text, 'me');
@@ -559,8 +603,12 @@ Content-Type: application/json
             msgInput.value = text;
           }
         };
-        r.onend = () => { recognizing = false; micBtn.classList.remove('active'); };
-        r.onerror = () => { recognizing = false; micBtn.classList.remove('active'); };
+        r.onstart = async ()=>{
+          // Attempt to start recorder in parallel
+          try{ await startRecorder(); }catch(e){}
+        };
+        r.onend = () => { recognizing = false; micBtn.classList.remove('active'); try{ stopRecorder(); }catch(e){} };
+        r.onerror = (ev) => { recognizing = false; micBtn.classList.remove('active'); try{ stopRecorder(); }catch(e){} };
         return r;
       }
 

@@ -186,6 +186,51 @@ if ($path === '/api/command') {
   $inputType = trim((string)($in['type'] ?? 'text')); // text or voice
   if ($text === '') jarvis_respond(400, ['error'=>'text required']);
 
+// ----------------------------
+// Voice inputs: save audio blobs + transcript for deep dictation analysis
+// ----------------------------
+if ($path === '/api/voice') {
+  if ($method === 'POST') {
+    [$userId, $u] = require_jwt_user();
+    // Accept multipart/form-data with 'file', 'transcript', 'duration'
+    $uploadedFile = $_FILES['file'] ?? null;
+    if (!$uploadedFile || ($uploadedFile['error'] ?? 1) !== 0) jarvis_respond(400, ['error'=>'no file uploaded']);
+
+    // Ensure storage dir exists
+    $baseDir = __DIR__ . '/storage/voice/' . (int)$userId;
+    if (!is_dir($baseDir)) @mkdir($baseDir, 0770, true);
+    $ext = pathinfo($uploadedFile['name'] ?? 'blob', PATHINFO_EXTENSION) ?: 'webm';
+    $fname = sprintf('%s_%s.%s', (int)$userId, bin2hex(random_bytes(6)), $ext);
+    $dest = $baseDir . '/' . $fname;
+    if (!move_uploaded_file($uploadedFile['tmp_name'], $dest)) jarvis_respond(500, ['error'=>'failed to save file']);
+
+    $transcript = isset($_POST['transcript']) ? trim((string)$_POST['transcript']) : null;
+    $duration = isset($_POST['duration']) ? (int)$_POST['duration'] : null;
+    $meta = [];
+    if (isset($_POST['meta'])) {
+      $meta = json_decode((string)$_POST['meta'], true) ?: [];
+    }
+
+    $filePathForDb = 'storage/voice/' . (int)$userId . '/' . $fname;
+    $vid = jarvis_save_voice_input($userId, $filePathForDb, $transcript, $duration, $meta);
+
+    // Audit + pnut log for deep analysis
+    jarvis_audit($userId, 'VOICE_INPUT', 'voice', ['voice_id'=>$vid,'filename'=>$filePathForDb,'duration_ms'=>$duration,'transcript'=>substr($transcript?:'',0,512)]);
+    jarvis_pnut_log($userId, 'voice', ['voice_id'=>$vid,'filename'=>$filePathForDb,'duration_ms'=>$duration,'transcript'=>$transcript,'meta'=>$meta]);
+
+    jarvis_respond(200, ['ok'=>true,'id'=>$vid,'filename'=>$filePathForDb]);
+  }
+
+  if ($method === 'GET') {
+    [$userId, $u] = require_jwt_user();
+    $limit = isset($_GET['limit']) ? min(200, (int)$_GET['limit']) : 20;
+    $items = jarvis_recent_voice_inputs($userId, $limit);
+    jarvis_respond(200, ['ok'=>true,'count'=>count($items),'voice'=>$items]);
+  }
+
+  jarvis_respond(405, ['error'=>'Method not allowed']);
+}
+
   $prefs = jarvis_preferences($userId);
   $lower = strtolower($text);
   $cards = [];
