@@ -31,6 +31,7 @@ CREATE TABLE IF NOT EXISTS preferences (
   last_instagram_check_at DATETIME NULL,
   last_instagram_story_check_at DATETIME NULL,
   last_weather_check_at DATETIME NULL,
+  last_calendar_check_at DATETIME NULL,
   PRIMARY KEY(user_id),
   CONSTRAINT fk_pref_user FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -214,3 +215,17 @@ CREATE TABLE IF NOT EXISTS pnut_logs (
   KEY ix_pnut_user(user_id),
   CONSTRAINT fk_pnut_user FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+CREATE TABLE IF NOT EXISTS home_devices (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  user_id BIGINT UNSIGNED NOT NULL,
+  name VARCHAR(64) NOT NULL,
+  type VARCHAR(32) NOT NULL DEFAULT 'switch',
+  status VARCHAR(32) NOT NULL DEFAULT 'off',
+  metadata_json JSON NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY(id),
+  KEY ix_hd_user(user_id),
+  CONSTRAINT fk_hd_user FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
