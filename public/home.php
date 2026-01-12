@@ -14,6 +14,7 @@ if ($userId <= 0) { session_destroy(); header('Location: login.php'); exit; }
 
 $dbUser = jarvis_user_by_id($userId);
 if (!$dbUser) { session_destroy(); header('Location: login.php'); exit; }
+$isAdmin = (($dbUser['role'] ?? '') === 'admin');
 $prefs = jarvis_preferences($userId);
 $igToken = jarvis_oauth_get($userId, 'instagram');
 
@@ -47,6 +48,11 @@ try {
 }
 
 $success = ''; $error = '';
+$recentLocations = jarvis_recent_locations($userId, 20);
+$lastWeather = null;
+if (!empty($recentLocations) && isset($recentLocations[0]['lat']) && isset($recentLocations[0]['lon'])) {
+  try { $lastWeather = jarvis_fetch_weather((float)$recentLocations[0]['lat'], (float)$recentLocations[0]['lon']); } catch (Throwable $e) { $lastWeather = null; }
+}
 
 function slack_post_message_portal(string $token, string $channel, string $text): array {
   $ch = curl_init('https://slack.com/api/chat.postMessage');
@@ -170,6 +176,8 @@ $phone = (string)($dbUser['phone_e164'] ?? '');
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>JARVIS • Portal</title>
   <link rel="stylesheet" href="style.css" />
+  <!-- Leaflet map for location history -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 </head>
 <body>
   <div class="navbar">
@@ -181,6 +189,9 @@ $phone = (string)($dbUser['phone_e164'] ?? '');
     <nav>
       <a href="home.php">Home</a>
       <a href="preferences.php">Preferences</a>
+      <?php if (!empty($isAdmin)): ?>
+        <a href="admin.php">Admin</a>
+      <?php endif; ?>
       <a href="audit.php">Audit Log</a>
       <a href="notifications.php">Notifications</a>
       <a href="siri.php">Add to Siri</a>
@@ -208,12 +219,45 @@ $phone = (string)($dbUser['phone_e164'] ?? '');
         <p class="muted">MySQL: <?php echo jarvis_pdo() ? 'Connected' : 'Not configured / unavailable'; ?></p>
         <p class="muted">REST Base: <span class="badge">/api</span></p>
         <p class="muted">Notifications: <span class="badge"><?php echo (int)$notifCount; ?> unread</span></p>
-        <p class="muted">Weather: <span id="jarvisWeather">(enable location logging in Preferences)</span></p>
+        <p class="muted">Weather: <span id="jarvisWeather"><?php echo $lastWeather ? htmlspecialchars($lastWeather['desc'] . ' • ' . ($lastWeather['temp_c'] !== null ? $lastWeather['temp_c'].'°C' : '')) : '(enable location logging in Preferences)'; ?></span></p>
         <?php if ($wakePrompt): ?>
           <div class="terminal" style="margin-top:12px">
             <div class="term-title">JARVIS Wake Prompt</div>
             <pre><?php echo htmlspecialchars($wakePrompt); ?></pre>
           </div>
+        <?php endif; ?>
+      </div>
+
+      <div class="card" id="locationCard">
+        <h3>Location & Weather</h3>
+        <?php if (empty($recentLocations)): ?>
+          <p class="muted">No location data yet. Enable location logging in Preferences and allow location access in your browser.</p>
+        <?php else: ?>
+          <div id="map" style="height:240px;border:1px solid #ddd;margin-bottom:8px"></div>
+          <div id="weatherSummary">
+            <?php if ($lastWeather): ?>
+              <p><strong><?php echo htmlspecialchars($lastWeather['desc'] ?? ''); ?></strong> — <?php echo ($lastWeather['temp_c'] !== null) ? htmlspecialchars($lastWeather['temp_c'].'°C') : ''; ?></p>
+            <?php else: ?>
+              <p class="muted">Weather data not available for last known location (configure OPENWEATHER_API_KEY in DB or env).</p>
+            <?php endif; ?>
+          </div>
+          <details>
+            <summary>Recent locations (latest first)</summary>
+            <table style="width:100%;margin-top:8px">
+              <thead><tr><th>When</th><th>Lat</th><th>Lon</th><th>Source</th></tr></thead>
+              <tbody>
+                <?php foreach($recentLocations as $loc): ?>
+                  <tr>
+                    <td><?php echo htmlspecialchars($loc['created_at']); ?></td>
+                    <td><?php echo htmlspecialchars($loc['lat']); ?></td>
+                    <td><?php echo htmlspecialchars($loc['lon']); ?></td>
+                    <td><?php echo htmlspecialchars($loc['source']); ?></td>
+                  </tr>
+                <?php endforeach; ?>
+              </tbody>
+            </table>
+            <div style="margin-top:8px"><a href="location_history.php">View full history</a></div>
+          </details>
         <?php endif; ?>
       </div>
 
@@ -338,28 +382,52 @@ Content-Type: application/json
     (function(){
       const enabled = <?php echo !empty($prefs['location_logging_enabled']) ? 'true' : 'false'; ?>;
       const token = <?php echo $webJwt ? json_encode($webJwt) : 'null'; ?>;
-      if (!enabled || !token || !navigator.geolocation) return;
-      navigator.geolocation.getCurrentPosition(async (pos)=>{
-        try {
-          const body = {
-            lat: pos.coords.latitude,
-            lon: pos.coords.longitude,
-            accuracy: pos.coords.accuracy
-          };
-          const r = await fetch('/api/location', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer '+token },
-            body: JSON.stringify(body)
-          });
-          const data = await r.json().catch(()=>null);
-          const el = document.getElementById('jarvisWeather');
-          if (el && data) {
-            el.textContent = data.note ? data.note : ('Location saved: '+body.lat.toFixed(3)+', '+body.lon.toFixed(3));
-          }
-        } catch (e) {}
-      }, ()=>{}, { enableHighAccuracy: true, maximumAge: 10*60*1000, timeout: 8000 });
-    })();
+      const recentLocations = <?php echo json_encode(array_values($recentLocations)); ?>;
+      const lastWeather = <?php echo json_encode($lastWeather); ?>;
 
+      // Init map if we have locations
+      async function initMap() {
+        if (!(recentLocations && recentLocations.length && typeof L !== 'undefined')) return;
+        const map = L.map('map');
+        const last = recentLocations[0];
+        map.setView([parseFloat(last.lat), parseFloat(last.lon)], 13);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
+        for (const r of recentLocations) {
+          const marker = L.marker([parseFloat(r.lat), parseFloat(r.lon)]).addTo(map);
+          marker.bindPopup(`<div><b>${r.source}</b><br>${r.created_at}<br>${parseFloat(r.lat).toFixed(5)}, ${parseFloat(r.lon).toFixed(5)}</div>`);
+        }
+      }
+
+      if (enabled && token && navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(async (pos)=>{
+          try {
+            const body = { lat: pos.coords.latitude, lon: pos.coords.longitude, accuracy: pos.coords.accuracy };
+            const r = await fetch('/api/location', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer '+token },
+              body: JSON.stringify(body)
+            });
+            const data = await r.json().catch(()=>null);
+            const el = document.getElementById('jarvisWeather');
+            if (el && data) {
+              el.textContent = data.weather && data.weather.desc ? (data.weather.desc + ' • ' + (data.weather.temp_c !== null ? data.weather.temp_c + '°C' : '')) : ('Location saved: '+body.lat.toFixed(3)+', '+body.lon.toFixed(3));
+            }
+            // refresh map after new location
+            if (typeof L !== 'undefined') setTimeout(initMap, 350);
+          } catch (e) {}
+        }, ()=>{ if (typeof L !== 'undefined') setTimeout(initMap, 50); }, { enableHighAccuracy: true, maximumAge: 10*60*1000, timeout: 8000 });
+      } else {
+        // just init map with existing locations
+        if (typeof L !== 'undefined') setTimeout(initMap, 50);
+      }
+
+      // Pre-fill weather info if server-side fetched
+      if (lastWeather && document.getElementById('jarvisWeather')) {
+        document.getElementById('jarvisWeather').textContent = lastWeather.desc + ' • ' + (lastWeather.temp_c !== null ? lastWeather.temp_c + '°C' : '');
+      }
+    })();
+  </script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     // ----------------------------
     // Voice input / output + Notifications
     // ----------------------------

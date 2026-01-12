@@ -1,0 +1,64 @@
+<?php
+session_start();
+require_once __DIR__ . '/../db.php';
+require_once __DIR__ . '/../helpers.php';
+if (!isset($_SESSION['username'])) { header('Location: login.php'); exit; }
+$userId = (int)($_SESSION['user_id'] ?? 0);
+if (!$userId) { session_destroy(); header('Location: login.php'); exit; }
+$locations = jarvis_recent_locations($userId, 200);
+?>
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Location History</title>
+  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+</head>
+<body>
+  <div class="navbar">
+    <div class="brand">JARVIS</div>
+    <nav>
+      <a href="home.php">Home</a>
+      <a href="logout.php">Logout</a>
+    </nav>
+  </div>
+  <main style="padding:18px">
+    <h1>Location History</h1>
+    <?php if(empty($locations)): ?>
+      <p class="muted">No location entries yet.</p>
+    <?php else: ?>
+      <div id="map" style="height:320px;border:1px solid #ddd;margin-bottom:12px"></div>
+      <table style="width:100%">
+        <thead><tr><th>When</th><th>Lat</th><th>Lon</th><th>Accuracy</th><th>Source</th></tr></thead>
+        <tbody>
+        <?php foreach($locations as $l): ?>
+          <tr>
+            <td><?php echo htmlspecialchars($l['created_at']); ?></td>
+            <td><?php echo htmlspecialchars($l['lat']); ?></td>
+            <td><?php echo htmlspecialchars($l['lon']); ?></td>
+            <td><?php echo htmlspecialchars($l['accuracy_m']); ?></td>
+            <td><?php echo htmlspecialchars($l['source']); ?></td>
+          </tr>
+        <?php endforeach; ?>
+        </tbody>
+      </table>
+    <?php endif; ?>
+  </main>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    (function(){
+      const locs = <?php echo json_encode($locations); ?>;
+      if (!locs || !locs.length) return;
+      const map = L.map('map');
+      const last = locs[0];
+      map.setView([parseFloat(last.lat), parseFloat(last.lon)], 12);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
+      for (const r of locs) {
+        const marker = L.marker([parseFloat(r.lat), parseFloat(r.lon)]).addTo(map);
+        marker.bindPopup(`<div><b>${r.source}</b><br>${r.created_at}<br>${parseFloat(r.lat).toFixed(5)}, ${parseFloat(r.lon).toFixed(5)}</div>`);
+      }
+    })();
+  </script>
+</body>
+</html>

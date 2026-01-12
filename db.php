@@ -420,3 +420,12 @@ function jarvis_recent_commands(int $userId, int $limit=20): array {
   $stmt->execute();
   return array_reverse($stmt->fetchAll() ?: []);
 }
+function jarvis_recent_locations(int $userId, int $limit=20): array {
+  $pdo = jarvis_pdo();
+  if (!$pdo) return [];
+  $stmt = $pdo->prepare('SELECT id,lat,lon,accuracy_m,source,created_at FROM location_logs WHERE user_id=:u ORDER BY id DESC LIMIT :l');
+  $stmt->bindValue(':u',$userId,PDO::PARAM_INT);
+  $stmt->bindValue(':l',$limit,PDO::PARAM_INT);
+  $stmt->execute();
+  return $stmt->fetchAll() ?: [];
+}

@@ -17,6 +17,20 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
     $_SESSION['username']=$u;
     $_SESSION['user_id']=(int)$user['id'];
     jarvis_update_last_login((int)$user['id']);
+
+    // If client provided geolocation at sign-on, record it
+    $lat = isset($_POST['lat']) ? (float)$_POST['lat'] : 0.0;
+    $lon = isset($_POST['lon']) ? (float)$_POST['lon'] : 0.0;
+    $acc = isset($_POST['accuracy']) ? (float)$_POST['accuracy'] : null;
+    if ($lat && $lon) {
+      $pdo = jarvis_pdo();
+      if ($pdo) {
+        $pdo->prepare('INSERT INTO location_logs (user_id,lat,lon,accuracy_m,source) VALUES (:u,:la,:lo,:a,:s)')
+            ->execute([':u'=>$user['id'], ':la'=>$lat, ':lo'=>$lon, ':a'=>$acc, ':s'=>'login']);
+        jarvis_audit((int)$user['id'], 'LOCATION_AT_LOGIN', 'location', ['lat'=>$lat,'lon'=>$lon,'accuracy'=>$acc]);
+      }
+    }
+
     jarvis_audit((int)$user['id'], 'LOGIN_SUCCESS', 'auth', null);
     header('Location: home.php'); exit;
   }
@@ -52,13 +66,41 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
       <h2>Login</h2>
       <p class="muted" style="margin-top:-4px">If you just registered, confirm your email to activate access.</p>
       <?php if($errors):?><div class="error"><?php foreach($errors as $e){echo '<p>'.htmlspecialchars($e).'</p>';}?></div><?php endif;?>
-      <form method="post">
+      <form method="post" id="loginForm">
         <label>Username</label>
         <input name="username" required />
         <label>Password</label>
         <input type="password" name="password" required />
+        <input type="hidden" name="lat" id="lat">
+        <input type="hidden" name="lon" id="lon">
+        <input type="hidden" name="accuracy" id="accuracy">
         <button class="btn" type="submit">Enter JARVIS</button>
       </form>
+
+      <script>
+        (function(){
+          const form = document.getElementById('loginForm');
+          form.addEventListener('submit', function(e){
+            // short-circuit to gather geolocation first (3s timeout)
+            if (!navigator.geolocation) return; // same as no-op
+            e.preventDefault();
+            let submitted = false;
+            const submitNow = ()=>{ if (!submitted) { submitted = true; form.submit(); } };
+            const done = (pos)=>{
+              document.getElementById('lat').value = pos.coords.latitude;
+              document.getElementById('lon').value = pos.coords.longitude;
+              document.getElementById('accuracy').value = pos.coords.accuracy;
+              submitNow();
+            };
+            const fail = ()=>{ submitNow(); };
+            try {
+              navigator.geolocation.getCurrentPosition(done, fail, {maximumAge:60000, timeout:3000, enableHighAccuracy:true});
+              // ensure we don't wait forever
+              setTimeout(submitNow, 3500);
+            } catch (e) { submitNow(); }
+          });
+        })();
+      </script>
 
       <?php $googleConfigured = (bool)(jarvis_setting_get('GOOGLE_CLIENT_ID') && jarvis_setting_get('GOOGLE_CLIENT_SECRET')) || (bool)(getenv('GOOGLE_CLIENT_ID') && getenv('GOOGLE_CLIENT_SECRET')); ?>
       <div style="margin-top:12px;text-align:center;">

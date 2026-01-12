@@ -85,6 +85,18 @@ php scripts/create-admin.php <email> [<display_name>]
 - The Admin UI lets you list, add, update, and delete settings stored in the `settings` table used for secrets (e.g., `SENDGRID_API_KEY`, `TWILIO_SID`).
 
 **Security note:** Values are editable in the Admin UI for convenience; avoid pasting secrets you don't want persisted in plain text and rotate keys that may have been leaked.
+
+## Location logging & weather
+
+- Browser location logging is enabled per-user in **Preferences** (toggle "Enable browser location logging"). The browser will send location to `/api/location` when visiting the portal and will also include location at sign-in if you allow the browser to share location.
+- Location history is stored in `location_logs` and is visible from the Home dashboard (map + recent entries) and the full Location History page (`/public/location_history.php`).
+- For local weather, set an OpenWeather API key in the DB or env:
+
+```bash
+php scripts/set-secret.php OPENWEATHER_API_KEY "<your-key>"
+```
+
+The app will fetch weather for the most recent location and show a short summary on the Home dashboard.
 ## REST endpoints
 
 ### Auth

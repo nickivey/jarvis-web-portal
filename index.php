@@ -237,14 +237,28 @@ if ($path === '/api/location') {
   if (!$lat || !$lon) jarvis_respond(400, ['error'=>'lat/lon required']);
 
   $pdo = jarvis_pdo();
-  $pdo->prepare('INSERT INTO location_logs (user_id,lat,lon,accuracy_m) VALUES (:u,:la,:lo,:a)')
-      ->execute([':u'=>$userId, ':la'=>$lat, ':lo'=>$lon, ':a'=>$acc]);
+  $pdo->prepare('INSERT INTO location_logs (user_id,lat,lon,accuracy_m,source) VALUES (:u,:la,:lo,:a,:s)')
+      ->execute([':u'=>$userId, ':la'=>$lat, ':lo'=>$lon, ':a'=>$acc, ':s'=>'browser']);
   jarvis_audit($userId, 'LOCATION_UPDATE', 'location', ['lat'=>$lat,'lon'=>$lon,'accuracy'=>$acc]);
 
-  // Hook: call Yahoo weather here. This build returns a placeholder payload.
-  $resp = ['ok'=>true, 'lat'=>$lat, 'lon'=>$lon, 'note'=>'Yahoo Weather integration hook point'];
+  // Fetch weather if API key is configured
+  $weather = null;
+  try {
+    $weather = jarvis_fetch_weather($lat, $lon);
+  } catch (Throwable $e) { $weather = null; }
+
+  $resp = ['ok'=>true, 'lat'=>$lat, 'lon'=>$lon, 'weather'=>$weather];
   jarvis_log_api_request($userId, 'web', $path, $method, $in, $resp, 200);
   jarvis_respond(200, $resp);
+}
+
+// Recent locations for user (JWT required)
+if ($path === '/api/locations') {
+  if ($method !== 'GET') jarvis_respond(405, ['error' => 'Method not allowed']);
+  [$userId, $u] = require_jwt_user();
+  $limit = isset($_GET['limit']) ? min(200, max(1, (int)$_GET['limit'])) : 50;
+  $locations = jarvis_recent_locations($userId, $limit);
+  jarvis_respond(200, ['ok'=>true, 'locations'=>$locations]);
 }
 
 // ----------------------------

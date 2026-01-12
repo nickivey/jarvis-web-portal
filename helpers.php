@@ -157,6 +157,26 @@ function jarvis_fetch_google_jwks(): ?array {
   return $cache;
 }
 
+function jarvis_fetch_weather(float $lat, float $lon): ?array {
+  // Prefer DB setting then env
+  $apiKey = jarvis_setting_get('OPENWEATHER_API_KEY') ?: getenv('OPENWEATHER_API_KEY');
+  if (!$apiKey) return null;
+  $url = sprintf('https://api.openweathermap.org/data/2.5/weather?lat=%s&lon=%s&units=metric&appid=%s', urlencode((string)$lat), urlencode((string)$lon), urlencode($apiKey));
+  $ch = curl_init($url);
+  curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_TIMEOUT=>8]);
+  $resp = curl_exec($ch);
+  $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+  curl_close($ch);
+  if ($resp === false || $code < 200 || $code >= 300) return null;
+  $data = json_decode($resp, true);
+  if (!is_array($data)) return null;
+  $out = [];
+  $out['temp_c'] = isset($data['main']['temp']) ? (float)$data['main']['temp'] : null;
+  $out['desc'] = isset($data['weather'][0]['description']) ? (string)$data['weather'][0]['description'] : null;
+  $out['icon'] = isset($data['weather'][0]['icon']) ? (string)$data['weather'][0]['icon'] : null;
+  $out['raw'] = $data;
+  return $out;
+}
 function jarvis_verify_google_id_token(string $idToken, string $clientId): ?array {
   $parts = explode('.', $idToken);
   if (count($parts) !== 3) return null;
