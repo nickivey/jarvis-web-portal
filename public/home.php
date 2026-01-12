@@ -280,7 +280,7 @@ Content-Type: application/json
 
         <div class="terminal" style="margin-top:10px">
           <div class="term-title">Recent Notifications</div>
-          <div class="term-body" style="max-height:140px; overflow:auto">
+          <div class="term-body" id="notifList" style="max-height:140px; overflow:auto">
             <?php if(!$notifs): ?>
               <p class="muted">No notifications yet.</p>
             <?php else: ?>
@@ -388,6 +388,11 @@ Content-Type: application/json
     // ----------------------------
     (function(){
       const token = <?php echo $webJwt ? json_encode($webJwt) : 'null'; ?>;
+      // Expose JWT to global scope for AJAX polling and API helper
+      window.jarvisJwt = token;
+      // Notify listeners that auth token is set
+      if (token) window.dispatchEvent(new CustomEvent('jarvis.token.set'));
+      window.jarvisBus && window.jarvisEmit && window.jarvisEmit('auth.token.set');
       const chatLog = document.querySelector('.chatlog');
       const msgInput = document.getElementById('messageInput');
       const micBtn = document.getElementById('micBtn');
@@ -546,33 +551,38 @@ Content-Type: application/json
         appendMessage(msg, 'me');
         msgInput.value = '';
 
-        // Call /api/command
+        if (window.jarvisShowLoader) jarvisShowLoader();
         try {
-          const r = await fetch('/api/command', {
-            method: 'POST', headers: { 'Content-Type':'application/json', 'Authorization': token ? 'Bearer '+token : '' }, body: JSON.stringify({ text: msg, type: lastInputType })
-          });
-          const data = await r.json().catch(()=>null);
+          // Prefer the Command API
+          window.jarvisEmit('command.sent', { text: msg, type: lastInputType });
+          const data = await (window.jarvisApi ? window.jarvisApi.post('/api/command', { text: msg, type: lastInputType }) : (async ()=>{ const r=await fetch('/api/command',{method:'POST',headers:{'Content-Type':'application/json','Authorization': token? 'Bearer '+token : ''},body:JSON.stringify({text:msg,type:lastInputType})}); return r.json(); })());
+
           if (data && typeof data.jarvis_response === 'string' && data.jarvis_response.trim() !== ''){
             appendMessage(data.jarvis_response, 'jarvis');
             speakText(data.jarvis_response);
             showNotification(data.jarvis_response);
+            window.jarvisEmit('command.response', data);
+            // Invalidate notifications list and fetch fresh
+            if (window.jarvisInvalidateNotifications) window.jarvisInvalidateNotifications();
             return;
           }
-        } catch(e){}
+        } catch(e){
+          // continue to fallback
+        } finally { if (window.jarvisHideLoader) jarvisHideLoader(); }
 
         // Fallback: send to Slack via /api/messages if JWT available (uses default channel)
         try {
-          const r2 = await fetch('/api/messages', {
-            method: 'POST', headers: { 'Content-Type':'application/json', 'Authorization': token ? 'Bearer '+token : '' }, body: JSON.stringify({ message: msg })
-          });
-          const data2 = await r2.json().catch(()=>null);
+          if (window.jarvisShowLoader) jarvisShowLoader();
+          const data2 = await (window.jarvisApi ? window.jarvisApi.post('/api/messages', { message: msg }) : (async ()=>{ const r2=await fetch('/api/messages',{method:'POST',headers:{'Content-Type':'application/json','Authorization': token? 'Bearer '+token : ''},body:JSON.stringify({message:msg})}); return r2.json(); })());
           if (data2 && data2.ok) {
             appendMessage('Sent to Slack (default channel)', 'jarvis');
             if (enableNotif.checked && Notification.permission === 'granted') showNotification('Slack message sent: '+msg);
+            window.jarvisEmit('message.sent', { message: msg, slack: data2.slack || null });
           } else {
             appendMessage('Failed to send to Slack', 'jarvis');
           }
         } catch(e){ appendMessage('Failed to send message', 'jarvis'); }
+        finally { if (window.jarvisHideLoader) jarvisHideLoader(); }
       });
 
       // On load, request notification permission quietly

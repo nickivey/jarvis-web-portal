@@ -57,6 +57,126 @@
         // Let real navigation happen, show loader
         window.jarvisShowLoader();
       }, true);
+
+      // --- Jarvis API wrapper, caching, and event bus ---
+      (function(){
+        // Simple event bus
+        if (!window.jarvisBus) window.jarvisBus = new EventTarget();
+        window.jarvisOn = function(name, cb){ window.jarvisBus.addEventListener(name, cb); };
+        window.jarvisEmit = function(name, detail){ window.jarvisBus.dispatchEvent(new CustomEvent(name, { detail })); };
+
+        // Simple in-memory + localStorage GET cache
+        const cache = new Map();
+        function cacheKey(url){ return url; }
+        function setCache(key, value, ttlMs){
+          const expires = Date.now() + (ttlMs||60000);
+          const entry = { value, expires };
+          cache.set(key, entry);
+          try { localStorage.setItem('jarvis_cache_' + key, JSON.stringify(entry)); } catch(e){}
+        }
+        function getCache(key){
+          // memory first
+          const me = cache.get(key);
+          if (me && me.expires > Date.now()) return me.value;
+          // try localStorage
+          try {
+            const raw = localStorage.getItem('jarvis_cache_' + key);
+            if (raw) {
+              const en = JSON.parse(raw);
+              if (en && en.expires > Date.now()) { cache.set(key,en); return en.value; }
+            }
+          } catch(e){}
+          cache.delete(key);
+          return null;
+        }
+
+        // Helper to build headers incl. Authorization if available
+        function authHeaders(hdrs){
+          const out = Object.assign({}, hdrs || {});
+          const token = window.jarvisJwt || null;
+          if (token) out['Authorization'] = 'Bearer ' + token;
+          return out;
+        }
+
+        window.jarvisApi = {
+          async get(url, { ttl=60000, force=false }={}){
+            const key = cacheKey(url);
+            if (!force) {
+              const c = getCache(key);
+              if (c !== null) return c;
+            }
+            const resp = await fetch(url, { method:'GET', headers: authHeaders({ 'Accept':'application/json' }) });
+            if (!resp.ok) throw new Error('HTTP ' + resp.status);
+            const data = await resp.json().catch(()=>null);
+            if (ttl && data !== null) setCache(key, data, ttl);
+            return data;
+          },
+          async post(url, body, { asJson=true }={}){
+            const headers = authHeaders({});
+            if (asJson) headers['Content-Type'] = 'application/json';
+            const resp = await fetch(url, { method:'POST', headers, body: asJson ? JSON.stringify(body) : body });
+            const data = await resp.json().catch(()=>null);
+            if (!resp.ok) {
+              const err = new Error('HTTP ' + resp.status);
+              err.response = data; throw err;
+            }
+            return data;
+          },
+          invalidate(url){ const key = cacheKey(url); cache.delete(key); try{ localStorage.removeItem('jarvis_cache_' + key); }catch(e){} }
+        };
+
+        // Notifications polling (if we have a JWT)
+        let notifTimer = null;
+        async function fetchNotifs(){
+          if (!window.jarvisJwt) return;
+          try {
+            const data = await window.jarvisApi.get('/api/notifications?limit=20', { ttl: 0, force:true });
+            if (data && data.ok) {
+              window.jarvisEmit('notifications.updated', data);
+              // Update nav badge if present
+              const a = document.querySelector('a[href="notifications.php"]');
+              if (a) {
+                let badge = a.querySelector('.nav-notif-badge');
+                if (!badge) { badge = document.createElement('span'); badge.className = 'badge nav-notif-badge'; a.appendChild(badge); }
+                badge.textContent = (data.count || 0) > 0 ? (data.count + ' unread') : '';
+              }
+            }
+          } catch(e) {}
+        }
+        function startPolling(){ if (notifTimer) clearInterval(notifTimer); fetchNotifs(); notifTimer = setInterval(fetchNotifs, 15*1000); }
+        function stopPolling(){ if (notifTimer) clearInterval(notifTimer); notifTimer = null; }
+
+        // Start polling when JWT is available
+        // If token already set, start immediately
+        if (window.jarvisJwt) startPolling();
+        // Watch for token being set later
+        window.jarvisOn('auth.token.set', ()=>{ startPolling(); });
+
+        // When notifications are updated, try to update any notification list in the DOM
+        window.jarvisOn('notifications.updated', (ev)=>{
+          try {
+            const data = ev.detail || {};
+            const listEl = document.getElementById('notifList');
+            if (listEl && Array.isArray(data.notifications)){
+              listEl.innerHTML = '';
+              if (data.notifications.length === 0) {
+                listEl.innerHTML = '<p class="muted">No notifications yet.</p>';
+              } else {
+                data.notifications.forEach(n=>{
+                  const div = document.createElement('div'); div.className='muted'; div.style.marginBottom='8px';
+                  const b = document.createElement('b'); b.textContent = n.title || '';
+                  const body = document.createElement('div'); body.textContent = n.body || '';
+                  const meta = document.createElement('div'); meta.className='meta'; meta.textContent = (n.created_at || '') + ((n.is_read == 0) ? ' • UNREAD' : '');
+                  div.appendChild(b); div.appendChild(body); div.appendChild(meta); listEl.appendChild(div);
+                });
+              }
+            }
+          } catch(e){}
+        });
+
+        // Expose small helpers
+        window.jarvisInvalidateNotifications = ()=>{ window.jarvisApi.invalidate('/api/notifications?limit=20'); fetchNotifs(); };
+      })();
     }
   });
 })();

@@ -132,6 +132,35 @@ if ($path === '/api/me') {
 }
 
 // ----------------------------
+// Notifications
+// ----------------------------
+
+if ($path === '/api/notifications') {
+  [$userId, $u] = require_jwt_user();
+  if ($method === 'GET') {
+    $limit = isset($_GET['limit']) ? min(200, (int)$_GET['limit']) : 20;
+    $notifs = jarvis_recent_notifications($userId, $limit);
+    $count = jarvis_unread_notifications_count($userId);
+    jarvis_log_api_request($userId, 'desktop', $path, $method, null, ['ok'=>true,'count'=>$count], 200);
+    jarvis_respond(200, ['ok'=>true,'count'=>$count,'notifications'=>$notifs]);
+  }
+  jarvis_respond(405, ['error'=>'Method not allowed']);
+}
+
+// Mark notification as read
+if (preg_match('#^/api/notifications/([0-9]+)/read$#', $path, $m)) {
+  [$userId, $u] = require_jwt_user();
+  if ($method !== 'POST') jarvis_respond(405, ['error'=>'Method not allowed']);
+  $nid = (int)$m[1];
+  $pdo = jarvis_pdo();
+  if (!$pdo) jarvis_respond(500, ['error'=>'DB not configured']);
+  $stmt = $pdo->prepare('UPDATE notifications SET is_read=1 WHERE id=:id AND user_id=:u');
+  $stmt->execute([':id'=>$nid, ':u'=>$userId]);
+  jarvis_log_api_request($userId, 'desktop', $path, $method, null, ['ok'=>true,'id'=>$nid], 200);
+  jarvis_respond(200, ['ok'=>true,'id'=>$nid]);
+}
+
+// ----------------------------
 // Command
 // ----------------------------
 
