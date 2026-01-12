@@ -55,7 +55,7 @@ body::before{
 /* Mobile nav toggle */
 .nav-toggle{display:none;background:transparent;border:1px solid rgba(255,255,255,.04);color:var(--txt);padding:6px 8px;border-radius:8px;font-size:18px}
 .navbar .nav-toggle{margin-left:12px}
-@media(max-width:780px){
+@media(max-width:600px){
   .navbar{padding:8px 12px}
   .navbar nav{display:none}
   .navbar.nav-open nav{display:block;position:absolute;left:0;right:0;top:56px;padding:12px;background:linear-gradient(180deg, rgba(7,18,42,.95), rgba(5,16,42,.95));border-bottom:1px solid rgba(30,120,255,.12)}
@@ -131,7 +131,7 @@ body::before{
   grid-template-columns:repeat(3, 1fr);
   gap:14px;
 }
-@media(max-width:980px){.grid{grid-template-columns:1fr}}
+@media(max-width:600px){.grid{grid-template-columns:1fr}}
 
 label{display:block;margin:10px 0 6px;color:var(--muted);font-size:13px}
 input,textarea{
@@ -226,6 +226,20 @@ code, pre{background:rgba(2,7,18,.55);border:1px solid rgba(30,120,255,.18);bord
   background:linear-gradient(180deg, rgba(1,3,8,.86), rgba(4,9,18,.86));
   color:var(--txt); text-align:center; padding:24px; backdrop-filter: blur(6px);
 }
+
+/* Permission banner */
+.perm-banner{background:linear-gradient(90deg, rgba(255,165,0,.06), rgba(255,165,0,.03));border-bottom:1px solid rgba(255,165,0,.12);padding:10px 16px;display:flex;gap:12px;align-items:center;justify-content:space-between;color:var(--muted)}
+.perm-banner .list{display:flex;gap:12px;align-items:center}
+.perm-banner .perm-item{background:rgba(255,255,255,.02);padding:6px 8px;border-radius:8px;border:1px solid rgba(255,255,255,.03);font-size:13px}
+.perm-banner .perm-cta{display:inline-flex;gap:8px;align-items:center;padding:8px 10px;border-radius:10px;background:linear-gradient(90deg, rgba(30,120,255,.18), rgba(0,212,255,.12));border:1px solid rgba(0,212,255,.18);cursor:pointer}
+
+/* Location history small map */
+.location-panel{display:flex;gap:12px;align-items:flex-start}
+.location-list{flex:1;max-height:160px;overflow:auto}
+.location-map{width:260px;height:160px;border-radius:8px;border:1px solid rgba(30,120,255,.12);overflow:hidden}
+
+/* Compact audit/notifications panels */
+.term-body.audit .muted, .term-body.notifications .muted{padding:6px 0;border-bottom:1px solid rgba(255,255,255,.02)}
 .loader-panel{max-width:360px;padding:28px;border-radius:14px;border:1px solid rgba(30,120,255,.12);background:linear-gradient(180deg, rgba(7,18,42,.7), rgba(2,7,18,.55));box-shadow:0 20px 60px rgba(0,0,0,.6);}
 .loader-logo{width:64px;height:64px;margin:0 auto 12px;display:block;filter:drop-shadow(0 0 18px rgba(0,212,255,.25))}
 .loader-title{font-weight:800;letter-spacing:.12em;margin:6px 0 8px}

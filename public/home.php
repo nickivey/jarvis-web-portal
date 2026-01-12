@@ -195,14 +195,15 @@ $phone = (string)($dbUser['phone_e164'] ?? '');
           <details>
             <summary>Recent locations (latest first)</summary>
             <table style="width:100%;margin-top:8px">
-              <thead><tr><th>When</th><th>Lat</th><th>Lon</th><th>Source</th></tr></thead>
-              <tbody>
+              <thead><tr><th>When</th><th>Lat</th><th>Lon</th><th>Source</th><th></th></tr></thead>
+              <tbody id="recentLocationsTbody">
                 <?php foreach($recentLocations as $loc): ?>
-                  <tr>
+                  <tr data-id="<?php echo (int)$loc['id']; ?>">
                     <td><?php echo htmlspecialchars($loc['created_at']); ?></td>
                     <td><?php echo htmlspecialchars($loc['lat']); ?></td>
                     <td><?php echo htmlspecialchars($loc['lon']); ?></td>
                     <td><?php echo htmlspecialchars($loc['source']); ?></td>
+                    <td><button class="btn secondary focusLocationBtn" data-id="<?php echo (int)$loc['id']; ?>">Focus</button></td>
                   </tr>
                 <?php endforeach; ?>
               </tbody>
@@ -353,17 +354,68 @@ Content-Type: application/json
       const recentLocations = <?php echo json_encode(array_values($recentLocations)); ?>;
       const lastWeather = <?php echo json_encode($lastWeather); ?>;
 
-      // Init map if we have locations
-      async function initMap() {
-        if (!(recentLocations && recentLocations.length && typeof L !== 'undefined')) return;
-        const map = L.map('map');
-        const last = recentLocations[0];
-        map.setView([parseFloat(last.lat), parseFloat(last.lon)], 13);
+      // Map management and location refreshing
+      let _mainMap = null, _miniMap = null;
+      function destroyMap(elId, mapRef){ try{ if (mapRef) { mapRef.remove(); } }catch(e){}
+        try{ const el = document.getElementById(elId); if (el) el.innerHTML=''; }catch(e){}
+      }
+      function makeMap(elId, centerLat, centerLon, zoom=13){
+        if (typeof L === 'undefined') return null;
+        destroyMap(elId, elId === 'map' ? _mainMap : _miniMap);
+        const map = L.map(elId);
+        map.setView([parseFloat(centerLat), parseFloat(centerLon)], zoom);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
-        for (const r of recentLocations) {
-          const marker = L.marker([parseFloat(r.lat), parseFloat(r.lon)]).addTo(map);
-          marker.bindPopup(`<div><b>${r.source}</b><br>${r.created_at}<br>${parseFloat(r.lat).toFixed(5)}, ${parseFloat(r.lon).toFixed(5)}</div>`);
+        if (elId === 'map') _mainMap = map; else _miniMap = map;
+        return map;
+      }
+      function renderLocationsOnMaps(locs){
+        if (!locs || !locs.length) return;
+        const c = locs[0];
+        const m = makeMap('map', c.lat, c.lon, 13);
+        for (const r of locs){
+          try{
+            const marker = L.marker([parseFloat(r.lat), parseFloat(r.lon)]).addTo(m);
+            marker.bindPopup(`<div><b>${r.source}</b><br>${r.created_at}<br>${parseFloat(r.lat).toFixed(5)}, ${parseFloat(r.lon).toFixed(5)}</div>`);
+          }catch(e){}
         }
+        try{
+          const mm = makeMap('miniMap', c.lat, c.lon, 11);
+          for (const r of locs.slice(0,8)){
+            const cm = L.circleMarker([parseFloat(r.lat), parseFloat(r.lon)], { radius:6 }).addTo(mm);
+            cm.bindPopup(`<div><b>${r.source}</b><br>${r.created_at}<br>${parseFloat(r.lat).toFixed(5)}, ${parseFloat(r.lon).toFixed(5)}</div>`);
+          }
+        }catch(e){}
+      }
+
+      async function refreshLocations(){
+        if (!window.jarvisApi) return;
+        try{
+          const data = await window.jarvisApi.get('/api/locations?limit=8', { ttl:0, force:true });
+          if (!data || !data.ok) return;
+          const locs = data.locations || [];
+          // update table
+          const tbody = document.getElementById('recentLocationsTbody');
+          if (tbody) {
+            tbody.innerHTML = '';
+            for (const r of locs) {
+              const tr = document.createElement('tr'); tr.setAttribute('data-id', r.id);
+              tr.innerHTML = `<td>${(r.created_at||'')}</td><td>${r.lat}</td><td>${r.lon}</td><td>${r.source||''}</td><td><button class="btn secondary focusLocationBtn" data-id="${r.id}">Focus</button></td>`;
+              tbody.appendChild(tr);
+            }
+            // attach focus handlers
+            document.querySelectorAll('.focusLocationBtn').forEach(b=>b.addEventListener('click', (ev)=>{
+              const id = b.getAttribute('data-id');
+              const loc = locs.find(x=>String(x.id)===String(id));
+              if (loc) {
+                if (_mainMap) { _mainMap.setView([parseFloat(loc.lat), parseFloat(loc.lon)], 13); }
+                // open popup on nearest marker is complex; recompute maps
+                renderLocationsOnMaps(locs);
+              }
+            }));
+          }
+          // render maps
+          renderLocationsOnMaps(locs);
+        }catch(e){}
       }
 
       if (enabled && token && navigator.geolocation) {
@@ -381,12 +433,12 @@ Content-Type: application/json
               el.textContent = data.weather && data.weather.desc ? (data.weather.desc + ' • ' + (data.weather.temp_c !== null ? data.weather.temp_c + '°C' : '')) : ('Location saved: '+body.lat.toFixed(3)+', '+body.lon.toFixed(3));
             }
             // refresh map after new location
-            if (typeof L !== 'undefined') setTimeout(initMap, 350);
+            if (typeof L !== 'undefined') setTimeout(()=>refreshLocations(), 350);
           } catch (e) {}
-        }, ()=>{ if (typeof L !== 'undefined') setTimeout(initMap, 50); }, { enableHighAccuracy: true, maximumAge: 10*60*1000, timeout: 8000 });
+        }, ()=>{ if (typeof L !== 'undefined') setTimeout(()=>refreshLocations(), 50); }, { enableHighAccuracy: true, maximumAge: 10*60*1000, timeout: 8000 });
       } else {
         // just init map with existing locations
-        if (typeof L !== 'undefined') setTimeout(initMap, 50);
+        if (typeof L !== 'undefined') setTimeout(()=>refreshLocations(), 50);
       }
 
       // Pre-fill weather info if server-side fetched
@@ -718,6 +770,8 @@ Content-Type: application/json
               }
             } catch(e){}
             try{ sessionStorage.setItem('jarvis_wake_prompt_shown', String(Date.now())); }catch(e){}
+            // Refresh locations in UI
+            try{ if (typeof refreshLocations === 'function') refreshLocations(); }catch(e){}
           } catch(e){}
         }, ()=>{}, { enableHighAccuracy: true, timeout: 8000 });
       } catch(e){}
