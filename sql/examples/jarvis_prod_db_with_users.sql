@@ -88,13 +88,13 @@ CREATE TABLE `audit_log` (
 LOCK TABLES `audit_log` WRITE;
 /*!40000 ALTER TABLE `audit_log` DISABLE KEYS */;
 INSERT INTO `audit_log` VALUES
-(1,NULL,'LOGIN_FAIL','auth','{\"email\":\"REDACTED_MAIL_FROM\"}','::1','Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36','2026-01-12 11:17:27',NULL),
-(2,NULL,'LOGIN_FAIL','auth','{\"email\":\"REDACTED_MAIL_FROM\"}','::1','Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36','2026-01-12 11:17:39',NULL),
-(3,NULL,'LOGIN_FAIL','auth','{\"email\":\"REDACTED_MAIL_FROM\"}','::1','Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36','2026-01-12 11:17:45',NULL),
-(4,NULL,'LOGIN_FAIL','auth','{\"email\":\"REDACTED_MAIL_FROM\"}','::1','Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36','2026-01-12 11:18:07',NULL),
+(1,NULL,'LOGIN_FAIL','auth','{\"email\":\"nick123ivey@gmail.com\"}','::1','Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36','2026-01-12 11:17:27',NULL),
+(2,NULL,'LOGIN_FAIL','auth','{\"email\":\"nick123ivey@gmail.com\"}','::1','Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36','2026-01-12 11:17:39',NULL),
+(3,NULL,'LOGIN_FAIL','auth','{\"email\":\"nick123ivey@gmail.com\"}','::1','Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36','2026-01-12 11:17:45',NULL),
+(4,NULL,'LOGIN_FAIL','auth','{\"email\":\"nick123ivey@gmail.com\"}','::1','Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36','2026-01-12 11:18:07',NULL),
 (5,NULL,'LOGIN_FAIL','auth','{\"email\":\"nickivey\"}','::1','Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36','2026-01-12 11:18:17',NULL),
 (6,NULL,'LOGIN_FAIL','auth','{\"email\":\"nickivey\"}','::1','Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36','2026-01-12 11:18:23',NULL),
-(7,1,'REGISTER','auth','{\"email\":\"REDACTED_MAIL_FROM\"}','::1','Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36','2026-01-12 11:19:23',NULL),
+(7,1,'REGISTER','auth','{\"email\":\"nick123ivey@gmail.com\"}','::1','Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36','2026-01-12 11:19:23',NULL),
 (8,NULL,'LOGIN_FAIL','auth','{\"email\":\"nickivey\"}','::1','Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36','2026-01-12 11:44:04',NULL),
 (9,NULL,'LOGIN_FAIL','auth','{\"email\":\"nickivey\"}','::1','Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36','2026-01-12 11:44:10',NULL),
 (10,NULL,'LOGIN_FAIL','auth','{\"email\":\"nickivey\"}','::1','Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36','2026-01-12 11:44:26',NULL),
@@ -102,12 +102,12 @@ INSERT INTO `audit_log` VALUES
 (12,1,'EMAIL_VERIFICATION_RESENT','auth',NULL,'::1','Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36','2026-01-12 11:52:18',NULL),
 (13,1,'EMAIL_VERIFICATION_RESENT','auth',NULL,'::1','Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36','2026-01-12 11:58:12',NULL),
 (14,1,'EMAIL_VERIFICATION_RESENT','auth',NULL,'::1','Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36','2026-01-12 11:58:53',NULL),
-(15,1,'PASSWORD_RESET_REQUESTED','auth','{\"email\":\"REDACTED_MAIL_FROM\"}','::1','Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36','2026-01-12 11:59:08',NULL),
+(15,1,'PASSWORD_RESET_REQUESTED','auth','{\"email\":\"nick123ivey@gmail.com\"}','::1','Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36','2026-01-12 11:59:08',NULL),
 (16,NULL,'USER_PROMOTE','admin','{\"target_username\": \"nickivey\", \"method\": \"manual_cli\"}',NULL,NULL,'2026-01-12 12:00:33',NULL),
 (17,NULL,'PASSWORD_SET_BY_ADMIN','admin','{\"target_username\": \"nickivey\", \"method\": \"manual_cli\", \"note\": \"temporary password set to nick1234\"}',NULL,NULL,'2026-01-12 12:01:57',NULL),
-(18,1,'LOGIN_FAIL','auth','{\"email\":\"REDACTED_MAIL_FROM\"}','::1','Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36','2026-01-12 12:03:33',NULL),
-(19,1,'LOGIN_FAIL','auth','{\"email\":\"REDACTED_MAIL_FROM\"}','::1','Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36','2026-01-12 12:03:40',NULL),
-(20,1,'LOGIN_FAIL','auth','{\"email\":\"REDACTED_MAIL_FROM\"}','::1','Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36','2026-01-12 12:03:45',NULL),
+(18,1,'LOGIN_FAIL','auth','{\"email\":\"nick123ivey@gmail.com\"}','::1','Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36','2026-01-12 12:03:33',NULL),
+(19,1,'LOGIN_FAIL','auth','{\"email\":\"nick123ivey@gmail.com\"}','::1','Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36','2026-01-12 12:03:40',NULL),
+(20,1,'LOGIN_FAIL','auth','{\"email\":\"nick123ivey@gmail.com\"}','::1','Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36','2026-01-12 12:03:45',NULL),
 (21,NULL,'PASSWORD_SET_BY_ADMIN','admin','{\"target_username\":\"nickivey\",\"method\":\"cli\",\"note\":\"set to provided value\"}',NULL,NULL,'2026-01-12 12:04:10',NULL),
 (22,1,'LOCATION_AT_LOGIN','location','{\"lat\":26.7255808,\"lon\":-80.0751616,\"accuracy\":2304616.1215763376,\"location_id\":1}','::1','Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36','2026-01-12 12:04:22',NULL),
 (23,1,'LOGIN_SUCCESS','auth',NULL,'::1','Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36','2026-01-12 12:04:22',NULL),
@@ -515,7 +515,7 @@ CREATE TABLE `users` (
 LOCK TABLES `users` WRITE;
 /*!40000 ALTER TABLE `users` DISABLE KEYS */;
 INSERT INTO `users` VALUES
-(1,'nickivey','REDACTED_MAIL_FROM','4074531934','$2y$10$HNUsJl4MZOnhRd6gk.x5ju20xVFiIv6E6fvOatFgMJwztZRUmtxJ.','78b38fabdebbe947dfcf45eddb81283b35ebbf0a46a591f0','2026-01-12 12:00:33','2026-01-12 11:19:23','2026-01-12 12:17:19','2026-01-12 12:19:17',NULL,'admin','f51396094a47a36f9a63d9f334711e1a886c1d861ecc9a9d','2026-01-12 12:59:08'),
+(1,'nickivey','nick123ivey@gmail.com','4074531934','$2y$10$HNUsJl4MZOnhRd6gk.x5ju20xVFiIv6E6fvOatFgMJwztZRUmtxJ.','78b38fabdebbe947dfcf45eddb81283b35ebbf0a46a591f0','2026-01-12 12:00:33','2026-01-12 11:19:23','2026-01-12 12:17:19','2026-01-12 12:19:17',NULL,'admin','f51396094a47a36f9a63d9f334711e1a886c1d861ecc9a9d','2026-01-12 12:59:08'),
 (2,'nick','nick@nickivey.com','4074531934','$2y$10$A7y0K.z4p0g5JHfPya08dOT3e8mAld6ZIaEf6EolMrXhsjgRsi4..','b6cf69fb0a6fff14989509f9b4f8b6ffb66fae2d7694aaf5',NULL,'2026-01-12 06:07:09',NULL,NULL,NULL,'user',NULL,NULL),
 (4,'nickivey2','nickivey@live.com','4074531934','$2y$10$cPV181PgFC3fgcczcziJqekLc3jrGTnHEp1lb05KmnBjuCWbPDr2i','9cead04bae1f273ea567b8d7bb539c325272548ecd3458f6',NULL,'2026-01-12 07:39:01',NULL,NULL,NULL,'user',NULL,NULL),
 (5,'AdminUser','admin@example.com',NULL,'$2y$10$7UrWbfnCoVDlFOjMbdbi7O2Puk2y3SABUjm1sLZ2VMoIniwtBaLwq','298c6c95456cd7669c0921fda3a5d689e44ddc75bfdb46a2',NULL,'2026-01-12 08:20:45',NULL,NULL,NULL,'admin','ef9d4d2bd98c9dd8fef1b2736b4fbb3852a80baf8a90c8ae','2026-01-12 09:24:12'),
