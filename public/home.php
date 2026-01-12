@@ -149,6 +149,12 @@ $phone = (string)($dbUser['phone_e164'] ?? '');
   </div>
 
   <div class="container">
+    <!-- Permission banner (hidden when not needed) -->
+    <div id="permBanner" class="perm-banner" style="display:none">
+      <div class="list"><div style="font-weight:700">Permissions required:</div><div id="permList" style="display:flex;gap:8px;align-items:center;margin-left:8px"></div></div>
+      <div style="display:flex;gap:8px;align-items:center"><button id="permRequestBtn" class="perm-cta">Request access</button><a href="#perminfo" style="color:var(--muted);font-size:13px;text-decoration:underline">How to allow</a></div>
+    </div>
+
     <?php if($success):?><div class="success"><p><?php echo htmlspecialchars($success); ?></p></div><?php endif;?>
     <?php if($error):?><div class="error"><p><?php echo htmlspecialchars($error); ?></p></div><?php endif;?>
 
@@ -613,5 +619,77 @@ Content-Type: application/json
       }
 
     })();
+  </script>
+  <script>
+  (function(){
+    // Permission + Notification handling
+    async function ensureNotificationPermission(){
+      if (!('Notification' in window)) return false;
+      if (Notification.permission === 'granted') return true;
+      try {
+        const p = await Notification.requestPermission();
+        return p === 'granted';
+      } catch(e) { return false; }
+    }
+
+    async function checkAndShowPermissions(){
+      const banner = document.getElementById('permBanner');
+      const permListEl = document.getElementById('permList');
+      if(!banner || !permListEl) return;
+      const missing = [];
+      try{
+        // Geolocation/microphone/camera
+        if (navigator.permissions) {
+          const geo = await navigator.permissions.query({name:'geolocation'}).catch(()=>({state:'prompt'}));
+          if (geo.state !== 'granted') missing.push('Location');
+          const mic = await navigator.permissions.query({name:'microphone'}).catch(()=>({state:'prompt'}));
+          if (mic.state !== 'granted') missing.push('Microphone');
+          const cam = await navigator.permissions.query({name:'camera'}).catch(()=>({state:'prompt'}));
+          if (cam.state !== 'granted') missing.push('Camera');
+        } else {
+          if(!navigator.geolocation) missing.push('Location');
+        }
+        // Notifications (special case)
+        if ('Notification' in window && Notification.permission !== 'granted') {
+          missing.push('Notifications');
+        }
+      }catch(e){/* ignore */}
+
+      if(missing.length===0){ banner.style.display='none'; return; }
+      permListEl.innerHTML='';
+      missing.forEach(m=>{ const it=document.createElement('div'); it.className='perm-item'; it.textContent=m; permListEl.appendChild(it); });
+      banner.style.display='flex';
+    }
+
+    document.getElementById('permRequestBtn')?.addEventListener('click', async ()=>{
+      // Request mic/cam/geo as before
+      try{ await navigator.mediaDevices.getUserMedia({ audio:true }); }catch(e){}
+      try{ await navigator.mediaDevices.getUserMedia({ video:true }); }catch(e){}
+      try{ await new Promise((res)=> navigator.geolocation.getCurrentPosition(()=>res(),()=>res(), {timeout:8000})); }catch(e){}
+      // Also request notification permission explicitly (user gesture)
+      try{ await ensureNotificationPermission(); }catch(e){}
+      // update UI (e.g., enableNotif checkbox) after permission attempt
+      if (document.getElementById('enableNotif')) {
+        document.getElementById('enableNotif').checked = ('Notification' in window && Notification.permission === 'granted');
+      }
+      setTimeout(()=>checkAndShowPermissions(),800);
+    });
+
+    // Initial state for the enableNotif checkbox
+    document.addEventListener('DOMContentLoaded', ()=>{
+      const cb = document.getElementById('enableNotif');
+      if (cb && 'Notification' in window) {
+        cb.checked = Notification.permission === 'granted';
+        cb.addEventListener('change', async ()=>{
+          if (cb.checked && Notification.permission !== 'granted') {
+            const ok = await ensureNotificationPermission();
+            cb.checked = ok;
+            if (!ok) alert('Notifications not granted. Please allow notifications from your browser settings.');
+          }
+        });
+      }
+      checkAndShowPermissions();
+    });
+  })();
   </script>
 </body></html>
