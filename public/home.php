@@ -147,6 +147,8 @@ $phone = (string)($dbUser['phone_e164'] ?? '');
     <h1>JARVIS</h1>
     <p>Blue / Black command portal • REST + Slack messaging • Timestamped logs</p>
   </div>
+  <!-- Pixel Dust FX Canvas -->
+  <canvas id="fxCanvas" class="fx-canvas" aria-hidden="true"></canvas>
 
   <div class="container">
     <!-- Permission banner (hidden when not needed) -->
@@ -224,6 +226,13 @@ $phone = (string)($dbUser['phone_e164'] ?? '');
       </div>
 
       <!-- 2 -->
+
+      <div class="card" id="photosCard">
+        <h3>Photos</h3>
+        <div id="photoPreview" style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-start"></div>
+        <div style="margin-top:8px"><a href="/public/photos.php">Open photo gallery</a> • <a href="/public/ios_photos.php">iOS setup</a></div>
+      </div>
+
       <div class="card">
         <h3>JARVIS Chat</h3>
         <div class="chatbox">
@@ -363,6 +372,22 @@ Content-Type: application/json
           <?php endforeach; ?>
         </ul>
       <?php endif; ?>
+    </div>
+
+    <div class="card" style="margin-top:14px" id="channelsActivity">
+      <h3>Channels & Activity</h3>
+      <div style="display:flex;gap:14px;align-items:flex-start;">
+        <div style="flex:1">
+          <div style="margin-bottom:8px"><strong>Channel:</strong> <span id="caChannel">local:rhats</span> • <a href="/public/channel.php">Open Channels</a></div>
+          <div id="caMessages" style="display:flex;flex-direction:column;gap:8px;max-height:260px;overflow:auto;padding:6px;border-radius:8px;border:1px solid rgba(255,255,255,.02);background:linear-gradient(180deg, rgba(255,255,255,.01), rgba(255,255,255,.00));"></div>
+        </div>
+        <div style="width:320px">
+          <div class="card">
+            <h4>Recent Audit Log</h4>
+            <div id="caAudit" style="max-height:240px;overflow:auto;padding:6px"></div>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -624,6 +649,99 @@ Content-Type: application/json
   </script>
   <!-- No Leaflet required when using embedded maps -->
     <script src="navbar.js"></script>
+    <script>
+    // Ambient pixel-dust particles (Pixar-like sparkle swirls)
+    (function(){
+      const prefersReduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      const canvas = document.getElementById('fxCanvas');
+      if (!canvas || prefersReduced) return;
+      const ctx = canvas.getContext('2d');
+      let w=0,h=0, dpr = Math.max(1, Math.min(2, window.devicePixelRatio||1));
+      function resize(){ w = window.innerWidth; h = window.innerHeight; canvas.width = Math.floor(w*dpr); canvas.height = Math.floor(h*dpr); canvas.style.width = w+'px'; canvas.style.height = h+'px'; ctx.setTransform(dpr,0,0,dpr,0,0); }
+      resize(); window.addEventListener('resize', resize);
+
+      const particles = []; const MAX = 160; const COLORS = ['#7dd3fc','#00d4ff','#1e78ff','#a5b4fc'];
+      function rand(min,max){ return Math.random()*(max-min)+min; }
+      function pick(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
+
+      function spawn(x, y, opts={}){
+        for (let i=0;i<(opts.count||24);i++){
+          const angle = rand(0, Math.PI*2);
+          const speed = rand(0.4, 2.2) * (opts.power||1);
+          const size = rand(1.25, 3.5) * (opts.size||1);
+          const life = rand(0.8, 2.2) * (opts.life||1);
+          const color = pick(COLORS);
+          const shape = Math.random() < 0.6 ? 'square' : 'tri';
+          particles.push({ x, y, vx: Math.cos(angle)*speed, vy: Math.sin(angle)*speed, ax: 0, ay: 0.02, size, life, alpha: 1, color, shape, t: 0 });
+          if (particles.length > MAX) particles.shift();
+        }
+      }
+
+      // Gentle ambient swirl
+      let tGlobal = 0; function ambient(){
+        tGlobal += 0.016; const cx = w*0.5 + Math.sin(tGlobal*0.6)*w*0.12; const cy = h*0.28 + Math.cos(tGlobal*0.8)*h*0.06;
+        spawn(cx, cy, { count: 6, power: 0.8, size: 1, life: 1.4 });
+      }
+
+      function step(dt){
+        for (let p of particles){
+          p.t += dt; p.vx += p.ax*dt; p.vy += p.ay*dt; p.x += p.vx*dt*60; p.y += p.vy*dt*60;
+          // Fade and shrink
+          p.alpha = Math.max(0, 1 - (p.t / p.life));
+          p.size *= 0.995;
+        }
+        // Remove dead
+        for (let i=particles.length-1;i>=0;i--){ if (particles[i].alpha <= 0 || particles[i].size <= 0.2) particles.splice(i,1); }
+      }
+      function draw(){
+        ctx.clearRect(0,0,w,h);
+        // soft glow trail
+        ctx.fillStyle = 'rgba(2,7,18,0.06)'; ctx.fillRect(0,0,w,h);
+        for (let p of particles){
+          ctx.globalAlpha = Math.max(0, Math.min(1, p.alpha));
+          ctx.fillStyle = p.color;
+          // slight pixel-saw look via crisp edges
+          if (p.shape === 'square'){
+            ctx.fillRect(Math.floor(p.x), Math.floor(p.y), Math.max(1, Math.floor(p.size)), Math.max(1, Math.floor(p.size)));
+          } else {
+            ctx.beginPath();
+            ctx.moveTo(Math.floor(p.x), Math.floor(p.y));
+            ctx.lineTo(Math.floor(p.x + p.size), Math.floor(p.y));
+            ctx.lineTo(Math.floor(p.x + p.size/2), Math.floor(p.y - p.size));
+            ctx.closePath();
+            ctx.fill();
+          }
+        }
+        ctx.globalAlpha = 1;
+      }
+      let last = performance.now();
+      function loop(now){ const dt = Math.min(0.06, (now - last)/1000); last = now; ambient(); step(dt); draw(); requestAnimationFrame(loop); }
+      requestAnimationFrame(loop);
+
+      // Expose a burst API for UX hooks (e.g., on send)
+      window.jarvisFx = window.jarvisFx || {};
+      window.jarvisFx.spawnBurst = (x,y,opts)=>spawn(x,y,opts||{});
+
+      // Hook message send to spawn a burst near chat input
+      try {
+        const sendBtn = document.getElementById('sendBtn');
+        sendBtn && sendBtn.addEventListener('click', ()=>{
+          const el = document.getElementById('messageInput');
+          if (!el) return;
+          const r = el.getBoundingClientRect();
+          const x = (r.left + r.right)/2; const y = r.top; spawn(x, y, { count: 26, power: 1.4, size: 1.2, life: 1.6 });
+        });
+      } catch(e){}
+
+      // Wake prompt sparkle
+      try {
+        const hero = document.querySelector('.hero');
+        if (hero) {
+          const r = hero.getBoundingClientRect(); spawn(r.left + r.width*0.5, r.top + r.height*0.35, { count: 32, power: 1.2 });
+        }
+      } catch(e){}
+    })();
+    </script>
     <script>
     // ----------------------------
     // Voice input / output + Notifications
@@ -1347,6 +1465,61 @@ Content-Type: application/json
       checkAndShowPermissions();
       // If permissions look ok and we haven't shown the wake prompt, try to post location and run wake
       try{ if (sessionStorage.getItem('jarvis_wake_prompt_shown') === null) postLocationAndRunWake(); }catch(e){}
+
+      // Fetch recent photos for preview
+      (async function(){
+        const el = document.getElementById('photoPreview');
+
+        // Also load channels activity preview (small recent messages + audit)
+        try{
+          const ca = document.getElementById('caMessages'); if (ca) {
+            const r = await fetch('/api/messages?channel=local:rhats&limit=6', { headers: { 'Authorization': 'Bearer ' + (window.jarvisJwt || '') } });
+            const j = await r.json().catch(()=>null);
+            if (j && Array.isArray(j.messages)) {
+              j.messages.forEach(m=>{
+                const im = document.createElement('div'); im.style.display='flex'; im.style.justifyContent='space-between'; im.style.alignItems='center'; im.style.gap='12px'; im.style.padding='8px'; im.style.borderRadius='8px';
+                const left = document.createElement('div'); left.style.flex='1'; left.innerHTML = '<div style="font-weight:700">'+(m.username||'you')+'</div><div style="color:var(--muted);font-size:13px">'+(m.message_text||'').replace(/(#([A-Za-z0-9_\-]+))/g, '<span style="color:var(--blue2)">$1</span>').replace(/@([A-Za-z0-9_\-]+)/g,'<span style="color:var(--ok)">$&</span>')+'</div>';
+                const meta = document.createElement('div'); meta.style.fontSize='12px'; meta.style.color='var(--muted)'; meta.textContent = new Date(m.created_at).toLocaleString();
+                im.appendChild(left); im.appendChild(meta); ca.appendChild(im);
+              });
+            }
+          }
+        }catch(e){}
+
+        if (!el || typeof window.jarvisJwt === 'undefined') return;
+        try {
+          const r = await fetch('/api/photos?limit=6', { headers: { 'Authorization': 'Bearer ' + window.jarvisJwt } });
+          const j = await r.json().catch(()=>null);
+          if (!j || !Array.isArray(j.photos)) return;
+          j.photos.forEach(p => {
+            const img = document.createElement('img');
+            img.src = '/api/photos/' + p.id + '/download?thumb=1';
+            img.style.width = '120px'; img.style.height = '120px'; img.style.objectFit = 'cover'; img.style.borderRadius = '12px'; img.style.filter = 'grayscale(40%) contrast(0.95)'; img.style.cursor = 'pointer';
+            img.title = p.original_filename || '';
+            img.addEventListener('click', ()=>{
+              openPhotoModal(p.id, p.original_filename);
+            });
+            el.appendChild(img);
+          });
+        } catch(e) { /* ignore */ }
+      })();
+
+      function openPhotoModal(id, title){
+        let modal = document.getElementById('photoModal');
+        if (!modal) {
+          modal = document.createElement('div'); modal.id='photoModal'; modal.style.position='fixed'; modal.style.inset='0'; modal.style.display='flex'; modal.style.alignItems='center'; modal.style.justifyContent='center'; modal.style.background='rgba(10,12,14,0.86)'; modal.style.zIndex=9999; modal.style.padding='24px';
+          const img = document.createElement('img'); img.id='photoModalImg'; img.style.maxWidth='90%'; img.style.maxHeight='90%'; img.style.borderRadius='12px'; img.style.boxShadow='0 28px 80px rgba(0,0,0,.6)';
+          const caption = document.createElement('div'); caption.id='photoModalCaption'; caption.style.color='var(--muted)'; caption.style.marginTop='12px'; caption.style.textAlign='center'; caption.style.fontSize='13px';
+          const wrap = document.createElement('div'); wrap.style.display='flex'; wrap.style.flexDirection='column'; wrap.style.alignItems='center'; wrap.appendChild(img); wrap.appendChild(caption);
+          modal.appendChild(wrap);
+          modal.addEventListener('click', (e)=>{ if (e.target === modal) modal.remove(); });
+          document.body.appendChild(modal);
+        }
+        const imgEl = document.getElementById('photoModalImg');
+        const capEl = document.getElementById('photoModalCaption');
+        imgEl.src = '/api/photos/' + id + '/download';
+        capEl.textContent = title || '';
+      }
     });
 
 
