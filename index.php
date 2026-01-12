@@ -231,13 +231,38 @@ if ($path === '/api/voice') {
   jarvis_respond(405, ['error'=>'Method not allowed']);
 }
 
-// Download a recorded voice blob (authenticated)
+// Download a recorded voice blob (authenticated via JWT or Session for Admin UI)
 if (preg_match('#^/api/voice/([0-9]+)/download$#', $path, $m)) {
-  [$userId, $u] = require_jwt_user();
+  $userId = 0;
+  $isAdmin = false;
+  $token = jarvis_bearer_token();
+  
+  if ($token) {
+    $payload = jarvis_jwt_verify($token);
+    if ($payload && !empty($payload['sub'])) {
+      $userId = (int)$payload['sub'];
+      $u = jarvis_user_by_id($userId);
+      if ($u && ($u['role']??'')==='admin') $isAdmin = true;
+    }
+  } else {
+    // Fallback to session (e.g. from Admin UI audio player)
+    if (session_status() === PHP_SESSION_NONE) session_start();
+    if (isset($_SESSION['user_id'])) {
+      $userId = (int)$_SESSION['user_id'];
+      $u = jarvis_user_by_id($userId);
+      if ($u && ($u['role']??'')==='admin') $isAdmin = true;
+    }
+  }
+
+  if ($userId <= 0) jarvis_respond(401, ['error'=>'Unauthorized']);
+
   $vid = (int)$m[1];
   $v = jarvis_voice_input_by_id($vid);
   if (!$v) jarvis_respond(404, ['error'=>'not found']);
-  if ((int)$v['user_id'] !== (int)$userId) jarvis_respond(403, ['error'=>'forbidden']);
+  
+  // Access control: Owner OR Admin
+  if ((int)$v['user_id'] !== (int)$userId && !$isAdmin) jarvis_respond(403, ['error'=>'forbidden']);
+  
   $f = __DIR__ . '/' . $v['filename'];
   if (!is_file($f)) jarvis_respond(404, ['error'=>'file not found']);
   // stream file
