@@ -580,6 +580,35 @@ Content-Type: application/json
       // On load, request notification permission quietly
       (async ()=>{ if ('Notification' in window) await ensureNotificationPermission(); })();
 
+      // Listen for notification updates from the global event bus and show new ones
+      if (window.jarvisOn) {
+        let lastNotifId = sessionStorage.getItem('jarvis_last_notif_id') ? parseInt(sessionStorage.getItem('jarvis_last_notif_id')) : 0;
+        window.jarvisOn('notifications.updated', (ev)=>{
+          const data = (ev && ev.detail) ? ev.detail : null;
+          if (!data || !Array.isArray(data.notifications)) return;
+          // find newest id (assumes notifications are descending by id)
+          const newest = data.notifications.length ? (data.notifications[0].id || 0) : 0;
+          if (newest > (lastNotifId||0)) {
+            // show browser notification for each new item newer than lastNotifId
+            data.notifications.slice().reverse().forEach(n=>{
+              const nid = n.id || 0;
+              if (nid > (lastNotifId||0)) {
+                // show lightweight toast in-page
+                if (document.getElementById('notifList')) {
+                  const top = document.createElement('div'); top.className='success'; top.style.marginBottom='8px'; top.innerHTML = '<b>'+ (n.title||'') +'</b><div>'+ (n.body||'') +'</div>';
+                  document.getElementById('notifList').insertBefore(top, document.getElementById('notifList').firstChild);
+                }
+                if (enableNotif && enableNotif.checked && 'Notification' in window && Notification.permission === 'granted') {
+                  try { new Notification(n.title || 'JARVIS', { body: n.body || '' }); } catch(e){}
+                }
+              }
+            });
+            lastNotifId = newest;
+            sessionStorage.setItem('jarvis_last_notif_id', String(lastNotifId));
+          }
+        });
+      }
+
     })();
   </script>
 </body></html>
