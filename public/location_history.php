@@ -5,8 +5,9 @@ require_once __DIR__ . '/../helpers.php';
 if (!isset($_SESSION['username'])) { header('Location: login.php'); exit; }
 $userId = (int)($_SESSION['user_id'] ?? 0);
 if (!$userId) { session_destroy(); header('Location: login.php'); exit; }
-$locations = jarvis_recent_locations($userId, 200);
-?>
+$locations = jarvis_recent_locations($userId, 200);  $focus = isset($_GET['focus']) ? (int)$_GET['focus'] : null;
+  $focusLat = isset($_GET['lat']) ? (float)$_GET['lat'] : null;
+  $focusLon = isset($_GET['lon']) ? (float)$_GET['lon'] : null;?>
 <!doctype html>
 <html>
 <head>
@@ -54,9 +55,20 @@ $locations = jarvis_recent_locations($userId, 200);
       const last = locs[0];
       map.setView([parseFloat(last.lat), parseFloat(last.lon)], 12);
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
+      let focusId = <?php echo json_encode($focus); ?>;
+      let focusLat = <?php echo json_encode($focusLat); ?>;
+      let focusLon = <?php echo json_encode($focusLon); ?>;
       for (const r of locs) {
         const marker = L.marker([parseFloat(r.lat), parseFloat(r.lon)]).addTo(map);
         marker.bindPopup(`<div><b>${r.source}</b><br>${r.created_at}<br>${parseFloat(r.lat).toFixed(5)}, ${parseFloat(r.lon).toFixed(5)}</div>`);
+        if (focusId && Number(r.id) === Number(focusId)) {
+          map.setView([parseFloat(r.lat), parseFloat(r.lon)], 13);
+          marker.openPopup();
+          const tr = document.querySelector('tbody tr');
+        }
+        if (!focusId && focusLat && focusLon) {
+          map.setView([parseFloat(focusLat), parseFloat(focusLon)], 13);
+        }
       }
     })();
   </script>

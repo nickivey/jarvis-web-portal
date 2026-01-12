@@ -55,13 +55,30 @@ $rows = $stmt->fetchAll() ?: [];
         <table class="table">
           <thead><tr><th>Time</th><th>Action</th><th>Entity</th><th>IP</th><th>Metadata</th></tr></thead>
           <tbody>
-            <?php foreach($rows as $r): ?>
+            <?php foreach($rows as $r):
+            $meta = null;
+            if (!empty($r['metadata_json'])) {
+              $meta = json_decode($r['metadata_json'], true);
+              if (!is_array($meta)) $meta = null;
+            }
+          ?>
               <tr>
                 <td><?php echo htmlspecialchars($r['created_at']); ?></td>
                 <td><?php echo htmlspecialchars($r['action']); ?></td>
                 <td><?php echo htmlspecialchars((string)($r['entity'] ?? '')); ?></td>
                 <td><?php echo htmlspecialchars((string)($r['ip'] ?? '')); ?></td>
-                <td><code><?php echo htmlspecialchars((string)($r['metadata_json'] ?? '')); ?></code></td>
+                <td>
+                  <?php if ($meta): ?>
+                    <?php if (isset($meta['location_id'])): ?>
+                      <div><a href="location_history.php?focus=<?php echo (int)$meta['location_id']; ?>">View location</a></div>
+                    <?php elseif (isset($meta['lat']) && isset($meta['lon'])): ?>
+                      <div><a href="location_history.php?lat=<?php echo htmlspecialchars($meta['lat']); ?>&amp;lon=<?php echo htmlspecialchars($meta['lon']); ?>">View location</a></div>
+                    <?php endif; ?>
+                    <div><code><?php echo htmlspecialchars(json_encode($meta)); ?></code></div>
+                  <?php else: ?>
+                    <code><?php echo htmlspecialchars((string)($r['metadata_json'] ?? '')); ?></code>
+                  <?php endif; ?>
+                </td>
               </tr>
             <?php endforeach; ?>
           </tbody>

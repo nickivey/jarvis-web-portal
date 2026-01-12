@@ -25,9 +25,10 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
     if ($lat && $lon) {
       $pdo = jarvis_pdo();
       if ($pdo) {
-        $pdo->prepare('INSERT INTO location_logs (user_id,lat,lon,accuracy_m,source) VALUES (:u,:la,:lo,:a,:s)')
-            ->execute([':u'=>$user['id'], ':la'=>$lat, ':lo'=>$lon, ':a'=>$acc, ':s'=>'login']);
-        jarvis_audit((int)$user['id'], 'LOCATION_AT_LOGIN', 'location', ['lat'=>$lat,'lon'=>$lon,'accuracy'=>$acc]);
+        $stmt = $pdo->prepare('INSERT INTO location_logs (user_id,lat,lon,accuracy_m,source) VALUES (:u,:la,:lo,:a,:s)');
+        $stmt->execute([':u'=>$user['id'], ':la'=>$lat, ':lo'=>$lon, ':a'=>$acc, ':s'=>'login']);
+        $locId = (int)$pdo->lastInsertId();
+        jarvis_audit((int)$user['id'], 'LOCATION_AT_LOGIN', 'location', ['lat'=>$lat,'lon'=>$lon,'accuracy'=>$acc,'location_id'=>$locId]);
       }
     }
 

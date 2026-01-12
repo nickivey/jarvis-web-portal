@@ -237,9 +237,9 @@ if ($path === '/api/location') {
   if (!$lat || !$lon) jarvis_respond(400, ['error'=>'lat/lon required']);
 
   $pdo = jarvis_pdo();
-  $pdo->prepare('INSERT INTO location_logs (user_id,lat,lon,accuracy_m,source) VALUES (:u,:la,:lo,:a,:s)')
-      ->execute([':u'=>$userId, ':la'=>$lat, ':lo'=>$lon, ':a'=>$acc, ':s'=>'browser']);
-  jarvis_audit($userId, 'LOCATION_UPDATE', 'location', ['lat'=>$lat,'lon'=>$lon,'accuracy'=>$acc]);
+  $stmt = $pdo->prepare('INSERT INTO location_logs (user_id,lat,lon,accuracy_m,source) VALUES (:u,:la,:lo,:a,:s)');
+  $stmt->execute([':u'=>$userId, ':la'=>$lat, ':lo'=>$lon, ':a'=>$acc, ':s'=>'browser']);
+  $locId = (int)$pdo->lastInsertId();
 
   // Fetch weather if API key is configured
   $weather = null;
@@ -247,7 +247,11 @@ if ($path === '/api/location') {
     $weather = jarvis_fetch_weather($lat, $lon);
   } catch (Throwable $e) { $weather = null; }
 
-  $resp = ['ok'=>true, 'lat'=>$lat, 'lon'=>$lon, 'weather'=>$weather];
+  $meta = ['lat'=>$lat,'lon'=>$lon,'accuracy'=>$acc,'location_id'=>$locId];
+  if ($weather) $meta['weather'] = $weather;
+  jarvis_audit($userId, 'LOCATION_UPDATE', 'location', $meta);
+
+  $resp = ['ok'=>true, 'lat'=>$lat, 'lon'=>$lon, 'weather'=>$weather, 'location_id'=>$locId];
   jarvis_log_api_request($userId, 'web', $path, $method, $in, $resp, 200);
   jarvis_respond(200, $resp);
 }
