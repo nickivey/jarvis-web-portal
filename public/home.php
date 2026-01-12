@@ -559,6 +559,26 @@ Content-Type: application/json
 
           if (data && typeof data.jarvis_response === 'string' && data.jarvis_response.trim() !== ''){
             appendMessage(data.jarvis_response, 'jarvis');
+            // Update weather UI if present in cards
+            try {
+              const cards = data.cards || {};
+              const w = cards.weather || cards['weather'] || null;
+              if (w && document.getElementById('jarvisWeather')) {
+                let txt = '';
+                if (typeof w.desc === 'string' && typeof w.temp_c !== 'undefined') txt = w.desc + ' • ' + (w.temp_c !== null ? w.temp_c + '°C' : '');
+                else if (w && w.main && w.weather) {
+                  const desc = (w.weather && w.weather[0] && w.weather[0].description) ? w.weather[0].description : '';
+                  const t = (w.main && typeof w.main.temp !== 'undefined') ? Math.round(w.main.temp) : null;
+                  txt = (desc ? (desc + ' • ') : '') + (t !== null ? (t + '°') : '');
+                } else if (w && w.raw && w.raw.weather && w.raw.main) {
+                  const desc = (w.raw.weather && w.raw.weather[0] && w.raw.weather[0].description) ? w.raw.weather[0].description : '';
+                  const t = (w.raw.main && typeof w.raw.main.temp !== 'undefined') ? Math.round(w.raw.main.temp) : null;
+                  txt = (desc ? (desc + ' • ') : '') + (t !== null ? (t + '°') : '');
+                }
+                if (txt) document.getElementById('jarvisWeather').textContent = txt;
+              }
+            } catch(e){}
+
             speakText(data.jarvis_response);
             showNotification(data.jarvis_response);
             window.jarvisEmit('command.response', data);
@@ -672,6 +692,37 @@ Content-Type: application/json
       banner.style.display='flex';
     }
 
+    async function postLocationAndRunWake(){
+      if (!token || !navigator.geolocation) return;
+      try{ if (sessionStorage.getItem('jarvis_wake_prompt_shown')) return; }catch(e){}
+      try{
+        navigator.geolocation.getCurrentPosition(async (pos)=>{
+          try {
+            const body = { lat: pos.coords.latitude, lon: pos.coords.longitude, accuracy: pos.coords.accuracy };
+            const r = await fetch('/api/location', { method:'POST', headers:{ 'Content-Type':'application/json', 'Authorization': 'Bearer '+token }, body: JSON.stringify(body) });
+            const data = await r.json().catch(()=>null);
+            if (data && document.getElementById('jarvisWeather')) {
+              const w = data.weather || data.weather || null;
+              if (w) {
+                const txt = (w.desc ? w.desc + ' • ' : '') + (typeof w.temp_c !== 'undefined' && w.temp_c !== null ? w.temp_c + '°C' : '');
+                if (txt) document.getElementById('jarvisWeather').textContent = txt;
+              } else {
+                document.getElementById('jarvisWeather').textContent = 'Location saved: '+body.lat.toFixed(3)+', '+body.lon.toFixed(3);
+              }
+            }
+            // Run a wake briefing to surface the new weather & info
+            try {
+              const wakeResp = await sendCommand('wake','system');
+              if (wakeResp) {
+                // appended by sendCommand
+              }
+            } catch(e){}
+            try{ sessionStorage.setItem('jarvis_wake_prompt_shown', String(Date.now())); }catch(e){}
+          } catch(e){}
+        }, ()=>{}, { enableHighAccuracy: true, timeout: 8000 });
+      } catch(e){}
+    }
+
     document.getElementById('permRequestBtn')?.addEventListener('click', async ()=>{
       // Request mic/cam/geo as before
       try{ await navigator.mediaDevices.getUserMedia({ audio:true }); }catch(e){}
@@ -684,6 +735,26 @@ Content-Type: application/json
         document.getElementById('enableNotif').checked = ('Notification' in window && Notification.permission === 'granted');
       }
       setTimeout(()=>checkAndShowPermissions(),800);
+      // Post location and run wake briefing if possible
+      try{ postLocationAndRunWake(); }catch(e){}
+    });
+
+    // Initial state for the enableNotif checkbox
+    document.addEventListener('DOMContentLoaded', ()=>{
+      const cb = document.getElementById('enableNotif');
+      if (cb && 'Notification' in window) {
+        cb.checked = Notification.permission === 'granted';
+        cb.addEventListener('change', async ()=>{
+          if (cb.checked && Notification.permission !== 'granted') {
+            const ok = await ensureNotificationPermission();
+            cb.checked = ok;
+            if (!ok) alert('Notifications not granted. Please allow notifications from your browser settings.');
+          }
+        });
+      }
+      checkAndShowPermissions();
+      // If permissions look ok and we haven't shown the wake prompt, try to post location and run wake
+      try{ if (sessionStorage.getItem('jarvis_wake_prompt_shown') === null) postLocationAndRunWake(); }catch(e){}
     });
 
     // Initial state for the enableNotif checkbox

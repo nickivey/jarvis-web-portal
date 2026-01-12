@@ -231,6 +231,18 @@ if ($path === '/api/command') {
     jarvis_respond(200, ['jarvis_response'=>$response, 'cards'=>$cards]);
   }
 
+  // Wake mode: produce a wake briefing (includes immediate weather and integrations)
+  if ($lower === 'wake') {
+    $out = jarvis_compose_briefing($userId, 'wake');
+    $response = (string)$out['text'];
+    $cards = (array)($out['cards'] ?? []);
+    $commandType = 'wake';
+    jarvis_log_command($userId, 'wake', $text, $response, $cards);
+    jarvis_audit($userId, 'COMMAND_WAKE', 'command', ['type'=>$inputType, 'question'=>$text, 'answer'=>$response]);
+    jarvis_log_api_request($userId, 'desktop', $path, $method, $in, ['jarvis_response'=>$response,'cards'=>$cards], 200);
+    jarvis_respond(200, ['jarvis_response'=>$response, 'cards'=>$cards]);
+  }
+
   if ($lower === 'check ig' || $lower === '/ig') {
     $ig = jarvis_instagram_check_media_updates($userId);
     if (!empty($ig['ok'])) {
