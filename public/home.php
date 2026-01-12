@@ -118,8 +118,7 @@ $phone = (string)($dbUser['phone_e164'] ?? '');
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>JARVIS • Portal</title>
   <link rel="stylesheet" href="style.css" />
-  <!-- Leaflet map for location history -->
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <!-- Using embedded third-party maps (Google Maps iframe) for location previews -->
 </head>
 <body>
   <div class="navbar">
@@ -438,34 +437,36 @@ Content-Type: application/json
       function destroyMap(elId, mapRef){ try{ if (mapRef) { mapRef.remove(); } }catch(e){}
         try{ const el = document.getElementById(elId); if (el) el.innerHTML=''; }catch(e){}
       }
-      function makeMap(elId, centerLat, centerLon, zoom=13){
-        if (typeof L === 'undefined') return null;
+      // Use an embedded third-party map (Google Maps embed) instead of Leaflet
+      function makeEmbedMap(elId, centerLat, centerLon, zoom=13){
         destroyMap(elId, elId === 'map' ? _mainMap : _miniMap);
-        const map = L.map(elId);
-        map.setView([parseFloat(centerLat), parseFloat(centerLon)], zoom);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
-        // Leaflet needs a resize after being inserted in the layout; ensure map renders correctly on mobile/layout changes
-        setTimeout(()=>{ try{ map.invalidateSize(); }catch(e){} }, 200);
-        if (elId === 'map') _mainMap = map; else _miniMap = map;
-        return map;
+        const el = document.getElementById(elId);
+        if (!el) return null;
+        const src = `https://www.google.com/maps?q=${encodeURIComponent(centerLat)},${encodeURIComponent(centerLon)}&z=${zoom}&output=embed`;
+        el.innerHTML = `<iframe class="embedMapIframe" src="${src}" style="width:100%;height:100%;border:0;" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>`;
+        if (elId === 'map') _mainMap = 'embed'; else _miniMap = 'embed';
+        return true;
       }
       function renderLocationsOnMaps(locs){
         if (!locs || !locs.length) return;
         const c = locs[0];
-        const m = makeMap('map', c.lat, c.lon, 13);
-        for (const r of locs){
-          try{
-            const marker = L.marker([parseFloat(r.lat), parseFloat(r.lon)]).addTo(m);
-            const addr = (r.address && (r.address.city || r.address.display_name)) ? (r.address.city || r.address.display_name) : '';
-            marker.bindPopup(`<div><b>${r.source}</b><br>${r.created_at}<br>${parseFloat(r.lat).toFixed(5)}, ${parseFloat(r.lon).toFixed(5)}<br>${addr}</div>`);
-          }catch(e){}
-        }
+        makeEmbedMap('map', c.lat, c.lon, 13);
         try{
-          const mm = makeMap('miniMap', c.lat, c.lon, 11);
-          for (const r of locs.slice(0,8)){
-            const cm = L.circleMarker([parseFloat(r.lat), parseFloat(r.lon)], { radius:6 }).addTo(mm);
-            const addr = (r.address && (r.address.city || r.address.display_name)) ? (r.address.city || r.address.display_name) : '';
-            cm.bindPopup(`<div><b>${r.source}</b><br>${r.created_at}<br>${parseFloat(r.lat).toFixed(5)}, ${parseFloat(r.lon).toFixed(5)}<br>${addr}</div>`);
+          const mmEl = document.getElementById('miniMap');
+          if (mmEl) {
+            mmEl.innerHTML = '';
+            for (const r of locs.slice(0,8)){
+              const row = document.createElement('div');
+              row.className = 'miniMapEntry';
+              const addr = (r.address && (r.address.city || r.address.display_name)) ? (r.address.city || r.address.display_name) : '';
+              row.innerHTML = `<div style="padding:6px;border-bottom:1px solid #eee"><b>${r.source}</b> <span class="muted">${r.created_at}</span><br>${addr}<br><a class="miniMapOpen" data-lat="${r.lat}" data-lon="${r.lon}" href="#">Open</a></div>`;
+              mmEl.appendChild(row);
+            }
+            mmEl.querySelectorAll('.miniMapOpen').forEach(a=>a.addEventListener('click', (ev)=>{
+              ev.preventDefault();
+              const lat = a.getAttribute('data-lat'), lon = a.getAttribute('data-lon');
+              makeEmbedMap('map', lat, lon, 13);
+            }));
           }
         }catch(e){}
       }
@@ -568,7 +569,7 @@ Content-Type: application/json
       }
     })();
   </script>
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <!-- No Leaflet required when using embedded maps -->
     <script src="navbar.js"></script>
     <script>
     // ----------------------------
@@ -722,7 +723,7 @@ Content-Type: application/json
       startLocationPoster();
 
       // Ensure maps resize on layout changes (e.g., mobile nav open/close)
-      window.addEventListener('resize', ()=>{ try{ if (typeof _mainMap !== 'undefined' && _mainMap) _mainMap.invalidateSize(); if (typeof _miniMap !== 'undefined' && _miniMap) _miniMap.invalidateSize(); }catch(e){} });
+      window.addEventListener('resize', ()=>{ try{ if (typeof _mainMap !== 'undefined' && _mainMap && typeof _mainMap.invalidateSize === 'function') _mainMap.invalidateSize(); if (typeof _miniMap !== 'undefined' && _miniMap && typeof _miniMap.invalidateSize === 'function') _miniMap.invalidateSize(); }catch(e){} });
 
       // Permission change listeners: run wake briefing on geolocation permission grant
       if (navigator.permissions && navigator.permissions.query) {

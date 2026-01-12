@@ -31,7 +31,7 @@ $focusLon = isset($_GET['lon']) ? (float)$_GET['lon'] : null;
   <meta charset="utf-8" />
   <title>Location History</title>
   <link rel="stylesheet" href="style.css" />
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <!-- Embedded map (Google Maps iframe) will be used for location previews -->
 </head>
 <body>
   <div class="navbar">
@@ -75,24 +75,24 @@ $focusLon = isset($_GET['lon']) ? (float)$_GET['lon'] : null;
       </tbody>
     </table>
   </main>
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="navbar.js"></script>
   <script>
     (function(){
       const token = <?php echo $webJwt ? json_encode($webJwt) : 'null'; ?>;
       let _map = null;
+      function setEmbedMap(centerLat, centerLon, zoom=12){
+        const el = document.getElementById('map');
+        if (!el) return;
+        const src = `https://www.google.com/maps?q=${encodeURIComponent(centerLat)},${encodeURIComponent(centerLon)}&z=${zoom}&output=embed`;
+        el.innerHTML = `<iframe class="embedMapIframe" src="${src}" style="width:100%;height:100%;border:0;" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>`;
+        _map = 'embed';
+      }
+
       function buildMap(locs){
-        if (!locs || !locs.length || typeof L === 'undefined') return;
-        try{ if (_map) _map.remove(); }catch(e){}
-        _map = L.map('map');
+        if (!locs || !locs.length) return;
         const last = locs[0];
-        _map.setView([parseFloat(last.lat), parseFloat(last.lon)], 12);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(_map);
-        for (const r of locs){
-          const marker = L.marker([parseFloat(r.lat), parseFloat(r.lon)]).addTo(_map);
-          const addr = (r.address && (r.address.city || r.address.display_name)) ? (r.address.city || r.address.display_name) : '';
-          marker.bindPopup(`<div><b>${r.source}</b><br>${r.created_at}<br>${parseFloat(r.lat).toFixed(5)}, ${parseFloat(r.lon).toFixed(5)}<br>${addr}</div>`);
-        }
+        setEmbedMap(last.lat, last.lon, 12);
+        // No interactive leaflet markers; instead provide quick focus links in the table and let "Focus" button update the iframe
       }
 
       async function refresh(){
@@ -119,7 +119,7 @@ $focusLon = isset($_GET['lon']) ? (float)$_GET['lon'] : null;
           document.querySelectorAll('.focusLocationBtn').forEach(b=>b.addEventListener('click', ()=>{
             const id = b.getAttribute('data-id');
             const loc = locs.find(x=>String(x.id)===String(id));
-            if (loc && _map) { _map.setView([parseFloat(loc.lat), parseFloat(loc.lon)], 13); }
+            if (loc) { setEmbedMap(loc.lat, loc.lon, 13); }
           }));
         }catch(e){}
       }
