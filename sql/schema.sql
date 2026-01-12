@@ -185,6 +185,10 @@ CREATE TABLE IF NOT EXISTS settings (
 ALTER TABLE users ADD COLUMN IF NOT EXISTS password_reset_token VARCHAR(128) NULL;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS password_reset_expires_at DATETIME NULL;
 
+-- Link audit log to voice inputs
+ALTER TABLE audit_log ADD COLUMN IF NOT EXISTS voice_input_id BIGINT UNSIGNED NULL;
+-- (Foreign key addition skipped in pure Schema to avoid duplication errors on re-run, handled by app logic or migration scripts)
+
 -- Voice input storage for deep dictation analysis
 CREATE TABLE IF NOT EXISTS voice_inputs (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,

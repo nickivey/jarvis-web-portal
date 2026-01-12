@@ -52,41 +52,25 @@ body::before{
   backdrop-filter: blur(10px);
 }
 
-/* Mobile nav toggle */
+/* Mobile nav toggle / Responsive breakpoints */
 .nav-toggle{display:none;background:transparent;border:1px solid rgba(255,255,255,.04);color:var(--txt);padding:6px 8px;border-radius:8px;font-size:18px}
 .navbar .nav-toggle{margin-left:12px}
-@media(max-width:600px){
+
+/* Updated breakpoint to around 700px (699px and down shows mobile nav) */
+@media(max-width:699px){
   .navbar{padding:8px 12px}
   .navbar nav{display:none}
-  .navbar.nav-open nav{display:block;position:absolute;left:0;right:0;top:56px;padding:12px;background:linear-gradient(180deg, rgba(7,18,42,.95), rgba(5,16,42,.95));border-bottom:1px solid rgba(30,120,255,.12)}
+  .navbar.nav-open nav{display:block;position:absolute;left:0;right:0;top:56px;padding:12px;background:linear-gradient(180deg, rgba(7,18,42,.95), rgba(5,16,42,.95));border-bottom:1px solid rgba(30,120,255,.12);z-index:999}
   .nav-toggle{display:inline-block}
   .grid{grid-template-columns:1fr}
   .hero h1{font-size:32px}
 }
-
-.navbar .brand{
-  display:flex; gap:10px; align-items:center;
-  font-weight:800; letter-spacing:.08em;
-}
-.brand img{width:28px;height:28px;display:block;filter:drop-shadow(0 0 14px rgba(0,212,255,.35))}
-.dot{width:10px;height:10px;border-radius:999px;background:var(--blue2);box-shadow:0 0 18px rgba(0,212,255,.85)}
-.navbar a{
-  color:var(--txt);
-  text-decoration:none;
-  padding:8px 10px;
-  border-radius:10px;
-  border:1px solid transparent;
-  display:inline-flex;align-items:center;gap:8px
-}
-.navbar a:hover{
-  border-color:rgba(30,120,255,.35);
-  background:rgba(30,120,255,.08);
-}
 /* Desktop nav layout improvements */
-@media(min-width:781px){
+@media(min-width:700px){
   .navbar nav{display:flex;gap:10px;align-items:center}
   .navbar .brand{min-width:220px}
   .navbar{padding:12px 24px}
+  .grid{grid-template-columns:repeat(3, 1fr)}
 }
 
 .hero{
