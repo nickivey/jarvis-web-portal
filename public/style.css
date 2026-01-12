@@ -103,8 +103,8 @@ body::before{
   color:#fff;
 }
 
-/* Updated breakpoint to around 700px (699px and down shows mobile nav) */
-@media(max-width:699px){
+/* Mobile: 599px and down shows mobile nav */
+@media(max-width:599px){
   .navbar{padding:8px 12px}
   .navbar nav{display:none}
   .navbar.nav-open nav{display:block;position:absolute;left:0;right:0;top:56px;padding:12px;background:linear-gradient(180deg, rgba(7,18,42,.95), rgba(5,16,42,.95));border-bottom:1px solid rgba(30,120,255,.12);z-index:999}
@@ -114,8 +114,8 @@ body::before{
   .navbar .brand{font-size:18px}
   .brand img{width:24px;height:24px}
 }
-/* Desktop nav layout improvements */
-@media(min-width:700px){
+/* Desktop: 600px and up shows desktop links */
+@media(min-width:600px){
   .navbar nav{display:flex;gap:10px;align-items:center}
   .navbar .brand{min-width:220px}
   .navbar{padding:12px 24px}
