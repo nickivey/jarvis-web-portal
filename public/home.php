@@ -452,10 +452,12 @@ Content-Type: application/json
   </script>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="navbar.js"></script>
+    <script>
     // ----------------------------
     // Voice input / output + Notifications
     // ----------------------------
     (function(){
+
       const token = <?php echo $webJwt ? json_encode($webJwt) : 'null'; ?>;
       // Expose JWT to global scope for AJAX polling and API helper
       window.jarvisJwt = token;
@@ -532,15 +534,9 @@ Content-Type: application/json
         } catch(e){}
       }
 
-      // Request Notification permission up front (user gesture recommended)
-      async function ensureNotificationPermission(){
-        if (!('Notification' in window)) return false;
-        if (Notification.permission === 'granted') return true;
-        try {
-          const p = await Notification.requestPermission();
-          return p === 'granted';
-        } catch(e){ return false; }
-      }
+      // Use global notification helper to request permission on user gesture
+      // (window.ensureNotificationPermission will be set by the permissions module)
+
 
       // Try to initialize Web Speech Recognition if available
       function initRecognition(){
@@ -581,47 +577,15 @@ Content-Type: application/json
       // When user types, mark type as text
       msgInput.addEventListener('input', ()=>{ lastInputType = 'text'; });
 
-      micBtn.addEventListener('click', async ()=>{
-        if (recognizing) {
-          if (recognition) recognition.stop();
-          recognizing = false; micBtn.classList.remove('active');
-          return;
-        }
-        // Create recognition if needed
-        if (!recognition) recognition = initRecognition();
+      // Use attachGesture handlers defined earlier for mic and voice command buttons to avoid duplicate events
 
-        // Ensure microphone permissions
-        const ok = await ensureMicrophonePermission();
-        if (!ok) { alert('Microphone not available or permission denied. Please allow microphone access in your browser.'); return; }
-
-        try {
-          if (recognition) recognition.start();
-          recognizing = true; micBtn.classList.add('active');
-        } catch(e) { recognizing=false; micBtn.classList.remove('active'); }
-      });
-
-      // Voice-only command: capture speech and immediately send to /api/command
-      const voiceCmdBtn = document.getElementById('voiceCmdBtn');
-      if (voiceCmdBtn) voiceCmdBtn.addEventListener('click', async ()=>{
-        if (!recognition) recognition = initRecognition();
-        if (!recognition) { alert('Voice recognition not supported in this browser.'); return; }
-        recognition.onresult = async (evt) => {
-          const text = evt.results[0][0].transcript || '';
-          if (!text.trim()) return;
-          appendMessage(text, 'me');
-          lastInputType = 'voice';
-          try { await sendCommand(text, 'voice'); } catch(e){}
-        };
-        // scroll chat to bottom
-        if (chatLog) chatLog.parentNode.scrollTop = chatLog.parentNode.scrollHeight;
-      });
 
       // Speak text using server-side TTS endpoint or fallback to Web SpeechSynthesis
       async function speakText(text){
         if (!enableTTS.checked || !text) return;
         // Try server-side TTS first
         try {
-          const url = '/public/tts.php?text=' + encodeURIComponent(text);
+          const url = '/tts.php?text=' + encodeURIComponent(text);
           const audio = new Audio(url);
           await audio.play().catch(async (e)=>{
             // Fallback to speechSynthesis
@@ -718,8 +682,8 @@ Content-Type: application/json
         await sendCommand(msg, lastInputType);
       });
 
-      // On load, request notification permission quietly
-      (async ()=>{ if ('Notification' in window) await ensureNotificationPermission(); })();
+      // On load, do not prompt for notifications automatically; just sync checkbox state
+      if ('Notification' in window && enableNotif) { enableNotif.checked = (Notification.permission === 'granted'); }
 
       // Listen for notification updates from the global event bus and show new ones
       if (window.jarvisOn) {
@@ -755,7 +719,7 @@ Content-Type: application/json
   <script>
   (function(){
     // Permission + Notification handling
-    async function ensureNotificationPermission(){
+    window.ensureNotificationPermission = async function(){
       if (!('Notification' in window)) return false;
       if (Notification.permission === 'granted') return true;
       try {
@@ -860,21 +824,7 @@ Content-Type: application/json
       try{ if (sessionStorage.getItem('jarvis_wake_prompt_shown') === null) postLocationAndRunWake(); }catch(e){}
     });
 
-    // Initial state for the enableNotif checkbox
-    document.addEventListener('DOMContentLoaded', ()=>{
-      const cb = document.getElementById('enableNotif');
-      if (cb && 'Notification' in window) {
-        cb.checked = Notification.permission === 'granted';
-        cb.addEventListener('change', async ()=>{
-          if (cb.checked && Notification.permission !== 'granted') {
-            const ok = await ensureNotificationPermission();
-            cb.checked = ok;
-            if (!ok) alert('Notifications not granted. Please allow notifications from your browser settings.');
-          }
-        });
-      }
-      checkAndShowPermissions();
-    });
+
   })();
   </script>
 </body></html>
