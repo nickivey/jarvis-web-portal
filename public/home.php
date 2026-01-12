@@ -585,14 +585,21 @@ Content-Type: application/json
       let lastInputType = 'text';
 
       // Helper to append a chat message to the output log (with animation)
-      function appendMessage(text, who='jarvis'){
+      function appendMessage(content, who='jarvis'){
         if (!chatLog) return;
         const wrapper = document.createElement('div'); wrapper.className = 'msg ' + (who==='me' ? 'me' : 'jarvis');
         const bubble = document.createElement('div'); bubble.className = 'bubble';
-        const content = document.createElement('div'); content.textContent = text;
+        const body = document.createElement('div');
+        if (typeof content === 'string') {
+          body.textContent = content;
+        } else if (content instanceof Node) {
+          body.appendChild(content);
+        } else {
+          try { body.textContent = JSON.stringify(content); } catch(e){ body.textContent = String(content); }
+        }
         const meta = document.createElement('div'); meta.className = 'meta';
         const now = new Date(); meta.textContent = now.toISOString().replace('T',' ').replace('Z',' UTC');
-        bubble.appendChild(content); bubble.appendChild(meta); wrapper.appendChild(bubble);
+        bubble.appendChild(body); bubble.appendChild(meta); wrapper.appendChild(bubble);
         // mark new for animation
         wrapper.classList.add('new'); bubble.classList.add('new');
         chatLog.appendChild(wrapper);
@@ -600,6 +607,23 @@ Content-Type: application/json
         setTimeout(()=>{ wrapper.classList.remove('new'); bubble.classList.remove('new'); }, 900);
         // scroll to bottom
         chatLog.parentNode.scrollTop = chatLog.parentNode.scrollHeight;
+      }
+
+      // Helper to append an audio message (uses appendMessage)
+      function appendAudioMessage(blob, who='me', transcript=null){
+        try{
+          const container = document.createElement('div');
+          const audioEl = document.createElement('audio');
+          audioEl.controls = true; audioEl.preload = 'none'; audioEl.style.height='32px'; audioEl.style.width='240px';
+          audioEl.src = URL.createObjectURL(blob);
+          container.appendChild(audioEl);
+          if (transcript) {
+            const cap = document.createElement('div'); cap.style.marginTop='6px'; cap.style.fontStyle='italic'; cap.textContent = '"' + transcript + '"';
+            container.appendChild(cap);
+          }
+          appendMessage(container, who);
+          return container;
+        }catch(e){ return null; }
       }
 
       // Touch/click helper to avoid duplicate events on touch devices
@@ -629,13 +653,36 @@ Content-Type: application/json
         try { recognition.start(); } catch(e){}
       });
 
+      // Toggle / auto-start behavior for Voice-Only mode
+      if (voiceOnlyMode) {
+        voiceOnlyMode.addEventListener('change', async ()=>{
+          if (voiceOnlyMode.checked) {
+            if (!recognition) recognition = initRecognition();
+            if (!recognition) { alert('Voice recognition not supported in this browser.'); voiceOnlyMode.checked=false; return; }
+            const ok = await ensureMicrophonePermission(); if (!ok) { alert('Microphone not available or permission denied.'); voiceOnlyMode.checked=false; return; }
+            try { recognition.start(); recognizing = true; micBtn.classList.add('active'); await startRecorder(); } catch(e){ console.error('voice-only start failed',e); }
+          } else {
+            try{ if (recognition && recognizing) recognition.stop(); }catch(e){}
+            try{ stopRecorder(); }catch(e){}
+            micBtn.classList.remove('active');
+          }
+        });
+      }
+
       // Polling for locations (auto-refresh)
       let _locPoll = null;
+      let _locPostInterval = null;
       function startLocationPolling(){ if (_locPoll) clearInterval(_locPoll); _locPoll = setInterval(()=>{ try{ if (document.visibilityState==='visible') refreshLocations(); }catch(e){} }, 30000); }
       function stopLocationPolling(){ if (_locPoll) clearInterval(_locPoll); _locPoll = null; }
-      document.addEventListener('visibilitychange', ()=>{ if (document.visibilityState==='hidden') stopLocationPolling(); else startLocationPolling(); });
+
+      // Periodic poster to send current location to server (e.g., every 5 minutes)
+      function startLocationPoster(){ if (_locPostInterval) clearInterval(_locPostInterval); _locPostInterval = setInterval(async ()=>{ try{ if (document.visibilityState!=='visible') return; if (!enabled || !token || !navigator.geolocation) return; navigator.geolocation.getCurrentPosition(async (pos)=>{ try{ const body={lat:pos.coords.latitude, lon:pos.coords.longitude, accuracy:pos.coords.accuracy}; window.jarvisLastLoc = body; const r = await fetch('/api/location',{method:'POST', headers:{'Content-Type':'application/json','Authorization':'Bearer '+token}, body:JSON.stringify(body)}); const data = await r.json().catch(()=>null); if (data && data.weather && window.jarvisUpdateWeather) window.jarvisUpdateWeather(data); if (typeof refreshLocations === 'function') refreshLocations(); }catch(e){} }, ()=>{}, {enableHighAccuracy:true, timeout:8000}); }catch(e){} }, 300000); }
+      function stopLocationPoster(){ if (_locPostInterval) clearInterval(_locPostInterval); _locPostInterval = null; }
+
+      document.addEventListener('visibilitychange', ()=>{ if (document.visibilityState==='hidden') { stopLocationPolling(); stopLocationPoster(); } else { startLocationPolling(); startLocationPoster(); } });
       // start polling when page ready
       startLocationPolling();
+      startLocationPoster();
 
       // Permission change listeners: run wake briefing on geolocation permission grant
       if (navigator.permissions && navigator.permissions.query) {
@@ -649,7 +696,7 @@ Content-Type: application/json
 
 
       // MediaRecorder helpers to capture raw audio and upload to the server
-      let _mediaStream = null, _mediaRecorder = null, _audioChunks = [], _lastTranscript = null, _voiceContextId = null;
+      let _mediaStream = null, _mediaRecorder = null, _audioChunks = [], _lastTranscript = null, _voiceContextId = null, _pendingVoiceCmd = null;
       async function startRecorder(){
         if (_mediaRecorder && _mediaRecorder.state !== 'inactive') return true;
         if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return false;
@@ -661,13 +708,32 @@ Content-Type: application/json
           _voiceContextId = crypto.randomUUID ? crypto.randomUUID() : ('vc-'+Date.now()+'-'+Math.random());
           _mediaRecorder.ondataavailable = (evt)=>{ if (evt && evt.data) _audioChunks.push(evt.data); };
           _mediaRecorder.onstop = async ()=>{
+            let blob = null;
             try{
-              const blob = new Blob(_audioChunks, { type: _audioChunks[0] ? _audioChunks[0].type || 'audio/webm' : 'audio/webm' });
-              // send blob to server with transcript (if present)
-              try { await sendAudioBlob(blob, _lastTranscript, Math.floor((blob.size/16000)), _voiceContextId); } catch(e){ console.warn('upload voice failed',e); }
+              blob = new Blob(_audioChunks, { type: _audioChunks[0] ? _audioChunks[0].type || 'audio/webm' : 'audio/webm' });
+              // Immediately add audio element to chat for user to see/play
+              try{
+                const container = appendAudioMessage(blob, 'me', _lastTranscript);
+                // Upload in background; update UI when done
+                try {
+                  const resp = await sendAudioBlob(blob, _lastTranscript, Math.floor((blob.size/16000)), _voiceContextId);
+                  if (resp && resp.ok && resp.id) {
+                    const link = document.createElement('a'); link.href = '/api/voice/' + resp.id + '/download'; link.target='_blank'; link.textContent = 'Download'; link.style.marginLeft='8px';
+                    const note = document.createElement('div'); note.className='muted'; note.style.marginTop='6px'; note.textContent = 'Uploaded • id: ' + resp.id; note.appendChild(link);
+                    if (container) container.appendChild(note);
+                    // If there's a pending voice command (voice-only mode), send it now with voice_input_id
+                    if (_pendingVoiceCmd && _pendingVoiceCmd.text) {
+                      try{ await sendCommand(_pendingVoiceCmd.text, 'voice', { voice_input_id: resp.id, voice_context_id: _pendingVoiceCmd.contextId }); }catch(e){ console.error('sendCommand after upload failed', e); }
+                      _pendingVoiceCmd = null;
+                    }
+                  } else {
+                    const note = document.createElement('div'); note.className='muted'; note.style.marginTop='6px'; note.textContent = 'Upload failed'; if (container) container.appendChild(note);
+                  }
+                } catch(e){ console.warn('upload voice failed',e); const note = document.createElement('div'); note.className='muted'; note.style.marginTop='6px'; note.textContent = 'Upload failed'; if (container) container.appendChild(note); }
+              }catch(e){}
             }catch(e){}
             try{ if (_mediaStream) { _mediaStream.getTracks().forEach(t=>t.stop()); _mediaStream=null; } }catch(e){}
-            _mediaRecorder = null; _audioChunks=[]; _lastTranscript=null; _voiceContextId=null;
+            _mediaRecorder = null; _audioChunks=[]; _lastTranscript=null; _voiceContextId=null; _pendingVoiceCmd = null;
           };
           _mediaRecorder.start();
           return true;
@@ -722,13 +788,11 @@ Content-Type: application/json
             // If empty after strip, maybe they just said "Jarvis?" - we can still send it or prompt
             if (voiceOnlyMode && voiceOnlyMode.checked) {
               appendMessage(text, 'me'); // Show full text with Jarvis
-              try { 
-                await sendCommand(cleanText || text, 'voice', { voice_context_id: _voiceContextId }); 
-              } catch(e) {}
-              // Restarting recorder context if needed happens automatically via onend/start loop if we were truly continuous, 
-              // but here we might want to stop/save this chunk and restart.
-              // Current implementation: One command per session for simplicity in saving files.
-              r.stop(); 
+              // Queue command to be sent after the recorded audio uploads
+              _pendingVoiceCmd = { text: cleanText || text, contextId: _voiceContextId };
+              // Stop recognition and recorder — onstop will upload and send the queued command
+              try { stopRecorder(); } catch(e){}
+              r.stop();
             } else {
               if(!msgInput.value) msgInput.value = text;
               else msgInput.value += ' ' + text;
@@ -742,12 +806,22 @@ Content-Type: application/json
         r.onend = () => { 
           recognizing = false; 
           micBtn.classList.remove('active'); 
-          try{ stopRecorder(); }catch(e){} 
+          // If voice-only is enabled and we don't have a pending upload, auto-restart to keep listening for the wake word
+          if (voiceOnlyMode && voiceOnlyMode.checked && !_pendingVoiceCmd) {
+            setTimeout(()=>{
+              try{ r.start(); recognizing = true; micBtn.classList.add('active'); startRecorder().catch(()=>{}); }catch(e){}
+            }, 500);
+            return;
+          }
+          try{ if (!voiceOnlyMode || !voiceOnlyMode.checked) stopRecorder(); }catch(e){}
         };
         r.onerror = (ev) => { 
           recognizing = false; 
           micBtn.classList.remove('active'); 
-          try{ stopRecorder(); }catch(e){} 
+          try{ stopRecorder(); }catch(e){}
+          if (voiceOnlyMode && voiceOnlyMode.checked) {
+            setTimeout(()=>{ try{ r.start(); recognizing=true; micBtn.classList.add('active'); startRecorder().catch(()=>{}); }catch(e){} }, 1000);
+          }
         };
         return r;
       }
@@ -866,12 +940,17 @@ Content-Type: application/json
             return data2;
           }
 
-          appendMessage('Failed to send message', 'jarvis');
+          let errText = 'Failed to send message';
+          if (data2 && (data2.error || data2.message)) errText += ': ' + (data2.error || data2.message);
+          else if (data2 && typeof data2 === 'object') errText += ': ' + JSON.stringify(data2);
+          appendMessage(errText, 'jarvis');
+          console.error('message send failed', data2);
           return null;
         } catch(e){
           // Remove processing indicator
           if (processingMsg && processingMsg.parentNode) processingMsg.parentNode.removeChild(processingMsg);
-          appendMessage('Failed to process command', 'jarvis');
+          appendMessage('Failed to process command: '+(e && e.message ? e.message : String(e)), 'jarvis');
+          console.error('sendCommand error', e);
           return null;
         } finally {
           if (window.jarvisHideLoader) jarvisHideLoader();
