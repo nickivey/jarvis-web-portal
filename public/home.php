@@ -187,19 +187,41 @@ $phone = (string)($dbUser['phone_e164'] ?? '');
 
       <!-- 1 -->
       <div class="card">
-        <h3>Connection Status</h3>
-        <p class="muted">Slack: <?php echo jarvis_setting_get('SLACK_BOT_TOKEN') || jarvis_setting_get('SLACK_APP_TOKEN') || getenv('SLACK_BOT_TOKEN') || getenv('SLACK_APP_TOKEN') ? 'Configured' : 'Not configured'; ?></p>
-        <p class="muted">Instagram (Basic Display): <?php echo $igToken ? 'Connected' : 'Not connected'; ?></p>
-        <p class="muted">MySQL: <?php echo jarvis_pdo() ? 'Connected' : 'Not configured / unavailable'; ?></p>
-        <p class="muted">REST Base: <span class="badge">/api</span></p>
-        <p class="muted">Notifications: <span class="badge"><?php echo (int)$notifCount; ?> unread</span></p>
-        <p class="muted">Weather: <span id="jarvisWeather"><?php if ($lastWeather) { echo htmlspecialchars($lastWeather['desc'] . ' • ' . ($lastWeather['temp_c'] !== null ? $lastWeather['temp_c'].'°C' : '')); } else { echo ($weatherConfigured ? '(no weather data for current location)' : '(OPENWEATHER_API_KEY not configured; add it in Admin > Settings)'); } ?></span></p>
-        <?php if ($wakePrompt): ?>
-          <div class="terminal" style="margin-top:12px">
-            <div class="term-title">JARVIS Wake Prompt</div>
-            <pre><?php echo htmlspecialchars($wakePrompt); ?></pre>
+        <h3>Audit & Notifications</h3>
+        <p class="muted">All logins, actions, requests, and JARVIS responses are timestamped and stored in MySQL.</p>
+
+        <div class="terminal" style="margin-top:10px">
+          <div class="term-title">Recent Notifications</div>
+          <div class="term-body" id="notifList" style="max-height:140px; overflow:auto">
+            <?php if(!$notifs): ?>
+              <p class="muted">No notifications yet.</p>
+            <?php else: ?>
+              <?php foreach($notifs as $n): ?>
+                <div class="muted" style="margin-bottom:8px">
+                  <b><?php echo htmlspecialchars($n['title']); ?></b>
+                  <div><?php echo htmlspecialchars((string)($n['body'] ?? '')); ?></div>
+                  <div class="meta"><?php echo htmlspecialchars($n['created_at']); ?><?php echo ((int)$n['is_read']===0) ? ' • UNREAD' : ''; ?></div>
+                </div>
+              <?php endforeach; ?>
+            <?php endif; ?>
           </div>
-        <?php endif; ?>
+        </div>
+
+        <div class="terminal" style="margin-top:10px">
+          <div class="term-title">Recent Audit Events</div>
+          <div class="term-body" style="max-height:140px; overflow:auto">
+            <?php if(!$auditItems): ?>
+              <p class="muted">No audit events yet.</p>
+            <?php else: ?>
+              <?php foreach($auditItems as $a): ?>
+                <div class="muted" style="margin-bottom:8px">
+                  <b><?php echo htmlspecialchars($a['action']); ?></b> <?php echo htmlspecialchars((string)($a['entity'] ?? '')); ?>
+                  <div class="meta"><?php echo htmlspecialchars($a['created_at']); ?></div>
+                </div>
+              <?php endforeach; ?>
+            <?php endif; ?>
+          </div>
+        </div>
       </div>
 
       <div class="card" id="weatherCard">
@@ -302,41 +324,19 @@ Content-Type: application/json
 
       <!-- 6 (BOTTOM RIGHT) -->
       <div class="card">
-        <h3>Audit & Notifications</h3>
-        <p class="muted">All logins, actions, requests, and JARVIS responses are timestamped and stored in MySQL.</p>
-
-        <div class="terminal" style="margin-top:10px">
-          <div class="term-title">Recent Notifications</div>
-          <div class="term-body" id="notifList" style="max-height:140px; overflow:auto">
-            <?php if(!$notifs): ?>
-              <p class="muted">No notifications yet.</p>
-            <?php else: ?>
-              <?php foreach($notifs as $n): ?>
-                <div class="muted" style="margin-bottom:8px">
-                  <b><?php echo htmlspecialchars($n['title']); ?></b>
-                  <div><?php echo htmlspecialchars((string)($n['body'] ?? '')); ?></div>
-                  <div class="meta"><?php echo htmlspecialchars($n['created_at']); ?><?php echo ((int)$n['is_read']===0) ? ' • UNREAD' : ''; ?></div>
-                </div>
-              <?php endforeach; ?>
-            <?php endif; ?>
+        <h3>Connection Status</h3>
+        <p class="muted">Slack: <?php echo jarvis_setting_get('SLACK_BOT_TOKEN') || jarvis_setting_get('SLACK_APP_TOKEN') || getenv('SLACK_BOT_TOKEN') || getenv('SLACK_APP_TOKEN') ? 'Configured' : 'Not configured'; ?></p>
+        <p class="muted">Instagram (Basic Display): <?php echo $igToken ? 'Connected' : 'Not connected'; ?></p>
+        <p class="muted">MySQL: <?php echo jarvis_pdo() ? 'Connected' : 'Not configured / unavailable'; ?></p>
+        <p class="muted">REST Base: <span class="badge">/api</span></p>
+        <p class="muted">Notifications: <span class="badge"><?php echo (int)$notifCount; ?> unread</span></p>
+        <p class="muted">Weather: <span id="jarvisWeather"><?php if ($lastWeather) { echo htmlspecialchars($lastWeather['desc'] . ' • ' . ($lastWeather['temp_c'] !== null ? $lastWeather['temp_c'].'°C' : '')); } else { echo ($weatherConfigured ? '(no weather data for current location)' : '(OPENWEATHER_API_KEY not configured; add it in Admin > Settings)'); } ?></span></p>
+        <?php if ($wakePrompt): ?>
+          <div class="terminal" style="margin-top:12px">
+            <div class="term-title">JARVIS Wake Prompt</div>
+            <pre><?php echo htmlspecialchars($wakePrompt); ?></pre>
           </div>
-        </div>
-
-        <div class="terminal" style="margin-top:10px">
-          <div class="term-title">Recent Audit Events</div>
-          <div class="term-body" style="max-height:140px; overflow:auto">
-            <?php if(!$auditItems): ?>
-              <p class="muted">No audit events yet.</p>
-            <?php else: ?>
-              <?php foreach($auditItems as $a): ?>
-                <div class="muted" style="margin-bottom:8px">
-                  <b><?php echo htmlspecialchars($a['action']); ?></b> <?php echo htmlspecialchars((string)($a['entity'] ?? '')); ?>
-                  <div class="meta"><?php echo htmlspecialchars($a['created_at']); ?></div>
-                </div>
-              <?php endforeach; ?>
-            <?php endif; ?>
-          </div>
-        </div>
+        <?php endif; ?>
       </div>
     </div>
   </div>
