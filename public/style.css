@@ -189,3 +189,27 @@ code, pre{background:rgba(2,7,18,.55);border:1px solid rgba(30,120,255,.18);bord
 .table th,.table td{border-bottom:1px solid rgba(148,163,184,.15);padding:10px;vertical-align:top;text-align:left}
 .table thead th{color:#e0f2fe;font-weight:700}
 .table code{display:block;max-width:520px;white-space:pre-wrap;word-break:break-word}
+
+/* Mobile-friendly tweaks and subtle animations */
+@media (prefers-reduced-motion: no-preference) {
+  .card{opacity:0;transform:translateY(8px);animation: cardIn .42s cubic-bezier(.16,.84,.44,1) forwards}
+  .hero-ill{transform-origin:center;animation: floatIll 8s ease-in-out infinite}
+  .btn{transition:transform .12s ease, box-shadow .12s ease}
+  .btn:active{transform:scale(.98)}
+}
+@keyframes cardIn{0%{opacity:0;transform:translateY(8px)}100%{opacity:1;transform:translateY(0)}}
+@keyframes floatIll{0%{transform:translateY(0)}50%{transform:translateY(-6px)}100%{transform:translateY(0)}}
+
+/* Increase form tap targets on small screens */
+@media(max-width:780px){
+  .card{padding:18px;border-radius:14px}
+  input,textarea{padding:14px 14px;font-size:16px}
+  .btn{width:100%;justify-content:center;padding:12px 16px}
+  .nav-links{font-size:15px}
+}
+
+/* Smooth nav open/close */
+.navbar nav{transition:max-height .22s ease, opacity .18s ease}
+.navbar nav{max-height:0;opacity:0;overflow:hidden}
+.navbar.nav-open nav{max-height:240px;opacity:1}
+

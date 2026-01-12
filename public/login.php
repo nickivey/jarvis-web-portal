@@ -4,17 +4,23 @@ require_once __DIR__ . '/../db.php';
 if (isset($_SESSION['username'])) { header('Location: home.php'); exit; }
 
 $errors=[];
+$showResendPrompt = false;
+$resendEmail = '';
 if ($_SERVER['REQUEST_METHOD']==='POST') {
-  $u=trim($_POST['username']??'');
+  $u=trim((string)($_POST['email']??''));
   $p=(string)($_POST['password']??'');
-  $user = $u ? jarvis_user_by_username($u) : null;
+  $user = $u ? jarvis_user_by_email($u) : null;
   if (!$u || !$p || !$user || !password_verify($p, $user['password_hash'] ?? '')) {
-    $errors[]='Invalid username or password.';
-    jarvis_audit($user['id'] ?? null, 'LOGIN_FAIL', 'auth', ['username'=>$u]);
+    $errors[]='Invalid email or password.';
+    jarvis_audit($user['id'] ?? null, 'LOGIN_FAIL', 'auth', ['email'=>$u]);
   } elseif (empty($user['email_verified_at'])) {
     $errors[]='Please confirm your email before logging in.';
+    // Prompt the UI to offer resend (preserve the entered email)
+    $showResendPrompt = true;
+    $resendEmail = $u;
   } else {
-    $_SESSION['username']=$u;
+    // Preserve username for display throughout the app, but authenticate by email
+    $_SESSION['username']=$user['username'];
     $_SESSION['user_id']=(int)$user['id'];
     jarvis_update_last_login((int)$user['id']);
 
@@ -69,8 +75,8 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
       <p class="muted" style="margin-top:-4px">If you just registered, confirm your email to activate access.</p>
       <?php if($errors):?><div class="error"><?php foreach($errors as $e){echo '<p>'.htmlspecialchars($e).'</p>';}?></div><?php endif;?>
       <form method="post" id="loginForm">
-        <label>Username</label>
-        <input name="username" required />
+        <label>Email</label>
+        <input name="email" required value="<?php echo htmlspecialchars($u ?? '', ENT_QUOTES); ?>" />
         <label>Password</label>
         <input type="password" name="password" required />
         <input type="hidden" name="lat" id="lat">
@@ -78,6 +84,16 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
         <input type="hidden" name="accuracy" id="accuracy">
         <button class="btn" type="submit">Enter JARVIS</button>
       </form>
+
+      <?php if (!empty($showResendPrompt) && $resendEmail): ?>
+        <div style="margin-top:12px;text-align:center">
+          <p class="muted">Didn't receive your confirmation email?</p>
+          <form method="post" action="resend_confirmation.php" style="display:inline-block">
+            <input type="hidden" name="identifier" value="<?php echo htmlspecialchars($resendEmail, ENT_QUOTES); ?>">
+            <button class="btn secondary" type="submit">Resend confirmation email</button>
+          </form>
+        </div>
+      <?php endif; ?>
 
       <script>
         (function(){
@@ -115,7 +131,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
         <?php endif; ?>
       </div>
 
-      <div class="nav-links"><a href="register.php">Create an account</a> | <a href="forgot_password.php">Forgot password?</a> | <a href="resend_confirmation.php">Resend confirmation email</a></div>
+      <div class="nav-links"><a href="register.php">Create an account</a> | <a href="forgot_password.php">Forgot password?</a></div>
     </div>
   </div>
       <script src="navbar.js"></script>

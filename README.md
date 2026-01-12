@@ -86,6 +86,29 @@ php scripts/create-admin.php <email> [<display_name>]
 
 **Security note:** Values are editable in the Admin UI for convenience; avoid pasting secrets you don't want persisted in plain text and rotate keys that may have been leaked.
 
+## Email delivery (SendGrid)
+
+JARVIS uses SendGrid for email delivery (account confirmation, password resets, etc.). To enable email:
+
+1. **Get a SendGrid API Key** from [SendGrid](https://app.sendgrid.com/settings/api_keys)
+2. **Set the API key** in the database:
+   ```bash
+   php scripts/set-secret.php SENDGRID_API_KEY "SG.your-api-key-here"
+   ```
+3. **Verify your sender email/domain** in SendGrid:
+   - Single Sender: [SendGrid Sender Authentication](https://app.sendgrid.com/settings/sender_auth/senders)
+   - Domain Authentication (recommended): [Domain Settings](https://app.sendgrid.com/settings/sender_auth)
+4. **Update MAIL_FROM** in the `env` file to match your verified email:
+   ```bash
+   MAIL_FROM="jarvis@yourdomain.com"
+   ```
+5. **Test email delivery**:
+   ```bash
+   php scripts/test-email.php your-email@example.com
+   ```
+
+**Important**: SendGrid requires sender verification. If emails aren't sending, check [SENDGRID_SETUP.md](SENDGRID_SETUP.md) for detailed troubleshooting.
+
 ## Location logging & weather
 
 - Browser location logging is enabled per-user in **Preferences** (toggle "Enable browser location logging"). The browser will send location to `/api/location` when visiting the portal and will also include location at sign-in if you allow the browser to share location.
@@ -102,7 +125,7 @@ The app will fetch weather for the most recent location and show a short summary
 ### Auth
 
 * `POST /api/auth/register` JSON: `{ "username": "nick", "email": "nick@example.com", "password": "...", "phone_e164": "+1555..." }`
-* `POST /api/auth/login` JSON: `{ "username": "nick", "password": "..." }` → `{ token }`
+* `POST /api/auth/login` JSON: `{ "email": "nick@example.com", "password": "..." }` → `{ token }`
 
 ### User
 
