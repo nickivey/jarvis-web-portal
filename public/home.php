@@ -695,7 +695,7 @@ Content-Type: application/json
       }
       function draw(){
         ctx.clearRect(0,0,w,h);
-        // soft glow trail
+        // soft glow trail overlay to keep motion subtle
         ctx.fillStyle = 'rgba(2,7,18,0.06)'; ctx.fillRect(0,0,w,h);
         for (let p of particles){
           ctx.globalAlpha = Math.max(0, Math.min(1, p.alpha));
@@ -711,8 +711,12 @@ Content-Type: application/json
             ctx.closePath();
             ctx.fill();
           }
+          // halo glow
+          ctx.globalAlpha = Math.max(0, Math.min(0.25, p.alpha*0.25));
+          ctx.fillStyle = 'rgba(0,212,255,0.15)';
+          ctx.beginPath(); ctx.arc(p.x, p.y, Math.max(1.5, p.size*1.6), 0, Math.PI*2); ctx.fill();
+          ctx.globalAlpha = 1;
         }
-        ctx.globalAlpha = 1;
       }
       let last = performance.now();
       function loop(now){ const dt = Math.min(0.06, (now - last)/1000); last = now; ambient(); step(dt); draw(); requestAnimationFrame(loop); }
@@ -732,6 +736,12 @@ Content-Type: application/json
           const x = (r.left + r.right)/2; const y = r.top; spawn(x, y, { count: 26, power: 1.4, size: 1.2, life: 1.6 });
         });
       } catch(e){}
+
+      // Cursor sparkle: tiny trail follows pointer
+      (function(){
+        let lastX=0,lastY=0; const trail = (ev)=>{ const x = ev.clientX, y = ev.clientY; if (!x && !y) return; const speed = Math.hypot(x-lastX,y-lastY); lastX=x; lastY=y; spawn(x, y, { count: Math.min(8, Math.max(2, Math.floor(speed*0.05))), power: 0.6, size: 0.8, life: 0.9 }); };
+        window.addEventListener('pointermove', trail, { passive: true });
+      })();
 
       // Wake prompt sparkle
       try {
