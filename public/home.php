@@ -38,13 +38,22 @@ try {
       $out = jarvis_compose_briefing($userId, 'wake');
       $wakePrompt = (string)$out['text'];
       $wakeCards = (array)($out['cards'] ?? []);
-      jarvis_log_command($userId, 'wake', null, $wakePrompt, ['away_seconds'=>$awaySeconds,'cards'=>$wakeCards]);
-      jarvis_notify($userId, 'info', 'Welcome back', 'Wake sequence completed. Say “briefing” for a full report.', $wakeCards);
-      jarvis_audit($userId, 'WAKE_PROMPT', 'system', ['away_seconds'=>$awaySeconds]);
+       // Log the wake greeting as a system command/response pair
+       jarvis_log_command($userId, 'wake', 'User login after 6+ hours away', $wakePrompt, ['away_seconds'=>$awaySeconds,'cards'=>$wakeCards]);
+       // Log to audit as a SYSTEM_WAKE_GREETING with full details
+       jarvis_audit($userId, 'SYSTEM_WAKE_GREETING', 'system', [
+         'away_seconds'=>$awaySeconds,
+         'message'=>$wakePrompt,
+         'notifications_unread'=>(int)($wakeCards['notifications_unread'] ?? 0),
+         'slack_status'=>(string)($wakeCards['integrations']['slack'] ?? 'unknown'),
+         'instagram_status'=>(string)($wakeCards['integrations']['instagram'] ?? 'unknown'),
+       ]);
+       // Create notification with comprehensive greeting
+       jarvis_notify($userId, 'info', 'Welcome back! 👋 Wake sequence initiated', $wakePrompt, $wakeCards);
     }
   }
 } catch (Throwable $e) {
-  // non-fatal
+  // non-fatal: $e->getMessage() could be logged if needed
 }
 
 $success = ''; $error = '';
@@ -284,7 +293,6 @@ $phone = (string)($dbUser['phone_e164'] ?? '');
             <?php endif; ?>
           </div>
           <form method="post" class="chatinput" id="chatForm">
-            <input name="channel" placeholder="Channel ID (optional)" value="<?php echo htmlspecialchars($defaultChannel); ?>" />
             <div style="display:flex;gap:8px;align-items:flex-end;">
               <textarea name="message" id="messageInput" placeholder="Type a message to Slack..." style="flex:1"></textarea>
               <div style="display:flex;flex-direction:column;gap:8px;">
@@ -312,9 +320,7 @@ POST /api/location
 Example: send a Slack message
 Content-Type: application/json
 {
-  "message": "Hello from .NET",
-  "message": "Hello from .NET",
-  "channel": "<?php echo htmlspecialchars(getenv('SLACK_CHANNEL_ID') ?: ''); ?>"
+  "message": "Hello from .NET"
 }</code></pre>
       </div>
 
@@ -449,6 +455,7 @@ Content-Type: application/json
     })();
   </script>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="navbar.js"></script>
     // ----------------------------
     // Voice input / output + Notifications
     // ----------------------------
@@ -461,6 +468,7 @@ Content-Type: application/json
       const enableNotif = document.getElementById('enableNotif');
       let recognizing = false;
       let recognition = null;
+      let lastInputType = 'text';
 
       // Request Notification permission up front (user gesture recommended)
       async function ensureNotificationPermission(){
@@ -483,11 +491,15 @@ Content-Type: application/json
         r.onresult = (evt) => {
           const text = evt.results[0][0].transcript || '';
           msgInput.value = text;
+          lastInputType = 'voice';
         };
         r.onend = () => { recognizing = false; micBtn.classList.remove('active'); };
         r.onerror = () => { recognizing = false; micBtn.classList.remove('active'); };
         return r;
       }
+
+      // When user types, mark type as text
+      msgInput.addEventListener('input', ()=>{ lastInputType = 'text'; });
 
       micBtn.addEventListener('click', async ()=>{
         if (recognizing) {
@@ -560,7 +572,6 @@ Content-Type: application/json
       if (chatForm) chatForm.addEventListener('submit', async (ev) => {
         ev.preventDefault();
         const msg = (msgInput.value || '').trim();
-        const chan = chatForm.querySelector('input[name="channel"]').value || '';
         if (!msg) return;
         appendMessage(msg, 'me');
         msgInput.value = '';
@@ -568,7 +579,7 @@ Content-Type: application/json
         // Call /api/command
         try {
           const r = await fetch('/api/command', {
-            method: 'POST', headers: { 'Content-Type':'application/json', 'Authorization': token ? 'Bearer '+token : '' }, body: JSON.stringify({ text: msg })
+            method: 'POST', headers: { 'Content-Type':'application/json', 'Authorization': token ? 'Bearer '+token : '' }, body: JSON.stringify({ text: msg, type: lastInputType })
           });
           const data = await r.json().catch(()=>null);
           if (data && typeof data.jarvis_response === 'string' && data.jarvis_response.trim() !== ''){
@@ -579,14 +590,14 @@ Content-Type: application/json
           }
         } catch(e){}
 
-        // Fallback: send to Slack via /api/messages if JWT available
+        // Fallback: send to Slack via /api/messages if JWT available (uses default channel)
         try {
           const r2 = await fetch('/api/messages', {
-            method: 'POST', headers: { 'Content-Type':'application/json', 'Authorization': token ? 'Bearer '+token : '' }, body: JSON.stringify({ message: msg, channel: chan })
+            method: 'POST', headers: { 'Content-Type':'application/json', 'Authorization': token ? 'Bearer '+token : '' }, body: JSON.stringify({ message: msg })
           });
           const data2 = await r2.json().catch(()=>null);
           if (data2 && data2.ok) {
-            appendMessage('Sent to Slack ' + (chan || 'default channel'), 'jarvis');
+            appendMessage('Sent to Slack (default channel)', 'jarvis');
             if (enableNotif.checked && Notification.permission === 'granted') showNotification('Slack message sent: '+msg);
           } else {
             appendMessage('Failed to send to Slack', 'jarvis');

@@ -100,4 +100,5 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
       <div class="nav-links"><a href="login.php">Already have an account? Log in</a></div>
     </div>
   </div>
+  <script src="navbar.js"></script>
 </body></html>

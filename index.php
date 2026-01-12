@@ -140,17 +140,21 @@ if ($path === '/api/command') {
   [$userId, $u] = require_jwt_user();
   $in = jarvis_json_input();
   $text = trim((string)($in['text'] ?? ''));
+  $inputType = trim((string)($in['type'] ?? 'text')); // text or voice
   if ($text === '') jarvis_respond(400, ['error'=>'text required']);
 
   $prefs = jarvis_preferences($userId);
   $lower = strtolower($text);
   $cards = [];
+  $commandType = 'user_command';
+  
   if ($lower === 'briefing' || $lower === '/brief') {
     $out = jarvis_compose_briefing($userId, 'briefing');
     $response = (string)$out['text'];
     $cards = (array)($out['cards'] ?? []);
+    $commandType = 'briefing';
     jarvis_log_command($userId, 'briefing', $text, $response, $cards);
-    jarvis_audit($userId, 'COMMAND', 'briefing', null);
+    jarvis_audit($userId, 'COMMAND_BRIEFING', 'command', ['type'=>$inputType, 'question'=>$text, 'answer'=>$response]);
     jarvis_log_api_request($userId, 'desktop', $path, $method, $in, ['jarvis_response'=>$response,'cards'=>$cards], 200);
     jarvis_respond(200, ['jarvis_response'=>$response, 'cards'=>$cards]);
   }
@@ -164,14 +168,17 @@ if ($path === '/api/command') {
       $response = "Instagram check: " . (string)($ig['note'] ?? 'unable to check');
     }
     $cards = ['instagram' => $ig];
+    $commandType = 'instagram_check';
     jarvis_log_command($userId, 'integration', $text, $response, $cards);
-    jarvis_audit($userId, 'COMMAND', 'instagram_check', ['ok'=>(bool)($ig['ok'] ?? false)]);
+    jarvis_audit($userId, 'COMMAND_INSTAGRAM_CHECK', 'command', ['type'=>$inputType, 'question'=>$text, 'answer'=>$response, 'ok'=>(bool)($ig['ok'] ?? false)]);
     jarvis_log_api_request($userId, 'desktop', $path, $method, $in, ['jarvis_response'=>$response,'cards'=>$cards], 200);
     jarvis_respond(200, ['jarvis_response'=>$response, 'cards'=>$cards]);
   }
 
   $response = "Command not recognized. Try: briefing, check ig.";
+  $commandType = 'unrecognized';
   jarvis_log_command($userId, 'system', $text, $response, null);
+  jarvis_audit($userId, 'COMMAND_UNRECOGNIZED', 'command', ['type'=>$inputType, 'question'=>$text, 'answer'=>$response]);
   jarvis_log_api_request($userId, 'desktop', $path, $method, $in, ['jarvis_response'=>$response], 200);
   jarvis_respond(200, ['jarvis_response'=>$response]);
 }
@@ -200,9 +207,14 @@ if ($path === '/api/messages') {
   [$userId, $u] = require_jwt_user();
   $in = jarvis_json_input();
   $message = trim((string)($in['message'] ?? ''));
-  $channel = trim((string)($in['channel'] ?? getenv('SLACK_CHANNEL_ID') ?? ''));
+  $channel = trim((string)($in['channel'] ?? ''));
   if ($message === '') jarvis_respond(400, ['error' => 'message is required']);
-  if ($channel === '') jarvis_respond(400, ['error' => 'channel is required']);
+  if ($channel === '') {
+    $prefs = jarvis_preferences($userId);
+    $channel = trim((string)($prefs['default_slack_channel'] ?? ''));
+    if ($channel === '') $channel = trim((string)(getenv('SLACK_CHANNEL_ID') ?: ''));
+    if ($channel === '') jarvis_respond(400, ['error' => 'default Slack channel not configured']);
+  }
 
   $token = jarvis_setting_get('SLACK_BOT_TOKEN') ?: jarvis_setting_get('SLACK_APP_TOKEN') ?: getenv('SLACK_BOT_TOKEN') ?: getenv('SLACK_APP_TOKEN');
   if (!$token) jarvis_respond(500, ['error' => 'SLACK is not configured (missing SLACK_APP_TOKEN / SLACK_BOT_TOKEN)']);
