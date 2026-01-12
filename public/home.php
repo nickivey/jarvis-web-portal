@@ -455,6 +455,16 @@ Content-Type: application/json
         return r;
       }
 
+      // Ensure microphone permission is requested when needed
+      async function ensureMicrophonePermission(){
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return false;
+        try {
+          const s = await navigator.mediaDevices.getUserMedia({ audio: true });
+          s.getTracks().forEach(t=>t.stop());
+          return true;
+        } catch(e){ return false; }
+      }
+
       // When user types, mark type as text
       msgInput.addEventListener('input', ()=>{ lastInputType = 'text'; });
 
@@ -464,15 +474,13 @@ Content-Type: application/json
           recognizing = false; micBtn.classList.remove('active');
           return;
         }
-        // ask for microphone by starting recognition/getUserMedia
-        if (!recognition) {
-          recognition = initRecognition();
-        }
-        if (!recognition) {
-          // Fallback: prompt for getUserMedia permission so user can record externally
-          try { await navigator.mediaDevices.getUserMedia({audio:true}); }
-          catch(e){ alert('Microphone not available or permission denied.'); return; }
-        }
+        // Create recognition if needed
+        if (!recognition) recognition = initRecognition();
+
+        // Ensure microphone permissions
+        const ok = await ensureMicrophonePermission();
+        if (!ok) { alert('Microphone not available or permission denied. Please allow microphone access in your browser.'); return; }
+
         try {
           if (recognition) recognition.start();
           recognizing = true; micBtn.classList.add('active');
@@ -493,7 +501,7 @@ Content-Type: application/json
             if (window.jarvisShowLoader) jarvisShowLoader();
             const isBrief = (text || '').trim().toLowerCase() === 'briefing' || (text || '').trim().toLowerCase() === '/brief';
             const data = await (window.jarvisApi ? window.jarvisApi.post('/api/command', { text, type: 'voice' }, { cacheTTL: isBrief ? 30000 : null }) : (async ()=>{ const r=await fetch('/api/command',{method:'POST',headers:{'Content-Type':'application/json','Authorization': token? 'Bearer '+token : ''},body:JSON.stringify({text,type:'voice'})}); return r.json(); })());
-            if (data && typeof data.jarvis_response === 'string' && data.jarvis_response.trim() !== ''){
+                if (data && typeof data.jarvis_response === 'string' && data.jarvis_response.trim() !== ''){
               appendMessage(data.jarvis_response, 'jarvis');
               speakText(data.jarvis_response);
               showNotification(data.jarvis_response);
@@ -502,14 +510,10 @@ Content-Type: application/json
             }
           } catch(e) {}
           finally { if (window.jarvisHideLoader) jarvisHideLoader(); }
-        const content = document.createElement('div'); content.textContent = text;
-        const meta = document.createElement('div'); meta.className='meta';
-        const now = new Date(); meta.textContent = now.toISOString().replace('T',' ').replace('Z',' UTC');
-        bubble.appendChild(content); bubble.appendChild(meta); wrapper.appendChild(bubble);
-        if (chatLog) chatLog.appendChild(wrapper);
-        // scroll
+        };
+        // scroll chat to bottom
         if (chatLog) chatLog.parentNode.scrollTop = chatLog.parentNode.scrollHeight;
-      }
+      });
 
       // Speak text using server-side TTS endpoint or fallback to Web SpeechSynthesis
       async function speakText(text){
