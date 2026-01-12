@@ -52,6 +52,11 @@ function jarvis_init_schema(PDO $pdo): void {
   foreach ($stmts as $stmt) {
     $pdo->exec($stmt);
   }
+
+  // Ensure new columns/tables exist even if table already created earlier
+  try { $pdo->exec('ALTER TABLE messages ADD COLUMN IF NOT EXISTS thread_id BIGINT UNSIGNED NULL'); } catch (Throwable $e) {}
+  try { $pdo->exec('ALTER TABLE messages ADD COLUMN IF NOT EXISTS edited_at DATETIME NULL'); } catch (Throwable $e) {}
+  try { $pdo->exec('CREATE TABLE IF NOT EXISTS message_reactions (\n    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,\n    message_id BIGINT UNSIGNED NOT NULL,\n    user_id BIGINT UNSIGNED NOT NULL,\n    type VARCHAR(32) NOT NULL,\n    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,\n    PRIMARY KEY(id),\n    UNIQUE KEY ux_msg_reaction (message_id, user_id, type),\n    KEY ix_msg_react_message (message_id),\n    KEY ix_msg_react_user (user_id),\n    CONSTRAINT fk_msg_react_message FOREIGN KEY(message_id) REFERENCES messages(id) ON DELETE CASCADE,\n    CONSTRAINT fk_msg_react_user FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE\n  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;'); } catch (Throwable $e) {}
 }
 
 function jarvis_now_sql(): string {
@@ -215,6 +220,8 @@ function jarvis_notify(int $userId, string $type, string $title, ?string $body=n
         ':b' => $body,
         ':m' => $meta ? json_encode($meta) : null,
       ]);
+  // Best-effort push delivery to registered devices
+  try { jarvis_send_push($userId, $type, $title, $body, $meta); } catch (Throwable $e) { /* ignore push failures */ }
 }
 
 function jarvis_unread_notifications_count(int $userId): int {
@@ -244,6 +251,76 @@ function jarvis_recent_notifications(int $userId, int $limit=10): array {
   $stmt->execute();
   return $stmt->fetchAll() ?: [];
 }
+
+// ----------------------------
+// Push Notifications (gateway stub)
+// ----------------------------
+
+/**
+ * Send a push notification via an external gateway (if configured).
+ * Env: PUSH_GATEWAY_URL (optional) – receives JSON { user_id, title, body, type, devices }
+ */
+function jarvis_send_push(int $userId, string $type, string $title, ?string $body, ?array $meta): bool {
+  $url = getenv('PUSH_GATEWAY_URL') ?: null;
+  $pdo = jarvis_pdo(); if (!$pdo) return false;
+  $devices = jarvis_list_devices($userId);
+  $payload = [
+    'user_id' => $userId,
+    'type' => $type,
+    'title' => $title,
+    'body' => $body,
+    'meta' => $meta,
+    'devices' => array_map(function($d){ return [
+      'uuid' => $d['device_uuid'] ?? null,
+      'platform' => $d['platform'] ?? null,
+      'push_provider' => $d['push_provider'] ?? null,
+      'push_token' => $d['push_token'] ?? null,
+    ]; }, $devices),
+  ];
+  if (!$url) {
+    // No gateway configured; audit only
+    jarvis_audit($userId, 'PUSH_STUB', 'push', ['title'=>$title,'type'=>$type,'device_count'=>count($devices)]);
+    return true;
+  }
+  $opts = [
+    'http' => [
+      'method' => 'POST',
+      'header' => "Content-Type: application/json\r\n",
+      'content' => json_encode($payload),
+      'timeout' => 3,
+    ]
+  ];
+  try {
+    $ctx = stream_context_create($opts);
+    $resp = @file_get_contents($url, false, $ctx);
+    jarvis_audit($userId, 'PUSH_SENT', 'push', ['title'=>$title,'type'=>$type,'resp'=>$resp ? substr($resp,0,200) : null]);
+    return true;
+  } catch (Throwable $e) {
+    jarvis_audit($userId, 'PUSH_FAILED', 'push', ['title'=>$title,'type'=>$type,'error'=>$e->getMessage()]);
+    return false;
+  }
+}
+
+// ----------------------------
+// Rate Limiting
+// ----------------------------
+
+/**
+ * Simple per-user, per-endpoint rate limit using api_requests table.
+ * Returns true if allowed, false if limit exceeded.
+ */
+function jarvis_rate_limit(int $userId, string $endpoint, int $limitPerMinute): bool {
+  $pdo = jarvis_pdo(); if (!$pdo) return true;
+  $stmt = $pdo->prepare('SELECT COUNT(*) c FROM api_requests WHERE user_id=:u AND endpoint=:e AND created_at >= DATE_SUB(NOW(), INTERVAL 60 SECOND)');
+  $stmt->execute([':u'=>$userId, ':e'=>$endpoint]);
+  $count = (int)($stmt->fetch()['c'] ?? 0);
+  return $count < $limitPerMinute;
+}
+
+// ----------------------------
+// Devices registration
+// ----------------------------
+// Deprecated duplicate: use the ON DUPLICATE KEY UPSERT below
 
 // ----------------------------
 // Preferences
@@ -367,6 +444,114 @@ function jarvis_register_device(int $userId, string $deviceUuid, string $platfor
   return (int)($row['id'] ?? 0);
 }
 
+// Device upload tokens (for iOS Shortcuts / external upload clients)
+function jarvis_create_device_upload_token(int $userId, ?string $label = null, ?int $ttlSeconds = 604800): array {
+  $pdo = jarvis_pdo(); if (!$pdo) throw new RuntimeException('DB not configured');
+  $token = bin2hex(random_bytes(32));
+  $expiresAt = $ttlSeconds ? date('Y-m-d H:i:s', time() + (int)$ttlSeconds) : null;
+  $stmt = $pdo->prepare('INSERT INTO device_upload_tokens (user_id, token, label, expires_at) VALUES (:u,:t,:l,:e)');
+  $stmt->execute([':u'=>$userId, ':t'=>$token, ':l'=>$label, ':e'=>$expiresAt]);
+  $id = (int)$pdo->lastInsertId();
+  return ['id'=>$id, 'user_id'=>$userId, 'token'=>$token, 'label'=>$label, 'expires_at'=>$expiresAt];
+}
+
+function jarvis_get_user_for_upload_token(string $token): ?array {
+  $pdo = jarvis_pdo(); if (!$pdo) return null;
+  $stmt = $pdo->prepare('SELECT t.id, t.user_id, t.expires_at, t.revoked, u.* FROM device_upload_tokens t JOIN users u ON u.id=t.user_id WHERE t.token=:t LIMIT 1');
+  $stmt->execute([':t'=>$token]);
+  $row = $stmt->fetch();
+  if (!$row) return null;
+  if (!empty($row['revoked'])) return null;
+  if (!empty($row['expires_at']) && strtotime($row['expires_at']) < time()) return null;
+  return $row;
+}
+
+function jarvis_list_device_upload_tokens(int $userId): array {
+  $pdo = jarvis_pdo(); if (!$pdo) return [];
+  $stmt = $pdo->prepare('SELECT id,token,label,expires_at,revoked,created_at FROM device_upload_tokens WHERE user_id=:u ORDER BY id DESC');
+  $stmt->execute([':u'=>$userId]);
+  return $stmt->fetchAll() ?: [];
+}
+
+function jarvis_revoke_device_upload_token(int $id, int $userId): bool {
+  $pdo = jarvis_pdo(); if (!$pdo) return false;
+  $stmt = $pdo->prepare('UPDATE device_upload_tokens SET revoked=1 WHERE id=:id AND user_id=:u');
+  $stmt->execute([':id'=>$id, ':u'=>$userId]);
+  return ($stmt->rowCount() > 0);
+}
+
+// ----------------------------
+// Jobs queue helpers
+// ----------------------------
+function jarvis_enqueue_job(string $type, array $payload = [], ?string $availableAt = null): int {
+  $pdo = jarvis_pdo(); if (!$pdo) throw new RuntimeException('DB not configured');
+  $availableAt = $availableAt ?: null;
+  $stmt = $pdo->prepare('INSERT INTO jobs (type, payload_json, available_at) VALUES (:t, :p, COALESCE(:a, NOW()))');
+  $stmt->execute([':t'=>$type, ':p'=>json_encode($payload), ':a'=>$availableAt]);
+  return (int)$pdo->lastInsertId();
+}
+
+function jarvis_fetch_next_job(?array $types = null): ?array {
+  $pdo = jarvis_pdo(); if (!$pdo) return null;
+  if ($types && count($types) > 0) {
+    $placeholders = implode(',', array_fill(0, count($types), '?'));
+    $stmt = $pdo->prepare("SELECT * FROM jobs WHERE status='pending' AND available_at <= NOW() AND type IN ({$placeholders}) ORDER BY id ASC LIMIT 1");
+    $stmt->execute($types);
+  } else {
+    $stmt = $pdo->prepare("SELECT * FROM jobs WHERE status='pending' AND available_at <= NOW() ORDER BY id ASC LIMIT 1");
+    $stmt->execute();
+  }
+  $row = $stmt->fetch(PDO::FETCH_ASSOC);
+  return $row ?: null;
+}
+
+function jarvis_mark_job_started(int $jobId): bool {
+  $pdo = jarvis_pdo(); if (!$pdo) return false;
+  $stmt = $pdo->prepare('UPDATE jobs SET status = :s, attempts = attempts + 1 WHERE id = :id AND status = :pending');
+  $stmt->execute([':s'=>'running', ':id'=>$jobId, ':pending'=>'pending']);
+  return ($stmt->rowCount() > 0);
+}
+
+function jarvis_mark_job_done(int $jobId): bool {
+  $pdo = jarvis_pdo(); if (!$pdo) return false;
+  $stmt = $pdo->prepare('UPDATE jobs SET status = :s WHERE id = :id');
+  $stmt->execute([':s'=>'done', ':id'=>$jobId]);
+  return ($stmt->rowCount() > 0);
+}
+
+function jarvis_mark_job_failed(int $jobId, int $retryAfterSeconds = 60): bool {
+  $pdo = jarvis_pdo(); if (!$pdo) return false;
+  $stmt = $pdo->prepare('UPDATE jobs SET status = :s, available_at = DATE_ADD(NOW(), INTERVAL :sec SECOND) WHERE id = :id');
+  $stmt->execute([':s'=>'pending','sec'=>$retryAfterSeconds, ':id'=>$jobId]);
+  return ($stmt->rowCount() > 0);
+}
+
+/**
+ * Process a single pending job in-process. Returns true on processed, false if none or failed.
+ */
+function jarvis_process_one_job_inprocess(): bool {
+  $job = jarvis_fetch_next_job();
+  if (!$job) return false;
+  $jobId = (int)$job['id'];
+  if (!jarvis_mark_job_started($jobId)) return false;
+  $payload = json_decode($job['payload_json'] ?? '{}', true) ?: [];
+  try {
+    if ($job['type'] === 'photo_reprocess') {
+      $photoId = isset($payload['photo_id']) ? (int)$payload['photo_id'] : 0;
+      if (!$photoId) throw new RuntimeException('photo_id missing');
+      $res = jarvis_reprocess_photo($photoId);
+      if (empty($res['ok'])) throw new RuntimeException('reprocess failed: ' . json_encode($res));
+      jarvis_mark_job_done($jobId);
+    } else {
+      throw new RuntimeException('unknown job type');
+    }
+    return true;
+  } catch (Throwable $e) {
+    jarvis_mark_job_failed($jobId, 60);
+    return false;
+  }
+}
+
 // Save a voice input record (audio file should already be persisted on disk)
 function jarvis_save_voice_input(int $userId, string $filename, ?string $transcript=null, ?int $durationMs=null, ?array $meta=null): int {
   $pdo = jarvis_pdo();
@@ -449,6 +634,94 @@ function jarvis_log_slack_message(?int $userId, ?string $channelId, string $mess
   ]);
 }
 
+/**
+ * Store a local channel message (provider = 'local') and optional metadata (tags etc)
+ */
+function jarvis_log_local_message(?int $userId, string $channelId, string $message, ?array $meta=null): void {
+  $pdo = jarvis_pdo();
+  if (!$pdo) return;
+  $stmt = $pdo->prepare('INSERT INTO messages (user_id,channel_id,message_text,provider,provider_response_json) VALUES (:u,:c,:m,:p,:r)');
+  $stmt->execute([
+    ':u' => $userId,
+    ':c' => $channelId,
+    ':m' => $message,
+    ':p' => 'local',
+    ':r' => $meta ? json_encode($meta) : null,
+  ]);
+}
+
+/**
+ * Reply to a local message thread (sets thread_id)
+ */
+function jarvis_log_local_reply(?int $userId, string $channelId, int $parentId, string $message, ?array $meta=null): int {
+  $pdo = jarvis_pdo(); if (!$pdo) return 0;
+  $stmt = $pdo->prepare('INSERT INTO messages (user_id,channel_id,message_text,provider,provider_response_json,thread_id) VALUES (:u,:c,:m,:p,:r,:t)');
+  $stmt->execute([
+    ':u'=>$userId,
+    ':c'=>$channelId,
+    ':m'=>$message,
+    ':p'=>'local',
+    ':r'=>$meta ? json_encode($meta) : null,
+    ':t'=>$parentId,
+  ]);
+  return (int)$pdo->lastInsertId();
+}
+
+/**
+ * Edit a local message (owner or admin validation is done at API layer). Updates message_text and edited_at.
+ */
+function jarvis_edit_local_message(int $messageId, string $newText, ?array $meta=null): bool {
+  $pdo = jarvis_pdo(); if (!$pdo) return false;
+  $stmt = $pdo->prepare('UPDATE messages SET message_text=:m, provider_response_json=:r, edited_at=NOW() WHERE id=:id AND provider=:p');
+  $stmt->execute([':m'=>$newText, ':r'=>$meta ? json_encode($meta) : null, ':id'=>$messageId, ':p'=>'local']);
+  return ($stmt->rowCount() > 0);
+}
+
+/**
+ * List a thread's messages (replies) sorted ascending.
+ */
+function jarvis_list_thread_messages(int $parentId, int $limit=100, int $offset=0): array {
+  $pdo = jarvis_pdo(); if (!$pdo) return [];
+  $stmt = $pdo->prepare('SELECT m.id,m.user_id,m.channel_id,m.message_text,m.provider,m.provider_response_json,m.created_at,u.username FROM messages m LEFT JOIN users u ON u.id=m.user_id WHERE m.thread_id=:t AND m.provider=:p ORDER BY m.id ASC LIMIT :l OFFSET :o');
+  $stmt->bindValue(':t',$parentId,PDO::PARAM_INT);
+  $stmt->bindValue(':p','local',PDO::PARAM_STR);
+  $stmt->bindValue(':l',$limit,PDO::PARAM_INT);
+  $stmt->bindValue(':o',$offset,PDO::PARAM_INT);
+  $stmt->execute();
+  $rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+  foreach ($rows as &$r) { if (!empty($r['provider_response_json'])) $r['meta'] = json_decode($r['provider_response_json'], true) ?: null; }
+  return $rows;
+}
+
+// Reactions helpers
+function jarvis_add_message_reaction(int $userId, int $messageId, string $type): bool {
+  $pdo = jarvis_pdo(); if (!$pdo) return false;
+  $type = strtolower(preg_replace('/[^a-z0-9_\-]/i','', $type)); if ($type==='') return false;
+  try {
+    $stmt = $pdo->prepare('INSERT IGNORE INTO message_reactions (message_id,user_id,type) VALUES (:m,:u,:t)');
+    $stmt->execute([':m'=>$messageId, ':u'=>$userId, ':t'=>$type]);
+    return true;
+  } catch (Throwable $e) { return false; }
+}
+
+function jarvis_remove_message_reaction(int $userId, int $messageId, string $type): bool {
+  $pdo = jarvis_pdo(); if (!$pdo) return false;
+  $stmt = $pdo->prepare('DELETE FROM message_reactions WHERE message_id=:m AND user_id=:u AND type=:t');
+  $stmt->execute([':m'=>$messageId, ':u'=>$userId, ':t'=>$type]);
+  return ($stmt->rowCount() > 0);
+}
+
+function jarvis_list_message_reactions(int $messageId): array {
+  $pdo = jarvis_pdo(); if (!$pdo) return [];
+  $stmt = $pdo->prepare('SELECT type, COUNT(*) AS count FROM message_reactions WHERE message_id=:m GROUP BY type ORDER BY type');
+  $stmt->execute([':m'=>$messageId]);
+  $agg = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+  $stmt2 = $pdo->prepare('SELECT mr.type, u.username FROM message_reactions mr LEFT JOIN users u ON u.id=mr.user_id WHERE mr.message_id=:m ORDER BY mr.type, u.username');
+  $stmt2->execute([':m'=>$messageId]);
+  $users = $stmt2->fetchAll(PDO::FETCH_ASSOC) ?: [];
+  return ['summary'=>$agg,'users'=>$users];
+}
+
 function jarvis_fetch_messages(int $userId, int $limit=50): array {
   $pdo = jarvis_pdo();
   if (!$pdo) return [];
@@ -457,6 +730,31 @@ function jarvis_fetch_messages(int $userId, int $limit=50): array {
   $stmt->bindValue(':l',$limit,PDO::PARAM_INT);
   $stmt->execute();
   return array_reverse($stmt->fetchAll() ?: []);
+}
+
+/**
+ * List messages for a channel (local provider). Optional tag filter (simple LIKE match on metadata_json or message_text).
+ */
+function jarvis_list_channel_messages(string $channelId, int $limit = 50, int $offset = 0, ?string $tag = null): array {
+  $pdo = jarvis_pdo(); if (!$pdo) return [];
+  $sql = 'SELECT m.id,m.user_id,m.channel_id,m.message_text,m.provider,m.provider_response_json,m.created_at,u.username FROM messages m LEFT JOIN users u ON u.id = m.user_id WHERE m.channel_id = :c AND m.provider = :p';
+  $params = [':c'=>$channelId, ':p'=>'local'];
+  if ($tag !== null && $tag !== '') {
+    $sql .= ' AND (m.provider_response_json LIKE :tag OR m.message_text LIKE :htag)';
+    $params[':tag'] = '%"' . str_replace('"','', $tag) . '"%';
+    $params[':htag'] = '%' . str_replace('%','\%',$tag) . '%';
+  }
+  $sql .= ' ORDER BY m.id DESC LIMIT :l OFFSET :o';
+  $stmt = $pdo->prepare($sql);
+  foreach ($params as $k=>$v) { $stmt->bindValue($k, $v, is_int($v) ? PDO::PARAM_INT : PDO::PARAM_STR); }
+  $stmt->bindValue(':l', $limit, PDO::PARAM_INT);
+  $stmt->bindValue(':o', $offset, PDO::PARAM_INT);
+  $stmt->execute();
+  $rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+  foreach ($rows as &$r) {
+    if (!empty($r['provider_response_json'])) $r['meta'] = json_decode($r['provider_response_json'], true) ?: null;
+  }
+  return $rows;
 }
 
 // ----------------------------
@@ -518,6 +816,25 @@ function jarvis_recent_commands(int $userId, int $limit=20): array {
   $stmt->bindValue(':l',$limit,PDO::PARAM_INT);
   $stmt->execute();
   return array_reverse($stmt->fetchAll() ?: []);
+}
+
+/**
+ * List command history with optional filtering (admin may request other users)
+ * Returns an array of rows with id,user_id,type,command_text,jarvis_response,metadata_json,created_at
+ */
+function jarvis_list_commands(int $limit = 50, int $offset = 0, ?int $userId = null, ?string $q = null): array {
+  $pdo = jarvis_pdo(); if (!$pdo) return [];
+  $sql = 'SELECT id,user_id,type,command_text,jarvis_response,metadata_json,created_at FROM command_history WHERE 1=1';
+  $params = [];
+  if ($userId !== null) { $sql .= ' AND user_id = :user'; $params[':user'] = $userId; }
+  if ($q !== null && $q !== '') { $sql .= ' AND (command_text LIKE :q OR jarvis_response LIKE :q)'; $params[':q'] = '%' . str_replace('%','\\%',$q) . '%'; }
+  $sql .= ' ORDER BY id DESC LIMIT :l OFFSET :o';
+  $stmt = $pdo->prepare($sql);
+  foreach ($params as $k=>$v) { $stmt->bindValue($k, $v, is_int($v) ? PDO::PARAM_INT : PDO::PARAM_STR); }
+  $stmt->bindValue(':l', $limit, PDO::PARAM_INT);
+  $stmt->bindValue(':o', $offset, PDO::PARAM_INT);
+  $stmt->execute();
+  return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
 }
 function jarvis_recent_locations(int $userId, int $limit=20): array {
   $pdo = jarvis_pdo();
@@ -604,6 +921,40 @@ function jarvis_get_location_by_id(int $id): ?array {
       if ($addr) $row['address'] = $addr;
     } catch (Throwable $e) { /* ignore */ }
   }
+  return $row ? $row : null;
+}
+
+// ----------------------------
+// Photos
+// ----------------------------
+
+function jarvis_store_photo(int $userId, string $filename, ?string $originalFilename = null, ?array $meta = null): int {
+  $pdo = jarvis_pdo(); if (!$pdo) return 0;
+  $stmt = $pdo->prepare('INSERT INTO photos (user_id,filename,original_filename,thumb_filename,metadata_json) VALUES (:u,:f,:of,:tf,:m)');
+  $stmt->execute([':u'=>$userId, ':f'=>$filename, ':of'=>$originalFilename, ':tf'=>null, ':m'=>$meta ? json_encode($meta) : null]);
+  return (int)$pdo->lastInsertId();
+}
+
+function jarvis_list_photos(int $userId, int $limit = 50, int $offset = 0): array {
+  $pdo = jarvis_pdo(); if (!$pdo) return [];
+  $stmt = $pdo->prepare('SELECT id,user_id,filename,original_filename,thumb_filename,metadata_json,created_at FROM photos WHERE user_id = :u ORDER BY id DESC LIMIT :l OFFSET :o');
+  $stmt->bindValue(':u', $userId, PDO::PARAM_INT);
+  $stmt->bindValue(':l', $limit, PDO::PARAM_INT);
+  $stmt->bindValue(':o', $offset, PDO::PARAM_INT);
+  $stmt->execute();
+  $rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+  foreach ($rows as &$r) {
+    if (!empty($r['metadata_json'])) $r['metadata'] = json_decode($r['metadata_json'], true) ?: null;
+  }
+  return $rows;
+}
+
+function jarvis_get_photo_by_id(int $id): ?array {
+  $pdo = jarvis_pdo(); if (!$pdo) return null;
+  $stmt = $pdo->prepare('SELECT id,user_id,filename,original_filename,thumb_filename,metadata_json,created_at FROM photos WHERE id = :id LIMIT 1');
+  $stmt->execute([':id'=>$id]);
+  $row = $stmt->fetch();
+  if ($row && !empty($row['metadata_json'])) $row['metadata'] = json_decode($row['metadata_json'], true) ?: null;
   return $row ? $row : null;
 }
 

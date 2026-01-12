@@ -72,6 +72,21 @@ CREATE TABLE IF NOT EXISTS devices (
   CONSTRAINT fk_device_user FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- Device upload tokens for third-party uploads (iOS Shortcuts, etc.)
+CREATE TABLE IF NOT EXISTS device_upload_tokens (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  user_id BIGINT UNSIGNED NOT NULL,
+  token VARCHAR(128) NOT NULL,
+  label VARCHAR(255) NULL,
+  expires_at DATETIME NULL,
+  revoked TINYINT(1) NOT NULL DEFAULT 0,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY(id),
+  UNIQUE KEY ux_device_token(token),
+  KEY ix_device_token_user(user_id),
+  CONSTRAINT fk_device_token_user FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 CREATE TABLE IF NOT EXISTS messages (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   user_id BIGINT UNSIGNED NULL,
@@ -79,10 +94,28 @@ CREATE TABLE IF NOT EXISTS messages (
   message_text TEXT NOT NULL,
   provider VARCHAR(32) NOT NULL DEFAULT 'slack',
   provider_response_json JSON NULL,
+  thread_id BIGINT UNSIGNED NULL,
+  edited_at DATETIME NULL,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY(id),
   KEY ix_messages_user(user_id),
+  KEY ix_messages_thread(thread_id),
   CONSTRAINT fk_messages_user FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Message reactions (emoji/simple types)
+CREATE TABLE IF NOT EXISTS message_reactions (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  message_id BIGINT UNSIGNED NOT NULL,
+  user_id BIGINT UNSIGNED NOT NULL,
+  type VARCHAR(32) NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY(id),
+  UNIQUE KEY ux_msg_reaction (message_id, user_id, type),
+  KEY ix_msg_react_message (message_id),
+  KEY ix_msg_react_user (user_id),
+  CONSTRAINT fk_msg_react_message FOREIGN KEY(message_id) REFERENCES messages(id) ON DELETE CASCADE,
+  CONSTRAINT fk_msg_react_user FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS command_history (
@@ -215,6 +248,20 @@ CREATE TABLE IF NOT EXISTS voice_inputs (
   CONSTRAINT fk_voice_user FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- Photos uploaded by users (from iOS Shortcuts / other sources)
+CREATE TABLE IF NOT EXISTS photos (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  user_id BIGINT UNSIGNED NOT NULL,
+  filename VARCHAR(255) NOT NULL,
+  original_filename VARCHAR(255) NULL,
+  thumb_filename VARCHAR(255) NULL,
+  metadata_json JSON NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY(id),
+  KEY ix_photos_user(user_id),
+  CONSTRAINT fk_photos_user FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 -- Lightweight pnut log table for offline / deep analysis
 CREATE TABLE IF NOT EXISTS pnut_logs (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -226,6 +273,20 @@ CREATE TABLE IF NOT EXISTS pnut_logs (
   KEY ix_pnut_user(user_id),
   CONSTRAINT fk_pnut_user FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Background jobs table (simple FIFO worker queue)
+CREATE TABLE IF NOT EXISTS jobs (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  type VARCHAR(64) NOT NULL,
+  payload_json JSON NOT NULL,
+  status VARCHAR(32) NOT NULL DEFAULT 'pending',
+  attempts INT NOT NULL DEFAULT 0,
+  available_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY(id),
+  KEY ix_jobs_status_available (status, available_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 CREATE TABLE IF NOT EXISTS home_devices (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   user_id BIGINT UNSIGNED NOT NULL,

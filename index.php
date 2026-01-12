@@ -34,6 +34,24 @@ function slack_post_message_api(string $token, string $channel, string $text): a
   return $data;
 }
 
+// Reprocess a photo and optionally override GPS (test helper)
+if (preg_match('#^/api/photos/(\d+)/reprocess$#', $path, $m)) {
+  if ($method !== 'POST') jarvis_respond(405, ['error' => 'Method not allowed']);
+  [$userId, $u] = require_jwt_user();
+  $photoId = (int)$m[1];
+  $photo = jarvis_get_photo_by_id($photoId);
+  if (!$photo) jarvis_respond(404, ['error'=>'not found']);
+  if ((int)$photo['user_id'] !== (int)$userId && ($u['role'] ?? '') !== 'admin') jarvis_respond(403, ['error'=>'forbidden']);
+  $in = jarvis_json_input();
+  $override = null;
+  if (is_array($in) && isset($in['gps_lat'], $in['gps_lon'])) {
+    $override = ['gps_lat' => (float)$in['gps_lat'], 'gps_lon' => (float)$in['gps_lon']];
+  }
+  $res = jarvis_reprocess_photo($photoId, $override);
+  jarvis_log_api_request($userId, 'desktop', $path, $method, $in, $res, $res['ok'] ? 200 : 500);
+  jarvis_respond($res['ok'] ? 200 : 500, $res);
+}
+
 function require_jwt_user(): array {
   $payload = jarvis_jwt_verify(jarvis_bearer_token());
   if (!$payload || empty($payload['sub'])) {
@@ -291,6 +309,59 @@ if ($path === '/api/command') {
     }
   }
 
+  // ----------------------------
+  // Basic command processing (simple built-in commands)
+  // ----------------------------
+  $respText = '';
+  $cards = [];
+  try {
+    $lc = strtolower(trim($text));
+    if ($lc === 'whoami' || strpos($lc, 'whoami') !== false) {
+      $name = $u['username'] ?? ($u['email'] ?? 'operator');
+      $email = $u['email'] ?? '';
+      $role = $u['role'] ?? '';
+      $respText = "You are @" . $name . ($email ? " ({$email})" : '') . ($role ? " — role: {$role}" : '');
+    } elseif ($lc === 'weather' || strpos($lc, 'weather') !== false) {
+      $recent = jarvis_recent_locations($userId, 1);
+      if (empty($recent)) {
+        $respText = "Location not available. Submit a location or enable browser location.";
+      } else {
+        $loc = $recent[0];
+        $weather = null;
+        try { $weather = jarvis_fetch_weather((float)$loc['lat'], (float)$loc['lon']); } catch (Throwable $e) { $weather = null; }
+        if ($weather) {
+          $desc = (string)($weather['desc'] ?? ($weather['raw']['weather'][0]['description'] ?? ''));
+          $temp = isset($weather['temp_c']) ? ($weather['temp_c'] . '°C') : null;
+          $respText = trim("Weather: " . ($desc ? $desc : 'unknown') . ($temp ? ' • ' . $temp : ''));
+          $cards['weather'] = $weather;
+          $respMeta['weather'] = $weather;
+        } else {
+          $respText = "Weather unavailable (API error or key missing).";
+        }
+      }
+    } elseif ($lc === 'briefing' || $lc === '/brief' || $lc === 'brief') {
+      $brief = jarvis_compose_briefing($userId, 'briefing');
+      $respText = $brief['text'] ?? 'Briefing failed';
+      if (!empty($brief['cards'])) $cards = $brief['cards'];
+    } else {
+      // Default fallback: inform the user
+      $respText = "I don't know that command. Try 'whoami', 'weather', or 'briefing'.";
+    }
+  } catch (Throwable $e) {
+    $respText = "Error processing command.";
+  }
+
+  // Log the command and response
+  $logMeta = $respMeta;
+  if (!empty($cards)) $logMeta['cards'] = $cards;
+  jarvis_log_command($userId, $inputType, $text, $respText, $logMeta);
+  jarvis_log_api_request($userId, 'desktop', $path, $method, $in, ['ok'=>true,'jarvis_response'=>$respText], 200);
+
+  $response = ['ok'=>true,'jarvis_response'=>$respText];
+  if (!empty($cards)) $response['cards'] = $cards;
+  if (!empty($respMeta)) $response = array_merge($response, $respMeta);
+  jarvis_respond(200, $response);
+
 // ----------------------------
 // Voice inputs: save audio blobs + transcript for deep dictation analysis
 // ----------------------------
@@ -298,6 +369,7 @@ if ($path === '/api/voice') {
   @file_put_contents('/tmp/jarvis_req.log', json_encode(['ts'=>time(),'enter_voice_handler'=>true,'method'=>$method]) . PHP_EOL, FILE_APPEND);
   if ($method === 'POST') {
     [$userId, $u] = require_jwt_user();
+    if (!jarvis_rate_limit($userId, '/api/voice', 20)) jarvis_respond(429, ['error'=>'rate limited']);
     // Accept multipart/form-data with 'file', 'transcript', 'duration'
     $uploadedFile = $_FILES['file'] ?? null;
     if (!$uploadedFile || ($uploadedFile['error'] ?? 1) !== 0) jarvis_respond(400, ['error'=>'no file uploaded']);
@@ -318,23 +390,196 @@ if ($path === '/api/voice') {
     }
 
     $filePathForDb = 'storage/voice/' . (int)$userId . '/' . $fname;
-    $vid = jarvis_save_voice_input($userId, $filePathForDb, $transcript, $duration, $meta);
 
-    // Audit + pnut log for deep analysis
-    jarvis_audit($userId, 'VOICE_INPUT', 'voice', ['voice_id'=>$vid,'filename'=>$filePathForDb,'duration_ms'=>$duration,'transcript'=>substr($transcript?:'',0,512)]);
-    jarvis_pnut_log($userId, 'voice', ['voice_id'=>$vid,'filename'=>$filePathForDb,'duration_ms'=>$duration,'transcript'=>$transcript,'meta'=>$meta]);
+  }
+}
 
-    jarvis_respond(200, ['ok'=>true,'id'=>$vid,'filename'=>$filePathForDb]);
+// ----------------------------
+// Photos (uploads from iOS Shortcuts or other sources)
+// ----------------------------
+if ($path === '/api/photos') {
+  if ($method === 'POST') {
+    // Allow either a JWT user or a device upload token (Bearer)
+    $bearer = jarvis_bearer_token();
+    $userId = 0; $u = null; $clientType = 'web'; $used_device_token = false;
+    if ($bearer) {
+      $payload = jarvis_jwt_verify($bearer);
+      if ($payload && !empty($payload['sub'])) {
+        $userId = (int)$payload['sub'];
+        $u = jarvis_user_by_id($userId);
+        $clientType = 'web';
+      } else {
+        $t = jarvis_get_user_for_upload_token($bearer);
+        if ($t && !empty($t['user_id'])) {
+          $userId = (int)$t['user_id'];
+          $u = jarvis_user_by_id($userId);
+          $clientType = 'ios-shortcut';
+          $used_device_token = true;
+        }
+      }
+    }
+    // If no bearer token or invalid, reject
+    if (!$userId || !$u) jarvis_respond(401, ['error'=>'Unauthorized']);
+    // Rate limit uploads: 15/min per user
+    if (!jarvis_rate_limit($userId, '/api/photos', 15)) jarvis_respond(429, ['error'=>'rate limited']);
+
+    $uploadedFile = $_FILES['file'] ?? null;
+    if (!$uploadedFile || ($uploadedFile['error'] ?? 1) !== 0) jarvis_respond(400, ['error'=>'no file uploaded']);
+
+    // Basic validation: size <= 25MB and allowed extensions
+    $size = (int)($uploadedFile['size'] ?? 0);
+    if ($size <= 0 || $size > 25*1024*1024) jarvis_respond(413, ['error'=>'file too large (max 25MB)']);
+    $origName = $uploadedFile['name'] ?? null;
+    $ext = strtolower(pathinfo($origName ?? 'photo', PATHINFO_EXTENSION)) ?: 'jpg';
+    if (!in_array($ext, ['jpg','jpeg','png','gif'])) jarvis_respond(415, ['error'=>'unsupported file type']);
+
+    $baseDir = __DIR__ . '/storage/photos/' . (int)$userId;
+    if (!is_dir($baseDir)) @mkdir($baseDir, 0770, true);
+    $origName = $uploadedFile['name'] ?? null;
+    $ext = strtolower(pathinfo($origName ?? 'photo', PATHINFO_EXTENSION)) ?: 'jpg';
+    // sanitize extension
+    $ext = preg_replace('/[^a-z0-9]/i', '', $ext) ?: 'jpg';
+    $fname = sprintf('%s_%s.%s', (int)$userId, bin2hex(random_bytes(6)), $ext);
+    $dest = $baseDir . '/' . $fname;
+    if (!move_uploaded_file($uploadedFile['tmp_name'], $dest)) jarvis_respond(500, ['error'=>'failed to save file']);
+
+    // Attempt to create a thumbnail (best-effort) using GD
+    $thumbName = null;
+    try {
+      if (function_exists('getimagesize') && function_exists('imagecreatetruecolor')) {
+        $info = @getimagesize($dest);
+        if ($info && isset($info[0], $info[1])) {
+          $max = 600;
+          $ratio = min(1, $max / max($info[0], $info[1]));
+          $tw = (int)round($info[0] * $ratio);
+          $th = (int)round($info[1] * $ratio);
+          $src = null;
+          $mime = $info['mime'] ?? '';
+          if ($mime === 'image/jpeg' || $mime === 'image/pjpeg') $src = imagecreatefromjpeg($dest);
+          elseif ($mime === 'image/png') $src = imagecreatefrompng($dest);
+          elseif ($mime === 'image/gif') $src = imagecreatefromgif($dest);
+          if ($src) {
+            $dst = imagecreatetruecolor($tw, $th);
+            imagecopyresampled($dst, $src, 0,0,0,0, $tw, $th, $info[0], $info[1]);
+            $thumbName = 'thumb_' . $fname . '.jpg';
+            $thumbPath = $baseDir . '/' . $thumbName;
+            imagejpeg($dst, $thumbPath, 80);
+            imagedestroy($dst);
+            imagedestroy($src);
+          }
+        }
+      }
+    } catch (Throwable $e) { /* non-fatal */ }
+
+    $meta = [];
+    if (isset($_POST['meta'])) $meta = json_decode((string)$_POST['meta'], true) ?: [];
+
+    // Attempt to extract EXIF (GPS/time) if available (best-effort)
+    try {
+      if (function_exists('exif_read_data')) {
+        $exif = @exif_read_data($dest, 0, true);
+        if (is_array($exif) && !empty($exif)) {
+          $meta['exif_present'] = true;
+          // store some common fields (DateTimeOriginal)
+          if (!empty($exif['EXIF']['DateTimeOriginal'])) $meta['exif_datetime'] = (string)$exif['EXIF']['DateTimeOriginal'];
+          // embed raw-ish GPS metadata if present
+          $gps = jarvis_exif_get_gps($exif);
+          if ($gps) {
+            $meta['exif_gps'] = $gps;
+            // Create a location log for this photo (best-effort) and attach id
+            try {
+              $pdo = jarvis_pdo();
+              if ($pdo) {
+                $stmt = $pdo->prepare('INSERT INTO location_logs (user_id,lat,lon,accuracy_m,source) VALUES (:u,:la,:lo,:a,:s)');
+                $stmt->execute([':u'=>$userId, ':la'=>$gps['lat'], ':lo'=>$gps['lon'], ':a'=>null, ':s'=>'photo']);
+                $locId = (int)$pdo->lastInsertId();
+                if ($locId) $meta['photo_location_id'] = $locId;
+              }
+            } catch (Throwable $e) {
+              // ignore location insertion errors
+            }
+          }
+        }
+      }
+    } catch (Throwable $e) { /* ignore exif errors */ }
+
+    $photoId = jarvis_store_photo($userId, $fname, $origName, $meta);
+
+    // If thumbnail was created, update the db thumb_filename (best-effort)
+    if ($thumbName && $photoId) {
+      $pdo = jarvis_pdo(); if ($pdo) {
+        $pdo->prepare('UPDATE photos SET thumb_filename = :t WHERE id = :id')->execute([':t'=>$thumbName, ':id'=>$photoId]);
+      }
+    }
+
+    // Enqueue a reprocess job (best-effort) so a worker can ensure thumbnails/EXIF/location are created
+    try {
+      jarvis_enqueue_job('photo_reprocess', ['photo_id'=>$photoId]);
+    } catch (Throwable $e) { /* ignore enqueue errors */ }
+
+    jarvis_audit($userId, 'PHOTO_UPLOAD', 'photo', array_merge($meta, ['photo_id'=>$photoId,'filename'=>$fname]));
+    jarvis_log_api_request($userId, 'desktop', $path, $method, [], ['ok'=>true,'id'=>$photoId,'url'=>'/api/photos/'.$photoId.'/download','thumb_url'=>'/api/photos/'.$photoId.'/download?thumb=1'], 200);
+    jarvis_respond(201, ['ok'=>true,'id'=>$photoId,'url'=>'/api/photos/'.$photoId.'/download','thumb_url'=>'/api/photos/'.$photoId.'/download?thumb=1']);
   }
 
   if ($method === 'GET') {
     [$userId, $u] = require_jwt_user();
-    $limit = isset($_GET['limit']) ? min(200, (int)$_GET['limit']) : 20;
-    $items = jarvis_recent_voice_inputs($userId, $limit);
-    jarvis_respond(200, ['ok'=>true,'count'=>count($items),'voice'=>$items]);
+    $limit = isset($_GET['limit']) ? min(200, max(1, (int)$_GET['limit'])) : 50;
+    $offset = isset($_GET['offset']) ? max(0, (int)$_GET['offset']) : 0;
+    $rows = jarvis_list_photos($userId, $limit, $offset);
+    jarvis_respond(200, ['ok'=>true,'count'=>count($rows),'photos'=>$rows]);
   }
 
   jarvis_respond(405, ['error'=>'Method not allowed']);
+}
+
+// ----------------------------
+// Device upload tokens (manage per-user tokens for iOS Shortcuts)
+// ----------------------------
+if ($path === '/api/device_tokens') {
+  [$userId, $u] = require_jwt_user();
+  if ($method === 'POST') {
+    $in = jarvis_json_input();
+    $label = isset($in['label']) ? trim((string)$in['label']) : null;
+    $ttl = isset($in['ttl_seconds']) ? max(0, (int)$in['ttl_seconds']) : 604800;
+    $token = jarvis_create_device_upload_token($userId, $label, $ttl);
+    jarvis_log_api_request($userId, 'desktop', $path, $method, $in, ['ok'=>true,'token_id'=>$token['id']], 201);
+    jarvis_respond(201, ['ok'=>true,'token'=>$token]);
+  }
+  if ($method === 'GET') {
+    $rows = jarvis_list_device_upload_tokens($userId);
+    jarvis_respond(200, ['ok'=>true,'tokens'=>$rows]);
+  }
+  jarvis_respond(405, ['error'=>'Method not allowed']);
+}
+
+if (preg_match('#^/api/device_tokens/([0-9]+)$#', $path, $m)) {
+  [$userId, $u] = require_jwt_user();
+  if ($method === 'DELETE') {
+    $id = (int)$m[1];
+    $ok = jarvis_revoke_device_upload_token($id, $userId);
+    jarvis_log_api_request($userId, 'desktop', $path, $method, null, ['ok'=>$ok,'id'=>$id], $ok ? 200 : 404);
+    if ($ok) jarvis_respond(200, ['ok'=>true,'id'=>$id]);
+    jarvis_respond(404, ['error'=>'not found']);
+  }
+  jarvis_respond(405, ['error'=>'Method not allowed']);
+}
+
+if (preg_match('#^/api/photos/(\d+)/download$#', $path, $m)) {
+  $id = (int)$m[1];
+  [$userId, $u] = require_jwt_user();
+  $photo = jarvis_get_photo_by_id($id);
+  if (!$photo) jarvis_respond(404, ['error'=>'not found']);
+  if ((int)$photo['user_id'] !== (int)$userId && ($u['role'] ?? '') !== 'admin') jarvis_respond(403, ['error'=>'forbidden']);
+  $thumb = isset($_GET['thumb']) && ($_GET['thumb'] === '1' || $_GET['thumb'] === 'true');
+  $baseDir = __DIR__ . '/storage/photos/' . (int)$photo['user_id'];
+  $file = $thumb && !empty($photo['thumb_filename']) ? ($baseDir . '/' . $photo['thumb_filename']) : ($baseDir . '/' . $photo['filename']);
+  if (!is_file($file)) jarvis_respond(404, ['error'=>'file not found']);
+  $mime = mime_content_type($file) ?: 'application/octet-stream';
+  header('Content-Type: ' . $mime);
+  header('Content-Disposition: attachment; filename="' . basename($photo['original_filename'] ?: $file) . '"');
+  readfile($file);
+  exit;
 }
 
 // Download a recorded voice blob (authenticated via JWT or Session for Admin UI)
@@ -557,6 +802,28 @@ if (preg_match('#^/api/voice/([0-9]+)/download$#', $path, $m)) {
 // ----------------------------
 // Instagram (Basic Display)
 // ----------------------------
+// Devices: register/list
+// ----------------------------
+if ($path === '/api/devices') {
+  [$userId, $u] = require_jwt_user();
+  if ($method === 'POST') {
+    $in = jarvis_json_input();
+    $uuid = trim((string)($in['uuid'] ?? ''));
+    $platform = trim((string)($in['platform'] ?? ''));
+    $provider = isset($in['push_provider']) ? (string)$in['push_provider'] : null;
+    $token = isset($in['push_token']) ? (string)$in['push_token'] : null;
+    if ($uuid === '' || $platform === '') jarvis_respond(400, ['error'=>'uuid and platform required']);
+    $id = jarvis_register_device($userId, $uuid, $platform, $provider, $token, null);
+    jarvis_audit($userId, 'DEVICE_REGISTER', 'device', ['id'=>$id,'uuid'=>$uuid,'platform'=>$platform,'provider'=>$provider]);
+    jarvis_log_api_request($userId, 'desktop', $path, $method, $in, ['ok'=>true,'id'=>$id], 200);
+    jarvis_respond(200, ['ok'=>true,'id'=>$id]);
+  }
+  if ($method === 'GET') {
+    $rows = jarvis_list_devices($userId);
+    jarvis_respond(200, ['ok'=>true,'devices'=>$rows]);
+  }
+  jarvis_respond(405, ['error'=>'Method not allowed']);
+}
 
 if ($path === '/api/instagram/check') {
   if ($method !== 'POST') jarvis_respond(405, ['error' => 'Method not allowed']);
@@ -570,36 +837,168 @@ if ($path === '/api/instagram/check') {
 }
 
 if ($path === '/api/messages') {
-  if ($method !== 'POST') jarvis_respond(405, ['error' => 'Method not allowed']);
   [$userId, $u] = require_jwt_user();
-  $in = jarvis_json_input();
-  $message = trim((string)($in['message'] ?? ''));
-  $channel = trim((string)($in['channel'] ?? ''));
-  if ($message === '') jarvis_respond(400, ['error' => 'message is required']);
-  if ($channel === '') {
-    $prefs = jarvis_preferences($userId);
-    $channel = trim((string)($prefs['default_slack_channel'] ?? ''));
-    if ($channel === '') $channel = trim((string)(getenv('SLACK_CHANNEL_ID') ?: ''));
-    if ($channel === '') jarvis_respond(400, ['error' => 'default Slack channel not configured']);
-  }
 
-  $token = jarvis_setting_get('SLACK_BOT_TOKEN') ?: jarvis_setting_get('SLACK_APP_TOKEN') ?: getenv('SLACK_BOT_TOKEN') ?: getenv('SLACK_APP_TOKEN');
-  if (!$token) jarvis_respond(500, ['error' => 'SLACK is not configured (missing SLACK_APP_TOKEN / SLACK_BOT_TOKEN)']);
-  $resp = slack_post_message_api($token, $channel, $message);
-
-  jarvis_log_slack_message($userId, $channel, $message, $resp);
-  jarvis_audit($userId, 'SLACK_SEND', 'slack', ['channel'=>$channel, 'ok'=>(bool)($resp['ok'] ?? false)]);
-  jarvis_log_api_request($userId, 'desktop', $path, $method, $in, ['slack'=>$resp], (int)($resp['ok'] ? 200 : 502));
-
-  if (!empty($resp['ok'])) {
-    jarvis_notify($userId, 'success', 'Slack message sent', $message, ['channel'=>$channel]);
-    $prefs = jarvis_preferences($userId);
-    if (!empty($u['phone_e164']) && !empty($prefs['notif_sms'])) {
-      jarvis_send_sms($u['phone_e164'], "JARVIS → Slack: {$message}");
+  if ($method === 'POST') {
+    $in = jarvis_json_input();
+    $message = trim((string)($in['message'] ?? ''));
+    $channel = trim((string)($in['channel'] ?? ''));
+    $provider = trim((string)($in['provider'] ?? '')) ?: 'slack';
+    $threadId = isset($in['thread_id']) ? (int)$in['thread_id'] : null;
+    // Rate limit local posts: 30/min per user
+    if ($provider === 'local' || stripos($channel, 'local:') === 0) {
+      if (!jarvis_rate_limit($userId, '/api/messages', 30)) jarvis_respond(429, ['error'=>'rate limited']);
     }
-    jarvis_respond(200, ['ok' => true, 'slack' => $resp]);
+    if ($message === '') jarvis_respond(400, ['error' => 'message is required']);
+    if ($channel === '') {
+      $prefs = jarvis_preferences($userId);
+      $channel = trim((string)($prefs['default_slack_channel'] ?? ''));
+      if ($channel === '') $channel = trim((string)(getenv('SLACK_CHANNEL_ID') ?: ''));
+      if ($channel === '') jarvis_respond(400, ['error' => 'channel required']);
+    }
+
+    // If provider explicitly 'local' or channel namespaced as local:, store locally
+    if ($provider === 'local' || stripos($channel, 'local:') === 0) {
+      // Parse hashtags
+      $tags = [];
+      if (preg_match_all('/#([A-Za-z0-9_\-]+)/', $message, $m)) {
+        $tags = array_values(array_unique($m[1]));
+      }
+      // Parse mentions @username
+      $mentions = [];
+      if (preg_match_all('/@([A-Za-z0-9_\-]+)/', $message, $mm)) {
+        $mentions = array_values(array_unique($mm[1]));
+      }
+
+      $meta = [];
+      if (!empty($tags)) $meta['tags'] = $tags;
+      if (!empty($mentions)) $meta['mentions'] = $mentions;
+
+      // Store the local message or reply
+      if ($threadId) {
+        $mid = jarvis_log_local_reply($userId, $channel, $threadId, $message, $meta);
+      } else {
+        jarvis_log_local_message($userId, $channel, $message, $meta);
+      }
+
+      // Notify mentioned users (best-effort)
+      foreach ($mentions as $un) {
+        try {
+          $target = jarvis_user_by_username($un);
+          if ($target && isset($target['id'])) {
+            jarvis_notify((int)$target['id'], 'mention', "Mentioned in {$channel}", substr($message ?: '', 0, 280), ['from'=>$u['username'] ?? null, 'channel'=>$channel, 'message'=>$message]);
+            jarvis_audit((int)$target['id'], 'MENTIONED', 'channel', ['by'=>$u['username'] ?? null, 'channel'=>$channel, 'mention'=>$un]);
+          }
+        } catch (Throwable $e) { /* ignore mention failures */ }
+      }
+
+      jarvis_audit($userId, 'CHANNEL_MSG', 'channel', ['channel'=>$channel,'tags'=>$tags,'mentions'=>$mentions]);
+      jarvis_log_api_request($userId, 'desktop', $path, $method, $in, ['ok'=>true,'channel'=>$channel,'tags'=>$tags,'mentions'=>$mentions], 201);
+        jarvis_respond(201, ['ok'=>true,'channel'=>$channel,'tags'=>$tags,'mentions'=>$mentions,'thread_id'=>$threadId]);
+    }
+
+    // Otherwise, attempt to post to Slack (existing behavior)
+    $token = jarvis_setting_get('SLACK_BOT_TOKEN') ?: jarvis_setting_get('SLACK_APP_TOKEN') ?: getenv('SLACK_BOT_TOKEN') ?: getenv('SLACK_APP_TOKEN');
+    if (!$token) jarvis_respond(500, ['error' => 'SLACK is not configured (missing SLACK_APP_TOKEN / SLACK_BOT_TOKEN)']);
+    $resp = slack_post_message_api($token, $channel, $message);
+
+    jarvis_log_slack_message($userId, $channel, $message, $resp);
+    jarvis_audit($userId, 'SLACK_SEND', 'slack', ['channel'=>$channel, 'ok'=>(bool)($resp['ok'] ?? false)]);
+    jarvis_log_api_request($userId, 'desktop', $path, $method, $in, ['slack'=>$resp], (int)($resp['ok'] ? 200 : 502));
+
+    if (!empty($resp['ok'])) {
+      jarvis_notify($userId, 'success', 'Slack message sent', $message, ['channel'=>$channel]);
+      $prefs = jarvis_preferences($userId);
+      if (!empty($u['phone_e164']) && !empty($prefs['notif_sms'])) {
+        jarvis_send_sms($u['phone_e164'], "JARVIS → Slack: {$message}");
+      }
+      jarvis_respond(200, ['ok' => true, 'slack' => $resp]);
+    }
+    jarvis_respond(502, ['ok' => false, 'slack' => $resp]);
   }
-  jarvis_respond(502, ['ok' => false, 'slack' => $resp]);
+
+  if ($method === 'GET') {
+    [$userId, $u] = require_jwt_user();
+    $channel = isset($_GET['channel']) ? trim((string)$_GET['channel']) : null;
+    $tag = isset($_GET['tag']) ? trim((string)$_GET['tag']) : null;
+    $limit = isset($_GET['limit']) ? min(200, max(1, (int)$_GET['limit'])) : 50;
+    $offset = isset($_GET['offset']) ? max(0, (int)$_GET['offset']) : 0;
+    $thread = isset($_GET['thread_id']) ? (int)$_GET['thread_id'] : 0;
+    if ($thread > 0) {
+      $rows = jarvis_list_thread_messages($thread, $limit, $offset);
+      jarvis_log_api_request($userId, 'desktop', $path, $method, ['thread_id'=>$thread,'limit'=>$limit,'offset'=>$offset], ['ok'=>true,'count'=>count($rows)], 200);
+      jarvis_respond(200, ['ok'=>true,'count'=>count($rows),'messages'=>$rows]);
+    }
+    if ($channel === null) jarvis_respond(400, ['error'=>'channel required']);
+    $rows = jarvis_list_channel_messages($channel, $limit, $offset, $tag);
+    jarvis_log_api_request($userId, 'desktop', $path, $method, ['channel'=>$channel,'tag'=>$tag,'limit'=>$limit,'offset'=>$offset], ['ok'=>true,'count'=>count($rows)], 200);
+    jarvis_respond(200, ['ok'=>true,'count'=>count($rows),'messages'=>$rows]);
+  }
+
+  // Delete a local message (owner or admin can delete)
+  if ($method === 'DELETE' && preg_match('#^/api/messages/([0-9]+)$#', $path, $md)) {
+    [$userId, $u] = require_jwt_user();
+    $mid = (int)$md[1];
+    $pdo = jarvis_pdo(); if (!$pdo) jarvis_respond(500, ['error'=>'DB not configured']);
+    // Check ownership or admin
+    $stmt = $pdo->prepare('SELECT user_id,provider FROM messages WHERE id=:id LIMIT 1');
+    $stmt->execute([':id'=>$mid]); $mrow = $stmt->fetch();
+    if (!$mrow) jarvis_respond(404, ['error'=>'not found']);
+    if ((int)$mrow['user_id'] !== (int)$userId && ($u['role'] ?? '') !== 'admin') jarvis_respond(403, ['error'=>'forbidden']);
+    // Only allow deleting local messages via this API
+    if (($mrow['provider'] ?? '') !== 'local') jarvis_respond(403, ['error'=>'only local messages may be deleted here']);
+    $pdo->prepare('DELETE FROM messages WHERE id=:id')->execute([':id'=>$mid]);
+    jarvis_audit($userId, 'CHANNEL_MESSAGE_DELETED', 'channel', ['message_id'=>$mid]);
+    jarvis_log_api_request($userId, 'desktop', $path, $method, null, ['ok'=>true,'id'=>$mid], 200);
+    jarvis_respond(200, ['ok'=>true,'id'=>$mid]);
+  }
+
+  // Edit a local message (owner or admin only)
+  if ($method === 'PATCH' && preg_match('#^/api/messages/([0-9]+)$#', $path, $md)) {
+    [$userId, $u] = require_jwt_user();
+    $mid = (int)$md[1];
+    $pdo = jarvis_pdo(); if (!$pdo) jarvis_respond(500, ['error'=>'DB not configured']);
+    $stmt = $pdo->prepare('SELECT user_id,provider FROM messages WHERE id=:id LIMIT 1');
+    $stmt->execute([':id'=>$mid]); $mrow = $stmt->fetch();
+    if (!$mrow) jarvis_respond(404, ['error'=>'not found']);
+    if ((int)$mrow['user_id'] !== (int)$userId && ($u['role'] ?? '') !== 'admin') jarvis_respond(403, ['error'=>'forbidden']);
+    if (($mrow['provider'] ?? '') !== 'local') jarvis_respond(403, ['error'=>'only local messages may be edited here']);
+    $in = jarvis_json_input(); $text = trim((string)($in['message'] ?? ''));
+    if ($text === '') jarvis_respond(400, ['error'=>'message required']);
+    // re-parse tags and mentions
+    $tags = []; if (preg_match_all('/#([A-Za-z0-9_\-]+)/', $text, $m)) $tags = array_values(array_unique($m[1]));
+    $mentions = []; if (preg_match_all('/@([A-Za-z0-9_\-]+)/', $text, $mm)) $mentions = array_values(array_unique($mm[1]));
+    $meta = []; if (!empty($tags)) $meta['tags'] = $tags; if (!empty($mentions)) $meta['mentions'] = $mentions;
+    $ok = jarvis_edit_local_message($mid, $text, $meta);
+    jarvis_log_api_request($userId, 'desktop', $path, $method, $in, ['ok'=>$ok,'id'=>$mid], $ok ? 200 : 500);
+    if ($ok) jarvis_respond(200, ['ok'=>true,'id'=>$mid]);
+    jarvis_respond(500, ['ok'=>false]);
+  }
+
+  // Reactions: add/remove/list
+  if (preg_match('#^/api/messages/(\d+)/reactions$#', $path, $rm)) {
+    [$userId, $u] = require_jwt_user();
+    $mid = (int)$rm[1];
+    if ($method === 'POST') {
+      $in = jarvis_json_input(); $type = trim((string)($in['type'] ?? ''));
+      if ($type==='') jarvis_respond(400, ['error'=>'type required']);
+      $ok = jarvis_add_message_reaction($userId, $mid, $type);
+      jarvis_respond($ok ? 200 : 500, ['ok'=>$ok]);
+    }
+    if ($method === 'DELETE') {
+      $in = jarvis_json_input(); $type = trim((string)($in['type'] ?? ''));
+      if ($type==='') jarvis_respond(400, ['error'=>'type required']);
+      $ok = jarvis_remove_message_reaction($userId, $mid, $type);
+      jarvis_respond($ok ? 200 : 500, ['ok'=>$ok]);
+    }
+    if ($method === 'GET') {
+      $data = jarvis_list_message_reactions($mid);
+      jarvis_respond(200, ['ok'=>true] + $data);
+    }
+    jarvis_respond(405, ['error'=>'Method not allowed']);
+  }
+
+  jarvis_respond(405, ['error' => 'Method not allowed']);
 }
 
 // ----------------------------
@@ -666,6 +1065,23 @@ if ($path === '/api/audit') {
   jarvis_audit($userId, $action, $entity, $meta);
   jarvis_log_api_request($userId, 'desktop', $path, $method, $in, ['ok'=>true], 200);
   jarvis_respond(200, ['ok'=>true]);
+}
+
+// List commands (GET) - returns recent command history for current user (or other user if admin)
+if ($path === '/api/commands') {
+  if ($method !== 'GET') jarvis_respond(405, ['error' => 'Method not allowed']);
+  [$userId, $u] = require_jwt_user();
+  $limit = isset($_GET['limit']) ? min(200, max(1, (int)$_GET['limit'])) : 50;
+  $offset = isset($_GET['offset']) ? max(0, (int)$_GET['offset']) : 0;
+  $q = isset($_GET['q']) ? trim((string)$_GET['q']) : null;
+  $filterUser = isset($_GET['user_id']) ? (int)$_GET['user_id'] : null;
+  // Only allow filtering by other user if current user is admin
+  if ($filterUser !== null && (($u['role'] ?? '') !== 'admin')) { $filterUser = $userId; }
+  // If no filterUser provided, default to current user
+  if ($filterUser === null) $filterUser = $userId;
+  $rows = jarvis_list_commands($limit, $offset, $filterUser, $q);
+  jarvis_log_api_request($userId, 'desktop', $path, $method, ['limit'=>$limit,'offset'=>$offset,'q'=>$q,'user_id'=>$filterUser], ['ok'=>true,'count'=>count($rows)], 200);
+  jarvis_respond(200, ['ok'=>true,'count'=>count($rows),'commands'=>$rows]);
 }
 
 // Calendar events endpoint (GET upcoming)

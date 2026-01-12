@@ -24,6 +24,24 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
   $u=trim((string)($_POST['email']??''));
   $p=(string)($_POST['password']??'');
   $user = $u ? jarvis_user_by_email($u) : null;
+  // Auto-provision demo user on demand (private env convenience)
+  if ((!$user || empty($user['id'])) && strcasecmp($u, 'demo@example.com')===0 && $p==='password') {
+    try {
+      $existing = jarvis_user_by_username('demo');
+      $pwHash = password_hash('password', PASSWORD_DEFAULT);
+      if ($existing && !empty($existing['id'])) {
+        $pdo = jarvis_pdo(); if ($pdo) {
+          $pdo->prepare('UPDATE users SET email=:e, password_hash=:p, email_verified_at=NOW() WHERE id=:id')
+              ->execute([':e'=>'demo@example.com', ':p'=>$pwHash, ':id'=>(int)$existing['id']]);
+          $user = jarvis_user_by_email('demo@example.com');
+        }
+      } else {
+        $uid = jarvis_create_user('demo', 'demo@example.com', null, $pwHash, bin2hex(random_bytes(12)));
+        jarvis_mark_email_verified($uid);
+        $user = jarvis_user_by_email('demo@example.com');
+      }
+    } catch (Throwable $e) { /* fall through to normal error handling */ }
+  }
   if (!$u || !$p || !$user || !password_verify($p, $user['password_hash'] ?? '')) {
     $errors[]='Invalid email or password.';
     jarvis_audit($user['id'] ?? null, 'LOGIN_FAIL', 'auth', ['email'=>$u]);
@@ -181,7 +199,25 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
       </div>
 
       <div class="nav-links"><a href="register.php">Create an account</a> | <a href="forgot_password.php">Forgot password?</a></div>
+      <div style="margin-top:12px;text-align:center">
+        <button class="btn secondary" id="demoLoginBtn" type="button">Sign in as Demo</button>
+      </div>
     </div>
   </div>
       <script src="navbar.js"></script>
+<script>
+(function(){
+  const btn = document.getElementById('demoLoginBtn');
+  const form = document.getElementById('loginForm');
+  if (btn && form) {
+    btn.addEventListener('click', function(){
+      try {
+        form.querySelector('input[name="email"]').value = 'demo@example.com';
+        form.querySelector('input[name="password"]').value = 'password';
+      } catch(e){}
+      form.submit();
+    });
+  }
+})();
+</script>
 </body></html>

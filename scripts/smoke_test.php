@@ -83,5 +83,103 @@ curl_close($ch);
 if ($code < 200 || $code >= 400) fail('Voice download HEAD failed: http=' . $code);
 ok('Voice download HEAD OK');
 
+// Photo upload test (multipart/form-data)
+$tmp2 = sys_get_temp_dir() . '/jarvis_smoke_sample.jpg';
+file_put_contents($tmp2, random_bytes(512));
+if (!is_file($tmp2) || filesize($tmp2) < 100) fail('Failed to create local sample image file');
+
+$ch = curl_init($base . '/api/photos');
+curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+curl_setopt($ch, CURLOPT_POST, true);
+curl_setopt($ch, CURLOPT_HTTPHEADER, ["Authorization: Bearer $token"]);
+$post = [ 'file' => new CURLFile($tmp2, 'image/jpeg', 'sample.jpg'), 'meta' => json_encode(['test'=>'smoke']) ];
+curl_setopt($ch, CURLOPT_POSTFIELDS, $post);
+$resp = curl_exec($ch);
+$code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+curl_close($ch);
+@unlink($tmp2);
+$j = $resp ? json_decode($resp, true) : null;
+if (!$j || empty($j['id']) || $code < 200 || $code >= 300) fail('/api/photos upload failed: http=' . $code . ' resp=' . substr($resp,0,200));
+$photoId = $j['id'];
+ok('/api/photos upload OK id=' . $photoId);
+
+// Also test device upload token flow: create a device token and upload with it
+$ch = curl_init($base . '/api/device_tokens');
+curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+curl_setopt($ch, CURLOPT_POST, true);
+curl_setopt($ch, CURLOPT_HTTPHEADER, ["Authorization: Bearer $token","Content-Type: application/json"]);
+curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode(['label'=>'smoke-test-device','ttl_seconds'=>300]));
+$resp = curl_exec($ch);
+$code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+curl_close($ch);
+$j = $resp ? json_decode($resp, true) : null;
+if (!$j || empty($j['token']) || $code < 200 || $code >= 300) fail('Create device token failed: http=' . $code . ' resp=' . substr($resp,0,200));
+$deviceToken = $j['token']['token'];
+ok('Created device token id=' . ($j['token']['id'] ?? '?'));
+
+// Upload a photo using the device token
+$tmp3 = sys_get_temp_dir() . '/jarvis_smoke_sample2.jpg';
+file_put_contents($tmp3, random_bytes(512));
+$ch = curl_init($base . '/api/photos');
+curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+curl_setopt($ch, CURLOPT_POST, true);
+curl_setopt($ch, CURLOPT_HTTPHEADER, ["Authorization: Bearer $deviceToken"]);
+$post = [ 'file' => new CURLFile($tmp3, 'image/jpeg', 'sample2.jpg'), 'meta' => json_encode(['test'=>'smoke_device_token']) ];
+curl_setopt($ch, CURLOPT_POSTFIELDS, $post);
+$resp = curl_exec($ch);
+$code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+curl_close($ch);
+@unlink($tmp3);
+$j = $resp ? json_decode($resp, true) : null;
+if (!$j || empty($j['id']) || $code < 200 || $code >= 300) fail('/api/photos upload with device token failed: http=' . $code . ' resp=' . substr($resp,0,200));
+$photoId2 = $j['id'];
+ok('/api/photos upload via device token OK id=' . $photoId2);
+
+// Run the worker once to process pending jobs
+$workerCmd = 'php ' . escapeshellarg(__DIR__ . '/photo_worker.php') . ' process_once';
+exec($workerCmd, $out, $wcode);
+if ($wcode !== 0) fail('Worker failed (exit ' . $wcode . '): ' . implode('\n', $out));
+ok('Worker processed pending jobs (exit=' . $wcode . ')');
+
+// HEAD download photo
+$ch = curl_init($base . '/api/photos/' . $photoId . '/download');
+curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+curl_setopt($ch, CURLOPT_NOBODY, true);
+curl_setopt($ch, CURLOPT_HTTPHEADER, ["Authorization: Bearer $token"]);
+curl_exec($ch);
+$code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+curl_close($ch);
+if ($code < 200 || $code >= 400) fail('Photo download HEAD failed: http=' . $code);
+ok('Photo download HEAD OK');
+
+// POST a local channel message
+$ch = curl_init($base . '/api/messages');
+curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+curl_setopt($ch, CURLOPT_POST, true);
+$post = json_encode(['channel'=>'local:rhats','message'=>'Smoke test channel #smoke','provider'=>'local']);
+curl_setopt($ch, CURLOPT_HTTPHEADER, ["Authorization: Bearer $token","Content-Type: application/json"]);
+curl_setopt($ch, CURLOPT_POSTFIELDS, $post);
+$resp = curl_exec($ch);
+$code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+curl_close($ch);
+$j = $resp ? json_decode($resp, true) : null;
+if (!$j || empty($j['ok']) || $code < 200 || $code >= 300) fail('/api/messages (local) failed: http=' . $code . ' resp=' . substr($resp,0,200));
+ok('/api/messages (local) OK');
+
+// Find the message via the API and delete it
+$r = @file_get_contents($base . '/api/messages?channel=local:rhats&limit=5', false, $ctx);
+$found = $r ? json_decode($r, true) : null;
+if (!$found || empty($found['messages']) || !is_array($found['messages'])) fail('Could not list messages after post');
+$mid = (int)$found['messages'][0]['id'];
+$ch = curl_init($base . '/api/messages/' . $mid);
+curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'DELETE');
+curl_setopt($ch, CURLOPT_HTTPHEADER, ["Authorization: Bearer $token"]);
+curl_exec($ch);
+$code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+curl_close($ch);
+if ($code < 200 || $code >= 300) fail('DELETE /api/messages/' . $mid . ' failed: http=' . $code);
+ok('DELETE /api/messages/' . $mid . ' OK');
+
 ok('Smoke tests completed successfully');
 return 0;

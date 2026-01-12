@@ -139,6 +139,7 @@
           try {
             const [nData, aData] = await Promise.all([
               window.jarvisApi.get('/api/notifications?limit=20', { ttl: 0, force:true }).catch(()=>null),
+      window.jarvisApi.get('/api/messages?channel=local:rhats&limit=6', { ttl: 0, force:true }).catch(()=>null),
               window.jarvisApi.get('/api/audit?limit=20', { ttl: 0, force:true }).catch(()=>null)
             ]);
             if (nData && nData.ok) {
@@ -148,8 +149,16 @@
                 let badge = a.querySelector('.nav-notif-badge');
                 if (!badge) { badge = document.createElement('span'); badge.className = 'badge nav-notif-badge'; a.appendChild(badge); }
                 badge.textContent = (nData.count || 0) > 0 ? (nData.count + ' unread') : '';
-              }
-            }
+              }              // Show a mention indicator on Channels link when there are unread mentions
+              try {
+                const mentions = (nData.notifications || []).some(n => (n.type === 'mention' || (n.metadata_json && n.metadata_json.includes('mention')) ) && (n.is_read == 0));
+                const ch = document.querySelector('a[href="/public/channel.php"]');
+                if (ch) {
+                  let mb = ch.querySelector('.nav-mention-badge');
+                  if (!mb) { mb = document.createElement('span'); mb.className = 'badge nav-mention-badge'; ch.appendChild(mb); }
+                  mb.textContent = mentions ? 'mention' : '';
+                }
+              } catch(e){}            }
             if (aData && aData.ok) {
               window.jarvisEmit('audit.updated', aData);
             }

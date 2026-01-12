@@ -274,6 +274,138 @@ function jarvis_fetch_weather(float $lat, float $lon): ?array {
   $out['raw'] = $data;
   return $out;
 }
+
+/**
+ * Convert an EXIF GPS coordinate (array with 3 rationals) to decimal degrees.
+ * Supports values like ['52/1','30/1','1234/100'] or numeric arrays returned by exif_read_data.
+ */
+function jarvis_exif_gps_to_decimal($coord): ?float {
+  if (!is_array($coord) || count($coord) < 3) return null;
+  try {
+    $parts = [];
+    foreach ($coord as $c) {
+      if (is_array($c) && isset($c['0']) && isset($c['1'])) {
+        // sometimes represented as array
+        $num = (float)$c[0]; $den = (float)$c[1];
+        $parts[] = $den != 0 ? ($num / $den) : 0.0;
+      } elseif (is_string($c) && strpos($c, '/') !== false) {
+        [$n,$d] = explode('/', $c, 2);
+        $parts[] = ((float)$n) / ((float)$d ?: 1.0);
+      } else {
+        $parts[] = (float)$c;
+      }
+    }
+    if (count($parts) < 3) return null;
+    $deg = $parts[0] + ($parts[1] / 60.0) + ($parts[2] / 3600.0);
+    return $deg;
+  } catch (Throwable $e) {
+    return null;
+  }
+}
+
+/**
+ * Parse EXIF data for GPS coordinates and returns ['lat'=>..., 'lon'=>..., 'alt'=>...] or null.
+ */
+function jarvis_exif_get_gps(array $exif): ?array {
+  if (empty($exif)) return null;
+  $gps = $exif['GPS'] ?? ($exif['GPSInfo'] ?? null);
+  if (!$gps || !is_array($gps)) return null;
+  $lat = $lon = null;
+  if (!empty($gps['GPSLatitude']) && !empty($gps['GPSLatitudeRef']) && !empty($gps['GPSLongitude']) && !empty($gps['GPSLongitudeRef'])) {
+    $lat = jarvis_exif_gps_to_decimal($gps['GPSLatitude']);
+    $lon = jarvis_exif_gps_to_decimal($gps['GPSLongitude']);
+    if ($lat === null || $lon === null) return null;
+    $latref = strtoupper(trim((string)$gps['GPSLatitudeRef']));
+    $lonref = strtoupper(trim((string)$gps['GPSLongitudeRef']));
+    if ($latref === 'S') $lat = -1 * $lat;
+    if ($lonref === 'W') $lon = -1 * $lon;
+  }
+  $alt = null;
+  if (!empty($gps['GPSAltitude'])) {
+    $alt = jarvis_exif_gps_to_decimal([$gps['GPSAltitude']]);
+  }
+  if ($lat === null || $lon === null) return null;
+  return ['lat'=>$lat,'lon'=>$lon,'altitude'=>$alt];
+}
+
+/**
+ * Reprocess a single photo by id: generate thumbnail if missing, extract EXIF and create location if GPS present.
+ * Returns an array with keys: ok(bool), messages(array)
+ */
+function jarvis_reprocess_photo(int $photoId, ?array $override = null): array {
+  $pdo = jarvis_pdo(); if (!$pdo) return ['ok'=>false,'messages'=>['db not configured']];
+  $stmt = $pdo->prepare('SELECT id,user_id,filename,thumb_filename,metadata_json FROM photos WHERE id=:id LIMIT 1');
+  $stmt->execute([':id'=>$photoId]);
+  $r = $stmt->fetch(PDO::FETCH_ASSOC);
+  if (!$r) return ['ok'=>false,'messages'=>['photo not found']];
+  $id = (int)$r['id']; $uid = (int)$r['user_id'];
+  $baseDir = __DIR__ . '/storage/photos/' . $uid;
+  $file = $baseDir . '/' . $r['filename'];
+  $messages = [];
+  if (!is_file($file)) return ['ok'=>false,'messages'=>['file missing']];
+
+  // thumbnail
+  $thumbName = $r['thumb_filename'];
+  if (empty($thumbName) || !is_file($baseDir . '/' . $thumbName)) {
+    try {
+      $info = @getimagesize($file);
+      if ($info && isset($info[0], $info[1]) && function_exists('imagecreatetruecolor')) {
+        $max = 600;
+        $ratio = min(1, $max / max($info[0], $info[1]));
+        $tw = (int)round($info[0] * $ratio);
+        $th = (int)round($info[1] * $ratio);
+        $mime = $info['mime'] ?? '';
+        $src = null;
+        if ($mime === 'image/jpeg' || $mime === 'image/pjpeg') $src = imagecreatefromjpeg($file);
+        elseif ($mime === 'image/png') $src = imagecreatefrompng($file);
+        elseif ($mime === 'image/gif') $src = imagecreatefromgif($file);
+        if ($src) {
+          $dst = imagecreatetruecolor($tw, $th);
+          imagecopyresampled($dst, $src, 0,0,0,0, $tw, $th, $info[0], $info[1]);
+          $thumbName = 'thumb_' . $r['filename'] . '.jpg';
+          imagejpeg($dst, $baseDir . '/' . $thumbName, 80);
+          imagedestroy($dst); imagedestroy($src);
+          $pdo->prepare('UPDATE photos SET thumb_filename = :t WHERE id = :id')->execute([':t'=>$thumbName, ':id'=>$id]);
+          $messages[] = "thumbnail created: {$thumbName}";
+        }
+      }
+    } catch (Throwable $e) { $messages[] = 'thumb failed: ' . $e->getMessage(); }
+  }
+
+  // EXIF (or override for tests)
+  $meta = $r['metadata_json'] ? json_decode($r['metadata_json'], true) : [];
+  // If override provides GPS lat/lon, set metadata and create location log immediately (used in tests)
+  if (is_array($override) && isset($override['gps_lat'], $override['gps_lon']) && is_numeric($override['gps_lat']) && is_numeric($override['gps_lon'])) {
+    $lat = (float)$override['gps_lat']; $lon = (float)$override['gps_lon'];
+    $meta['exif_gps'] = ['lat'=>$lat,'lon'=>$lon,'altitude'=>null];
+    $s = $pdo->prepare('INSERT INTO location_logs (user_id,lat,lon,accuracy_m,source) VALUES (:u,:la,:lo,:a,:s)');
+    $s->execute([':u'=>$uid, ':la'=>$lat, ':lo'=>$lon, ':a'=>null, ':s'=>'photo']);
+    $locId = (int)$pdo->lastInsertId(); if ($locId) $meta['photo_location_id'] = $locId;
+    $meta['exif_present'] = true;
+    $pdo->prepare('UPDATE photos SET metadata_json = :m WHERE id = :id')->execute([':m'=>json_encode($meta), ':id'=>$id]);
+    $messages[] = 'gps override applied';
+  }
+  if (empty($meta['exif_present']) && function_exists('exif_read_data')) {
+    try {
+      $exif = @exif_read_data($file, 0, true);
+      if (is_array($exif) && !empty($exif)) {
+        if (!empty($exif['EXIF']['DateTimeOriginal'])) $meta['exif_datetime'] = (string)$exif['EXIF']['DateTimeOriginal'];
+        $gps = jarvis_exif_get_gps($exif);
+        if ($gps) {
+          $meta['exif_gps'] = $gps;
+          $s = $pdo->prepare('INSERT INTO location_logs (user_id,lat,lon,accuracy_m,source) VALUES (:u,:la,:lo,:a,:s)');
+          $s->execute([':u'=>$uid, ':la'=>$gps['lat'], ':lo'=>$gps['lon'], ':a'=>null, ':s'=>'photo']);
+          $locId = (int)$pdo->lastInsertId(); if ($locId) $meta['photo_location_id'] = $locId;
+        }
+        $meta['exif_present'] = true;
+        $pdo->prepare('UPDATE photos SET metadata_json = :m WHERE id = :id')->execute([':m'=>json_encode($meta), ':id'=>$id]);
+        $messages[] = 'exif extracted';
+      }
+    } catch (Throwable $e) { $messages[] = 'exif failed: ' . $e->getMessage(); }
+  }
+
+  return ['ok'=>true,'messages'=>$messages];
+}
 function jarvis_verify_google_id_token(string $idToken, string $clientId): ?array {
   $parts = explode('.', $idToken);
   if (count($parts) !== 3) return null;
