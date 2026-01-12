@@ -1028,3 +1028,81 @@ function jarvis_resend_email_verification(int $userId): bool {
   jarvis_audit($userId, 'EMAIL_VERIFICATION_RESENT', 'auth', null);
   return true;
 }
+
+// ========== Local Calendar Events (user-created events, not from Google) ==========
+
+/**
+ * Ensure the local events table exists
+ */
+function jarvis_ensure_local_events_table(): void {
+  $pdo = jarvis_pdo();
+  if (!$pdo) return;
+  $pdo->exec("
+    CREATE TABLE IF NOT EXISTS user_local_events (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+      user_id BIGINT UNSIGNED NOT NULL,
+      title VARCHAR(255) NOT NULL,
+      event_date DATE NOT NULL,
+      event_time TIME NULL,
+      location VARCHAR(255) NULL,
+      notes TEXT NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      PRIMARY KEY(id),
+      KEY ix_local_events_user(user_id),
+      KEY ix_local_events_date(event_date),
+      CONSTRAINT fk_local_events_user FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+  ");
+}
+
+/**
+ * List local events for a user
+ */
+function jarvis_list_local_events(int $userId, int $limit = 20): array {
+  $pdo = jarvis_pdo();
+  if (!$pdo) return [];
+  // Ensure table exists
+  jarvis_ensure_local_events_table();
+  $stmt = $pdo->prepare('SELECT id, title, event_date, event_time, location, notes, created_at FROM user_local_events WHERE user_id = :u AND event_date >= CURDATE() ORDER BY event_date ASC, event_time ASC LIMIT :l');
+  $stmt->bindValue(':u', $userId, PDO::PARAM_INT);
+  $stmt->bindValue(':l', $limit, PDO::PARAM_INT);
+  $stmt->execute();
+  return $stmt->fetchAll() ?: [];
+}
+
+/**
+ * Add a local event
+ */
+function jarvis_add_local_event(int $userId, string $title, string $eventDate, ?string $eventTime = null, ?string $location = null, ?string $notes = null): int {
+  $pdo = jarvis_pdo();
+  if (!$pdo) return 0;
+  jarvis_ensure_local_events_table();
+  $stmt = $pdo->prepare('INSERT INTO user_local_events (user_id, title, event_date, event_time, location, notes) VALUES (:u, :t, :d, :tm, :loc, :n)');
+  $stmt->execute([
+    ':u' => $userId,
+    ':t' => $title,
+    ':d' => $eventDate,
+    ':tm' => $eventTime,
+    ':loc' => $location,
+    ':n' => $notes
+  ]);
+  $id = (int)$pdo->lastInsertId();
+  jarvis_audit($userId, 'LOCAL_EVENT_CREATED', 'calendar', ['event_id' => $id, 'title' => $title]);
+  return $id;
+}
+
+/**
+ * Delete a local event
+ */
+function jarvis_delete_local_event(int $userId, int $eventId): bool {
+  $pdo = jarvis_pdo();
+  if (!$pdo) return false;
+  $stmt = $pdo->prepare('DELETE FROM user_local_events WHERE id = :id AND user_id = :u');
+  $stmt->execute([':id' => $eventId, ':u' => $userId]);
+  if ($stmt->rowCount() > 0) {
+    jarvis_audit($userId, 'LOCAL_EVENT_DELETED', 'calendar', ['event_id' => $eventId]);
+    return true;
+  }
+  return false;
+}

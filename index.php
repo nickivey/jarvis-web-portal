@@ -1190,4 +1190,48 @@ if (preg_match('#^/api/home/devices/(\d+)/toggle$#', $path, $m)) {
   jarvis_respond(200, ['ok'=>true, 'device_id'=>$did, 'status'=>$newStatus]);
 }
 
+// ==================== Local Calendar Events API ====================
+
+// GET /api/local-events - List local events
+if ($path === '/api/local-events' && $method === 'GET') {
+  [$userId, $u] = require_jwt_user();
+  $limit = isset($_GET['limit']) ? min((int)$_GET['limit'], 50) : 20;
+  $events = jarvis_list_local_events($userId, $limit);
+  jarvis_respond(200, ['ok' => true, 'events' => $events]);
+}
+
+// POST /api/local-events - Add a local event
+if ($path === '/api/local-events' && $method === 'POST') {
+  [$userId, $u] = require_jwt_user();
+  $body = json_decode(file_get_contents('php://input'), true) ?: [];
+  $title = trim($body['title'] ?? '');
+  $eventDate = trim($body['event_date'] ?? '');
+  $eventTime = !empty($body['event_time']) ? trim($body['event_time']) : null;
+  $location = !empty($body['location']) ? trim($body['location']) : null;
+  $notes = !empty($body['notes']) ? trim($body['notes']) : null;
+  
+  if (!$title || !$eventDate) {
+    jarvis_respond(400, ['ok' => false, 'error' => 'Title and event_date are required']);
+  }
+  
+  $eventId = jarvis_add_local_event($userId, $title, $eventDate, $eventTime, $location, $notes);
+  if ($eventId) {
+    jarvis_respond(201, ['ok' => true, 'event_id' => $eventId]);
+  } else {
+    jarvis_respond(500, ['ok' => false, 'error' => 'Failed to create event']);
+  }
+}
+
+// DELETE /api/local-events/:id - Delete a local event
+if (preg_match('#^/api/local-events/(\d+)$#', $path, $m) && $method === 'DELETE') {
+  [$userId, $u] = require_jwt_user();
+  $eventId = (int)$m[1];
+  $deleted = jarvis_delete_local_event($userId, $eventId);
+  if ($deleted) {
+    jarvis_respond(200, ['ok' => true, 'deleted' => $eventId]);
+  } else {
+    jarvis_respond(404, ['ok' => false, 'error' => 'Event not found or not owned by user']);
+  }
+}
+
 jarvis_respond(404, ['error' => 'Not found']);

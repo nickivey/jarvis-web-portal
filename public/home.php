@@ -107,6 +107,13 @@ $auditItems = jarvis_latest_audit($userId, 12);
 $notifCount = jarvis_unread_notifications_count($userId);
 $notifs = jarvis_recent_notifications($userId, 8);
 
+// Google Calendar connection status
+$googleToken = jarvis_oauth_get($userId, 'google');
+$googleCalendarConnected = !empty($googleToken) && !empty($googleToken['access_token']);
+
+// Local events for user (from user_local_events table)
+$localEvents = jarvis_list_local_events($userId, 10);
+
 // Bottom-right panel content
 $restLogs = [];
 
@@ -141,6 +148,17 @@ $phone = (string)($dbUser['phone_e164'] ?? '');
 
     <?php if($success):?><div class="success"><p><?php echo htmlspecialchars($success); ?></p></div><?php endif;?>
     <?php if($error):?><div class="error"><p><?php echo htmlspecialchars($error); ?></p></div><?php endif;?>
+
+    <?php if (!$googleCalendarConnected): ?>
+    <div class="calendar-connect-banner">
+      <div class="banner-icon">📅</div>
+      <div class="banner-content">
+        <strong>Google Calendar Not Connected</strong>
+        <p>Connect your Google Calendar to sync events and receive reminders.</p>
+      </div>
+      <a href="connect_google.php" class="btn">Connect Google Calendar</a>
+    </div>
+    <?php endif; ?>
 
     <div class="grid">
       <!-- JARVIS Chat: full-width first row -->
@@ -421,18 +439,112 @@ Content-Type: application/json
   </div>
 
   <div class="container">
-    <div class="card">
-      <h3>Upcoming Calendar Events</h3>
-      <?php if (empty($calendarEvents)): ?>
-        <p class="muted">No upcoming events. Connect Google Calendar in Preferences.</p>
+    <div class="card" id="calendarCard">
+      <h3>📅 <?php echo $googleCalendarConnected ? 'Upcoming Calendar Events' : 'My Calendar'; ?></h3>
+      
+      <?php if ($googleCalendarConnected): ?>
+        <!-- Google Calendar Events -->
+        <?php if (empty($calendarEvents)): ?>
+          <p class="muted">No upcoming events from Google Calendar.</p>
+        <?php else: ?>
+          <ul class="calendar-events-list">
+            <?php foreach($calendarEvents as $ce): ?>
+              <li class="calendar-event">
+                <div class="event-time"><?php echo htmlspecialchars(date('M j', strtotime($ce['start_dt'] ?? 'now'))); ?></div>
+                <div class="event-details">
+                  <strong><?php echo htmlspecialchars($ce['summary'] ?? '(no title)'); ?></strong>
+                  <div class="muted"><?php echo htmlspecialchars(date('g:i A', strtotime($ce['start_dt'] ?? 'now'))); ?><?php echo !empty($ce['location']) ? ' • ' . htmlspecialchars($ce['location']) : ''; ?></div>
+                </div>
+              </li>
+            <?php endforeach; ?>
+          </ul>
+        <?php endif; ?>
       <?php else: ?>
-        <ul>
-          <?php foreach($calendarEvents as $ce): ?>
-            <li><strong><?php echo htmlspecialchars($ce['summary'] ?? '(no title)'); ?></strong>
-              <div class="muted"><?php echo htmlspecialchars((string)($ce['start_dt'] ?? '')); ?> — <?php echo htmlspecialchars((string)($ce['location'] ?? '')); ?></div>
-            </li>
-          <?php endforeach; ?>
-        </ul>
+        <!-- Local Events Calendar -->
+        <div class="local-calendar">
+          <div class="calendar-month-view" id="localCalendarView">
+            <?php
+              $today = new DateTime();
+              $currentMonth = $today->format('F Y');
+              $daysInMonth = (int)$today->format('t');
+              $firstDayOfMonth = (new DateTime($today->format('Y-m-01')))->format('w');
+            ?>
+            <div class="calendar-header">
+              <span class="calendar-month-name"><?php echo $currentMonth; ?></span>
+            </div>
+            <div class="calendar-weekdays">
+              <span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span>
+            </div>
+            <div class="calendar-days">
+              <?php
+                // Empty cells before first day
+                for ($i = 0; $i < $firstDayOfMonth; $i++) {
+                  echo '<span class="calendar-day empty"></span>';
+                }
+                // Days of the month
+                for ($day = 1; $day <= $daysInMonth; $day++) {
+                  $isToday = $day == (int)$today->format('j');
+                  $dayDate = $today->format('Y-m-') . str_pad($day, 2, '0', STR_PAD_LEFT);
+                  $hasEvent = false;
+                  foreach ($localEvents as $evt) {
+                    if (date('Y-m-d', strtotime($evt['event_date'])) === $dayDate) {
+                      $hasEvent = true;
+                      break;
+                    }
+                  }
+                  $classes = 'calendar-day' . ($isToday ? ' today' : '') . ($hasEvent ? ' has-event' : '');
+                  echo '<span class="' . $classes . '" data-date="' . $dayDate . '">' . $day . '</span>';
+                }
+              ?>
+            </div>
+          </div>
+          
+          <div class="local-events-list">
+            <div class="local-events-header">
+              <h4>Upcoming Events</h4>
+              <button type="button" class="btn btn-sm" id="addLocalEventBtn">+ Add Event</button>
+            </div>
+            <?php if (empty($localEvents)): ?>
+              <p class="muted">No local events. Add your first event above!</p>
+            <?php else: ?>
+              <ul class="calendar-events-list">
+                <?php foreach($localEvents as $evt): ?>
+                  <li class="calendar-event">
+                    <div class="event-time"><?php echo htmlspecialchars(date('M j', strtotime($evt['event_date']))); ?></div>
+                    <div class="event-details">
+                      <strong><?php echo htmlspecialchars($evt['title']); ?></strong>
+                      <div class="muted"><?php echo htmlspecialchars(date('g:i A', strtotime($evt['event_time'] ?? '00:00'))); ?><?php echo !empty($evt['location']) ? ' • ' . htmlspecialchars($evt['location']) : ''; ?></div>
+                    </div>
+                    <button class="btn btn-sm secondary delete-local-event" data-id="<?php echo (int)$evt['id']; ?>">×</button>
+                  </li>
+                <?php endforeach; ?>
+              </ul>
+            <?php endif; ?>
+          </div>
+        </div>
+        
+        <!-- Add Event Modal -->
+        <div id="addEventModal" class="modal" style="display:none">
+          <div class="modal-content">
+            <h4>Add Local Event</h4>
+            <form id="addLocalEventForm">
+              <label>Event Title</label>
+              <input type="text" name="title" required placeholder="Meeting, Birthday, etc." />
+              <label>Date</label>
+              <input type="date" name="event_date" required value="<?php echo $today->format('Y-m-d'); ?>" />
+              <label>Time</label>
+              <input type="time" name="event_time" value="09:00" />
+              <label>Location (optional)</label>
+              <input type="text" name="location" placeholder="Office, Home, etc." />
+              <label>Notes (optional)</label>
+              <textarea name="notes" rows="2" placeholder="Additional details..."></textarea>
+              <div style="display:flex;gap:8px;margin-top:12px">
+                <button type="submit" class="btn">Save Event</button>
+                <button type="button" class="btn secondary" id="closeEventModal">Cancel</button>
+              </div>
+            </form>
+          </div>
+        </div>
       <?php endif; ?>
     </div>
 
@@ -709,6 +821,87 @@ Content-Type: application/json
       }
     })();
   </script>
+  
+  <!-- Local Calendar Events Script -->
+  <script>
+  (function(){
+    const addBtn = document.getElementById('addLocalEventBtn');
+    const modal = document.getElementById('addEventModal');
+    const closeBtn = document.getElementById('closeEventModal');
+    const form = document.getElementById('addLocalEventForm');
+    
+    if (addBtn && modal) {
+      addBtn.addEventListener('click', () => {
+        modal.style.display = 'flex';
+      });
+    }
+    
+    if (closeBtn && modal) {
+      closeBtn.addEventListener('click', () => {
+        modal.style.display = 'none';
+      });
+      modal.addEventListener('click', (e) => {
+        if (e.target === modal) modal.style.display = 'none';
+      });
+    }
+    
+    if (form) {
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const formData = new FormData(form);
+        const data = {
+          title: formData.get('title'),
+          event_date: formData.get('event_date'),
+          event_time: formData.get('event_time'),
+          location: formData.get('location'),
+          notes: formData.get('notes')
+        };
+        
+        try {
+          const resp = await (window.jarvisApi ? window.jarvisApi.post('/api/local-events', data) : fetch('/api/local-events', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+          }).then(r => r.json()));
+          
+          if (resp && resp.ok) {
+            window.location.reload();
+          } else {
+            alert('Failed to add event: ' + (resp.error || 'Unknown error'));
+          }
+        } catch (err) {
+          alert('Error adding event: ' + err.message);
+        }
+      });
+    }
+    
+    // Delete event handlers
+    document.querySelectorAll('.delete-local-event').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.preventDefault();
+        const eventId = btn.getAttribute('data-id');
+        if (!eventId) return;
+        
+        if (!confirm('Delete this event?')) return;
+        
+        try {
+          const resp = await (window.jarvisApi ? window.jarvisApi.delete('/api/local-events/' + eventId) : fetch('/api/local-events/' + eventId, {
+            method: 'DELETE'
+          }).then(r => r.json()));
+          
+          if (resp && resp.ok) {
+            btn.closest('.calendar-event').remove();
+          } else {
+            alert('Failed to delete event');
+          }
+        } catch (err) {
+          alert('Error deleting event: ' + err.message);
+        }
+      });
+    });
+  })();
+  </script>
+  
   <!-- No Leaflet required when using embedded maps -->
     
     <script>
