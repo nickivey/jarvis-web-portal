@@ -99,10 +99,12 @@ $focusLon = isset($_GET['lon']) ? (float)$_GET['lon'] : null;
           const noLocs = document.getElementById('no-locs');
           if (!locs.length){ if (tbody) tbody.innerHTML=''; if (noLocs) noLocs.style.display='block'; return; } else { if (noLocs) noLocs.style.display='none'; }
           tbody.innerHTML = '';
-          locs.forEach(r=>{
+          locs.forEach((r, i)=>{
             const tr = document.createElement('tr'); tr.setAttribute('data-id', r.id);
+            tr.className = 'new';
             tr.innerHTML = `<td>${r.created_at}</td><td>${r.lat}</td><td>${r.lon}</td><td>${r.accuracy_m || ''}</td><td>${r.source || ''}</td><td><button class="btn secondary focusLocationBtn" data-id="${r.id}">Focus</button></td>`;
             tbody.appendChild(tr);
+            setTimeout(()=>{ try{ tr.classList.remove('new'); }catch(e){} }, 1000 + (i*40));
           });
           buildMap(locs);
           document.getElementById('locationsUpdatedAt').textContent = new Date().toISOString();
@@ -118,6 +120,9 @@ $focusLon = isset($_GET['lon']) ? (float)$_GET['lon'] : null;
       document.getElementById('refreshLocationsBtn').addEventListener('click', ()=> refresh());
       // Initial load
       refresh();
+
+      // Poll for updates every 30s
+      let _lhPoll = setInterval(()=>{ if (document.visibilityState==='visible') refresh(); }, 30000);
     })();
   </script>
 </body>

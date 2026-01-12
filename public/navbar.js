@@ -175,7 +175,7 @@
                 listEl.innerHTML = '<p class="muted">No notifications yet.</p>';
               } else {
                 data.notifications.forEach(n=>{
-                  const div = document.createElement('div'); div.className='muted'; div.style.marginBottom='8px';
+                  const div = document.createElement('div'); div.className='muted new'; div.style.marginBottom='8px';
                   const b = document.createElement('b'); b.textContent = n.title || '';
                   const body = document.createElement('div'); body.textContent = n.body || '';
                   const meta = document.createElement('div'); meta.className='meta'; meta.textContent = (n.created_at || '') + ((n.is_read == 0) ? ' • UNREAD' : '');
@@ -195,6 +195,7 @@
                     div.appendChild(btn);
                   }
                   listEl.appendChild(div);
+                  setTimeout(()=>{ try{ div.classList.remove('new'); }catch(e){} }, 900);
                 });
               }
             }
@@ -214,9 +215,25 @@
                 data.audit.forEach(a=>{
                   const div = document.createElement('div'); div.className='muted'; div.style.marginBottom='8px';
                   const b = document.createElement('b'); b.textContent = a.action || '';
-                  const body = document.createElement('div'); body.textContent = a.metadata_json ? JSON.stringify(a.metadata_json) : '';
                   const meta = document.createElement('div'); meta.className='meta'; meta.textContent = (a.created_at || '') + ' • ' + (a.entity || '');
-                  div.appendChild(b); div.appendChild(body); div.appendChild(meta); listEl.appendChild(div);
+                  div.appendChild(b);
+                  if (a.metadata_json) {
+                    let parsed = a.metadata_json;
+                    if (typeof parsed === 'string') {
+                      try { parsed = JSON.parse(parsed); } catch(e){}
+                    }
+                    const body = document.createElement('div');
+                    if (parsed && parsed.location_id) {
+                      const link = document.createElement('a');
+                      link.href = 'location_history.php?location_id=' + encodeURIComponent(parsed.location_id);
+                      link.textContent = 'View location #' + parsed.location_id;
+                      body.appendChild(link);
+                      body.appendChild(document.createElement('div'));
+                    }
+                    body.appendChild(document.createTextNode(JSON.stringify(parsed)));
+                    div.appendChild(body);
+                  }
+                  div.appendChild(meta); listEl.appendChild(div);
                 });
               }
             }
