@@ -248,7 +248,7 @@ function jarvis_fetch_weather(float $lat, float $lon): ?array {
   // Use Open-Meteo API (free, no API key required)
   // Docs: https://open-meteo.com/en/docs
   $url = sprintf(
-    'https://api.open-meteo.com/v1/forecast?latitude=%s&longitude=%s&current=temperature_2m,weather_code,wind_speed_10m,relative_humidity_2m&timezone=auto',
+    'https://api.open-meteo.com/v1/forecast?latitude=%s&longitude=%s&current=temperature_2m,weather_code,wind_speed_10m,relative_humidity_2m,is_day&daily=temperature_2m_max,temperature_2m_min,weather_code&timezone=auto',
     urlencode((string)$lat),
     urlencode((string)$lon)
   );
@@ -265,30 +265,62 @@ function jarvis_fetch_weather(float $lat, float $lon): ?array {
   
   $current = $data['current'];
   $weatherCode = (int)($current['weather_code'] ?? 0);
+  $isDay = (bool)($current['is_day'] ?? true);
   
-  // Map WMO weather codes to descriptions
+  // Map WMO weather codes to descriptions and icons
   // https://open-meteo.com/en/docs (see WMO Weather interpretation codes)
-  $weatherDescriptions = [
-    0 => 'Clear sky',
-    1 => 'Mainly clear', 2 => 'Partly cloudy', 3 => 'Overcast',
-    45 => 'Foggy', 48 => 'Depositing rime fog',
-    51 => 'Light drizzle', 53 => 'Moderate drizzle', 55 => 'Dense drizzle',
-    56 => 'Light freezing drizzle', 57 => 'Dense freezing drizzle',
-    61 => 'Slight rain', 63 => 'Moderate rain', 65 => 'Heavy rain',
-    66 => 'Light freezing rain', 67 => 'Heavy freezing rain',
-    71 => 'Slight snow', 73 => 'Moderate snow', 75 => 'Heavy snow',
-    77 => 'Snow grains',
-    80 => 'Slight rain showers', 81 => 'Moderate rain showers', 82 => 'Violent rain showers',
-    85 => 'Slight snow showers', 86 => 'Heavy snow showers',
-    95 => 'Thunderstorm', 96 => 'Thunderstorm with slight hail', 99 => 'Thunderstorm with heavy hail',
+  $weatherData = [
+    0 => ['desc' => 'Clear sky', 'icon_day' => '☀️', 'icon_night' => '🌙'],
+    1 => ['desc' => 'Mainly clear', 'icon_day' => '🌤️', 'icon_night' => '🌙'],
+    2 => ['desc' => 'Partly cloudy', 'icon_day' => '⛅', 'icon_night' => '☁️'],
+    3 => ['desc' => 'Overcast', 'icon_day' => '☁️', 'icon_night' => '☁️'],
+    45 => ['desc' => 'Foggy', 'icon_day' => '🌫️', 'icon_night' => '🌫️'],
+    48 => ['desc' => 'Rime fog', 'icon_day' => '🌫️', 'icon_night' => '🌫️'],
+    51 => ['desc' => 'Light drizzle', 'icon_day' => '🌦️', 'icon_night' => '🌧️'],
+    53 => ['desc' => 'Drizzle', 'icon_day' => '🌦️', 'icon_night' => '🌧️'],
+    55 => ['desc' => 'Dense drizzle', 'icon_day' => '🌧️', 'icon_night' => '🌧️'],
+    56 => ['desc' => 'Freezing drizzle', 'icon_day' => '🌧️', 'icon_night' => '🌧️'],
+    57 => ['desc' => 'Heavy freezing drizzle', 'icon_day' => '🌧️', 'icon_night' => '🌧️'],
+    61 => ['desc' => 'Light rain', 'icon_day' => '🌦️', 'icon_night' => '🌧️'],
+    63 => ['desc' => 'Rain', 'icon_day' => '🌧️', 'icon_night' => '🌧️'],
+    65 => ['desc' => 'Heavy rain', 'icon_day' => '🌧️', 'icon_night' => '🌧️'],
+    66 => ['desc' => 'Freezing rain', 'icon_day' => '🌧️', 'icon_night' => '🌧️'],
+    67 => ['desc' => 'Heavy freezing rain', 'icon_day' => '🌧️', 'icon_night' => '🌧️'],
+    71 => ['desc' => 'Light snow', 'icon_day' => '🌨️', 'icon_night' => '🌨️'],
+    73 => ['desc' => 'Snow', 'icon_day' => '❄️', 'icon_night' => '❄️'],
+    75 => ['desc' => 'Heavy snow', 'icon_day' => '❄️', 'icon_night' => '❄️'],
+    77 => ['desc' => 'Snow grains', 'icon_day' => '🌨️', 'icon_night' => '🌨️'],
+    80 => ['desc' => 'Light showers', 'icon_day' => '🌦️', 'icon_night' => '🌧️'],
+    81 => ['desc' => 'Showers', 'icon_day' => '🌧️', 'icon_night' => '🌧️'],
+    82 => ['desc' => 'Heavy showers', 'icon_day' => '🌧️', 'icon_night' => '🌧️'],
+    85 => ['desc' => 'Snow showers', 'icon_day' => '🌨️', 'icon_night' => '🌨️'],
+    86 => ['desc' => 'Heavy snow showers', 'icon_day' => '❄️', 'icon_night' => '❄️'],
+    95 => ['desc' => 'Thunderstorm', 'icon_day' => '⛈️', 'icon_night' => '⛈️'],
+    96 => ['desc' => 'Thunderstorm with hail', 'icon_day' => '⛈️', 'icon_night' => '⛈️'],
+    99 => ['desc' => 'Severe thunderstorm', 'icon_day' => '⛈️', 'icon_night' => '⛈️'],
   ];
   
-  $desc = $weatherDescriptions[$weatherCode] ?? 'Unknown';
+  $info = $weatherData[$weatherCode] ?? ['desc' => 'Unknown', 'icon_day' => '🌡️', 'icon_night' => '🌡️'];
+  $desc = $info['desc'];
+  $icon = $isDay ? $info['icon_day'] : $info['icon_night'];
+  
+  // Get today's high/low from daily forecast
+  $highTemp = null;
+  $lowTemp = null;
+  if (isset($data['daily']['temperature_2m_max'][0])) {
+    $highTemp = (float)$data['daily']['temperature_2m_max'][0];
+  }
+  if (isset($data['daily']['temperature_2m_min'][0])) {
+    $lowTemp = (float)$data['daily']['temperature_2m_min'][0];
+  }
   
   return [
     'temp_c' => isset($current['temperature_2m']) ? (float)$current['temperature_2m'] : null,
+    'high_c' => $highTemp,
+    'low_c' => $lowTemp,
     'desc' => $desc,
-    'icon' => null, // Open-Meteo doesn't provide icons, but we can add emoji mapping if needed
+    'icon' => $icon,
+    'is_day' => $isDay,
     'humidity' => isset($current['relative_humidity_2m']) ? (int)$current['relative_humidity_2m'] : null,
     'wind_speed' => isset($current['wind_speed_10m']) ? (float)$current['wind_speed_10m'] : null,
     'weather_code' => $weatherCode,

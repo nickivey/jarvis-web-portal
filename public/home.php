@@ -225,8 +225,8 @@ $phone = (string)($dbUser['phone_e164'] ?? '');
       </div>
 
       <div class="card" id="weatherCard">
-        <h3>Weather Conditions</h3>
-        <div id="weatherSummary" style="font-size:18px; line-height:1.4">
+        <h3>Weather</h3>
+        <div id="weatherSummary">
           <?php if ($lastWeather): ?>
             <?php
               $weatherCity = '';
@@ -236,17 +236,34 @@ $phone = (string)($dbUser['phone_e164'] ?? '');
                 $weatherCity = $addr['city'] ?? '';
                 $weatherState = $addr['state'] ?? '';
               }
+              $locationStr = trim($weatherCity . ($weatherCity && $weatherState ? ', ' : '') . $weatherState);
             ?>
-            <div style="display:flex;align-items:center;gap:12px;margin-top:8px">
-              <div style="font-size:32px"><?php echo ($lastWeather['temp_c'] !== null) ? htmlspecialchars(round($lastWeather['temp_c']).'°') : '--'; ?></div>
-              <div>
-                <div style="font-weight:700"><?php echo htmlspecialchars($lastWeather['desc'] ?? ''); ?></div>
-                <?php if ($weatherCity || $weatherState): ?>
-                  <div style="font-size:14px;margin-bottom:2px"><?php echo htmlspecialchars(trim($weatherCity . ($weatherCity && $weatherState ? ', ' : '') . $weatherState)); ?></div>
+            <div class="weather-widget">
+              <div class="weather-main">
+                <div class="weather-icon"><?php echo $lastWeather['icon'] ?? '🌡️'; ?></div>
+                <div class="weather-temp">
+                  <span class="temp-current"><?php echo ($lastWeather['temp_c'] !== null) ? round($lastWeather['temp_c']) : '--'; ?>°</span>
+                  <span class="temp-unit">C</span>
+                </div>
+              </div>
+              <div class="weather-details">
+                <div class="weather-condition"><?php echo htmlspecialchars($lastWeather['desc'] ?? ''); ?></div>
+                <?php if ($locationStr): ?>
+                  <div class="weather-location">📍 <?php echo htmlspecialchars($locationStr); ?></div>
                 <?php endif; ?>
-                <div class="muted">
-                  <?php if (isset($lastWeather['humidity'])): ?>Humidity: <?php echo (int)$lastWeather['humidity']; ?>%<?php endif; ?>
-                  <?php if (isset($lastWeather['wind_speed'])): ?> • Wind: <?php echo round($lastWeather['wind_speed']); ?> km/h<?php endif; ?>
+                <?php if ($lastWeather['high_c'] !== null && $lastWeather['low_c'] !== null): ?>
+                  <div class="weather-highlow">
+                    <span class="weather-high">↑ <?php echo round($lastWeather['high_c']); ?>°</span>
+                    <span class="weather-low">↓ <?php echo round($lastWeather['low_c']); ?>°</span>
+                  </div>
+                <?php endif; ?>
+                <div class="weather-stats">
+                  <?php if (isset($lastWeather['humidity'])): ?>
+                    <span title="Humidity">💧 <?php echo (int)$lastWeather['humidity']; ?>%</span>
+                  <?php endif; ?>
+                  <?php if (isset($lastWeather['wind_speed'])): ?>
+                    <span title="Wind speed">💨 <?php echo round($lastWeather['wind_speed']); ?> km/h</span>
+                  <?php endif; ?>
                 </div>
               </div>
             </div>
