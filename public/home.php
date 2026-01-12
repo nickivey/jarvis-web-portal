@@ -1233,9 +1233,10 @@ Content-Type: application/json
         };
         
         try {
+          const token = window.jarvisJwt || '';
           const resp = await (window.jarvisApi ? window.jarvisApi.post('/api/local-events', data) : fetch('/api/local-events', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
             body: JSON.stringify(data)
           }).then(r => r.json()));
           
@@ -1260,8 +1261,10 @@ Content-Type: application/json
         if (!confirm('Delete this event?')) return;
         
         try {
+          const token = window.jarvisJwt || '';
           const resp = await (window.jarvisApi ? window.jarvisApi.delete('/api/local-events/' + eventId) : fetch('/api/local-events/' + eventId, {
-            method: 'DELETE'
+            method: 'DELETE',
+            headers: { 'Authorization': 'Bearer ' + token }
           }).then(r => r.json()));
           
           if (resp && resp.ok) {
