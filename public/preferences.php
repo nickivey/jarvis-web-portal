@@ -10,6 +10,10 @@ $user = jarvis_user_by_id($userId);
 if (!$user) { session_destroy(); header('Location: login.php'); exit; }
 
 $prefs = jarvis_preferences($userId);
+if (!$prefs) {
+  jarvis_pdo()->prepare('INSERT INTO preferences (user_id) VALUES (:id)')->execute([':id'=>$userId]);
+  $prefs = jarvis_preferences($userId);
+}
 $igToken = jarvis_oauth_get($userId, 'instagram');
 $googleToken = jarvis_oauth_get($userId, 'google');
 $devices = jarvis_list_devices($userId);
@@ -65,7 +69,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       <img src="images/logo.svg" alt="JARVIS logo" />
       <span class="dot" aria-hidden="true"></span>
       <span>JARVIS</span>
-    </div>    <button class="nav-toggle" id="navToggle" aria-label="Open menu">☰</button>    <nav>
+    </div>
+    <button class="nav-toggle" id="navToggle" aria-label="Open menu">☰</button>
+    <nav>
       <a href="home.php">Home</a>
       <a href="preferences.php" class="active">Preferences</a>
       <a href="audit.php">Audit Log</a>
@@ -177,4 +183,5 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       </div>
     </div>
   </div>
+  <script src="navbar.js"></script>
 </body></html>

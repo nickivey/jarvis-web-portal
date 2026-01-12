@@ -7,24 +7,51 @@ require_once __DIR__ . '/instagram_basic.php';
  * Returns: ['text'=>string, 'cards'=>array]
  */
 function jarvis_compose_briefing(int $userId, string $mode='briefing'): array {
+  require_once __DIR__ . '/helpers.php';
+  
   $prefs = jarvis_preferences($userId);
+  if (!$prefs) {
+    jarvis_pdo()->prepare('INSERT INTO preferences (user_id) VALUES (:id)')->execute([':id'=>$userId]);
+    $prefs = jarvis_preferences($userId);
+  }
   $u = jarvis_user_by_id($userId);
   $unread = jarvis_unread_notifications_count($userId);
 
   // Integration status
-  $slackOk = (bool)getenv('SLACK_BOT_TOKEN');
+  $slackToken = jarvis_setting_get('SLACK_BOT_TOKEN') ?: getenv('SLACK_BOT_TOKEN');
+  $slackOk = (bool)$slackToken;
   $igToken = jarvis_oauth_get($userId, 'instagram');
 
   // Instagram update check (Basic Display: media only)
   $ig = jarvis_instagram_check_media_updates($userId);
 
+  // Get current weather from last location
+  $weather = null;
+  $recentLocs = jarvis_recent_locations($userId, 1);
+  if (!empty($recentLocs) && isset($recentLocs[0]['lat'], $recentLocs[0]['lon'])) {
+    try {
+      $weather = jarvis_fetch_weather((float)$recentLocs[0]['lat'], (float)$recentLocs[0]['lon']);
+    } catch (Throwable $e) {
+      $weather = null;
+    }
+  }
+
+  // Slack updates (if connected)
+  $slackInfo = ['status'=>'not_connected', 'recent_messages'=>[]];
+  if ($slackOk && !empty($prefs['default_slack_channel'])) {
+    $slackInfo['status'] = 'connected';
+    $slackInfo['channel'] = $prefs['default_slack_channel'];
+  }
+
   $cards = [
     'notifications_unread' => $unread,
     'integrations' => [
-      'slack' => $slackOk ? 'connected' : 'missing_env',
+      'slack' => $slackOk ? 'connected' : 'not_connected',
       'instagram' => $igToken ? 'connected' : 'not_connected',
     ],
     'instagram' => $ig,
+    'slack' => $slackInfo,
+    'weather' => $weather,
   ];
 
   $name = $u['username'] ?? 'operator';
@@ -36,6 +63,16 @@ function jarvis_compose_briefing(int $userId, string $mode='briefing'): array {
   }
   $lines[] = "Unread notifications: {$unread}.";
 
+  // Weather information (if available)
+  if ($mode === 'wake' && $weather) {
+    $temp = (int)($weather['main']['temp'] ?? 0);
+    $desc = ucfirst((string)($weather['weather'][0]['description'] ?? 'unknown'));
+    $lines[] = "Weather: {$desc}, {$temp}°F.";
+  } elseif ($mode === 'wake') {
+    $lines[] = "Weather: location unavailable. Use browser location to refresh.";
+  }
+
+  // Instagram updates
   if (!empty($prefs['instagram_watch_username'])) {
     $watch = '@' . ltrim((string)$prefs['instagram_watch_username'], '@');
     if (!empty($ig['ok'])) {
@@ -51,8 +88,15 @@ function jarvis_compose_briefing(int $userId, string $mode='briefing'): array {
     $lines[] = "Instagram watch: not configured.";
   }
 
-  // Weather (location updates go through /api/location)
-  $lines[] = "Weather: use browser location to refresh (Yahoo hook point).";
+  // Slack status for wake briefing
+  if ($mode === 'wake') {
+    if ($slackOk) {
+      $lines[] = "Slack: connected to {$prefs['default_slack_channel']}.";
+    } else {
+      $lines[] = "Slack: not connected or configured.";
+    }
+  }
+
   $text = implode("\n• ", array_merge([$lines[0]], array_slice($lines, 1)));
 
   return ['text' => $text, 'cards' => $cards];
