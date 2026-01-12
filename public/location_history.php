@@ -94,11 +94,37 @@ $focusLon = isset($_GET['lon']) ? (float)$_GET['lon'] : null;
         const fallback = el.querySelector('.embedFallback');
         if (iframe) {
           let loaded = false;
-          iframe.addEventListener('load', ()=>{ loaded = true; if (fallback) fallback.style.display = 'none'; });
-          setTimeout(()=>{ try{ if (!loaded && fallback) fallback.style.display = 'block'; }catch(e){} }, 3000);
-          const rl = el.querySelector('.reloadMap'); if (rl) rl.addEventListener('click',(ev)=>{ ev.preventDefault(); try{ iframe.src = iframe.src; if (fallback) fallback.style.display='none'; }catch(e){} });
+          iframe.addEventListener('load', ()=>{ loaded = true; if (fallback) { fallback.style.display = 'none'; hideMapIssueBanner(el); } });
+          setTimeout(()=>{ try{ if (!loaded && fallback) { fallback.style.display = 'block'; showMapIssueBanner(el); sendMapEmbedFailure(centerLat, centerLon, 'location_history'); } }catch(e){} }, 3000);
+          const rl = el.querySelector('.reloadMap'); if (rl) rl.addEventListener('click',(ev)=>{ ev.preventDefault(); try{ if (fallback) fallback.style.display='none'; hideMapIssueBanner(el); iframe.src = iframe.src; }catch(e){} });
         }
         _map = 'embed';
+      }
+
+      // Map embed diagnostics (shared with home): show a banner and send an audit event when iframe fails
+      function showMapIssueBanner(el){ try{
+        if (!el) return;
+        let b = el.querySelector('.mapIssueBanner');
+        const src = el.dataset && el.dataset.src ? el.dataset.src.replace('/export/embed.html','/') : '#';
+        if (!b) {
+          b = document.createElement('div'); b.className = 'mapIssueBanner';
+          b.innerHTML = `<div style="padding:8px;background:linear-gradient(90deg,rgba(255,165,0,.06),rgba(255,165,0,.03));border:1px solid rgba(255,165,0,.12);border-radius:8px">Map failed to load. <a class="open-osm-link" href="${src}" target="_blank">Open in OpenStreetMap</a> • <a class="retry-osm" href="#" style="margin-left:8px">Retry</a></div>`;
+          el.insertBefore(b, el.firstChild);
+          b.querySelector('.retry-osm').addEventListener('click',(ev)=>{ ev.preventDefault(); try{ const iframe = el.querySelector('iframe'); if (iframe){ iframe.src = iframe.src; } b.style.display='none'; if (el.querySelector('.embedFallback')) el.querySelector('.embedFallback').style.display='none'; }catch(e){} });
+        } else { b.style.display = 'block'; }
+      }catch(e){}
+      }
+      function hideMapIssueBanner(el){ try{ const b = el.querySelector('.mapIssueBanner'); if (b) b.style.display = 'none'; }catch(e){}
+      }
+      function sendMapEmbedFailure(lat, lon, src){ try{
+        const payload = { action: 'MAP_EMBED_FAILED', entity: 'location_map', metadata: { lat: lat, lon: lon, source: src } };
+        if (window.jarvisApi && typeof window.jarvisApi.post === 'function') {
+          window.jarvisApi.post('/api/audit', { action: payload.action, entity: payload.entity, metadata: payload.metadata }).catch(()=>{});
+        } else {
+          try{ const headers = window.jarvisApiToken ? { 'Content-Type':'application/json','Authorization':'Bearer '+window.jarvisApiToken } : { 'Content-Type':'application/json' }; fetch('/api/audit', { method:'POST', headers: headers, body: JSON.stringify({ action: payload.action, entity: payload.entity, metadata: payload.metadata }) }).catch(()=>{}); }catch(e){}
+        }
+      }catch(e){}
+      }
       }
 
       function buildMap(locs){

@@ -338,4 +338,9 @@ tr.new{animation:rowFlash .9s ease forwards}
 .embedMapWrap .openOsm{color:var(--blue2);text-decoration:underline}
 .embedMapWrap .reloadMap{color:var(--blue);margin-left:8px;text-decoration:underline}
 
+/* Map issue banner */
+.mapIssueBanner{margin-bottom:8px}
+.mapIssueBanner .open-osm-link{color:var(--blue2);text-decoration:underline}
+.mapIssueBanner .retry-osm{color:var(--blue);text-decoration:underline;margin-left:8px}
+
 
