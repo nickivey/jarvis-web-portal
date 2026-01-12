@@ -456,18 +456,8 @@ Content-Type: application/json
             if (!text.trim()) return;
             appendMessage(text, 'me');
             try {
-              if (window.jarvisShowLoader) jarvisShowLoader();
-              const isBrief = (text || '').trim().toLowerCase() === 'briefing' || (text || '').trim().toLowerCase() === '/brief';
-              const data = await (window.jarvisApi ? window.jarvisApi.post('/api/command', { text, type: 'voice' }, { cacheTTL: isBrief ? 30000 : null }) : (async ()=>{ const r=await fetch('/api/command',{method:'POST',headers:{'Content-Type':'application/json','Authorization': token ? 'Bearer '+token : ''},body:JSON.stringify({text,type:'voice'})}); return r.json(); })());
-              if (data && typeof data.jarvis_response === 'string' && data.jarvis_response.trim() !== ''){
-                appendMessage(data.jarvis_response, 'jarvis');
-                speakText(data.jarvis_response);
-                showNotification(data.jarvis_response);
-                window.jarvisEmit && window.jarvisEmit('command.response', data);
-                if (window.jarvisInvalidateNotifications) window.jarvisInvalidateNotifications();
-              }
+              await sendCommand(text, 'voice');
             } catch(e) {}
-            finally { if (window.jarvisHideLoader) jarvisHideLoader(); }
           } else {
             msgInput.value = text;
           }
@@ -519,19 +509,7 @@ Content-Type: application/json
           if (!text.trim()) return;
           appendMessage(text, 'me');
           lastInputType = 'voice';
-          try {
-            if (window.jarvisShowLoader) jarvisShowLoader();
-            const isBrief = (text || '').trim().toLowerCase() === 'briefing' || (text || '').trim().toLowerCase() === '/brief';
-            const data = await (window.jarvisApi ? window.jarvisApi.post('/api/command', { text, type: 'voice' }, { cacheTTL: isBrief ? 30000 : null }) : (async ()=>{ const r=await fetch('/api/command',{method:'POST',headers:{'Content-Type':'application/json','Authorization': token? 'Bearer '+token : ''},body:JSON.stringify({text,type:'voice'})}); return r.json(); })());
-                if (data && typeof data.jarvis_response === 'string' && data.jarvis_response.trim() !== ''){
-              appendMessage(data.jarvis_response, 'jarvis');
-              speakText(data.jarvis_response);
-              showNotification(data.jarvis_response);
-              window.jarvisEmit && window.jarvisEmit('command.response', data);
-              if (window.jarvisInvalidateNotifications) window.jarvisInvalidateNotifications();
-            }
-          } catch(e) {}
-          finally { if (window.jarvisHideLoader) jarvisHideLoader(); }
+          try { await sendCommand(text, 'voice'); } catch(e){}
         };
         // scroll chat to bottom
         if (chatLog) chatLog.parentNode.scrollTop = chatLog.parentNode.scrollHeight;
@@ -568,7 +546,47 @@ Content-Type: application/json
         try { new Notification('JARVIS', { body: text }); } catch(e){}
       }
 
-      // Intercept chat form submit and use /api/command (Jarvis), fallback to /api/messages for Slack
+      // Centralized AJAX command sender used by text + voice
+      async function sendCommand(msg, type='text'){
+        if (!msg || !(msg||'').trim()) return null;
+        const sendBtn = document.getElementById('sendBtn');
+        msgInput.disabled = true; if (sendBtn) sendBtn.disabled = true;
+        if (window.jarvisShowLoader) jarvisShowLoader();
+        window.jarvisEmit('command.sent', { text: msg, type });
+        try {
+          const isBrief = (msg || '').trim().toLowerCase() === 'briefing' || (msg || '').trim().toLowerCase() === '/brief';
+          const data = await (window.jarvisApi ? window.jarvisApi.post('/api/command', { text: msg, type }, { cacheTTL: isBrief ? 30000 : null }) : (async ()=>{ const r=await fetch('/api/command',{method:'POST',headers:{'Content-Type':'application/json','Authorization': token? 'Bearer '+token : ''},body:JSON.stringify({text:msg,type:type})}); return r.json(); })());
+
+          if (data && typeof data.jarvis_response === 'string' && data.jarvis_response.trim() !== ''){
+            appendMessage(data.jarvis_response, 'jarvis');
+            speakText(data.jarvis_response);
+            showNotification(data.jarvis_response);
+            window.jarvisEmit('command.response', data);
+            if (window.jarvisInvalidateNotifications) window.jarvisInvalidateNotifications();
+            if (window.jarvisInvalidateAudit) window.jarvisInvalidateAudit();
+            return data;
+          }
+
+          // Fallback: Slack messaging endpoint
+          const data2 = await (window.jarvisApi ? window.jarvisApi.post('/api/messages', { message: msg }) : (async ()=>{ const r2=await fetch('/api/messages',{method:'POST',headers:{'Content-Type':'application/json','Authorization': token? 'Bearer '+token : ''},body:JSON.stringify({message:msg})}); return r2.json(); })());
+          if (data2 && data2.ok) {
+            appendMessage('Sent to Slack (default channel)', 'jarvis');
+            if (enableNotif && enableNotif.checked && Notification.permission === 'granted') showNotification('Slack message sent: '+msg);
+            window.jarvisEmit('message.sent', { message: msg, slack: data2.slack || null });
+            return data2;
+          }
+
+          appendMessage('Failed to send message', 'jarvis');
+          return null;
+        } catch(e){
+          appendMessage('Failed to process command', 'jarvis');
+          return null;
+        } finally {
+          if (window.jarvisHideLoader) jarvisHideLoader();
+          msgInput.disabled = false; if (sendBtn) sendBtn.disabled = false; msgInput.focus();
+        }
+      }
+
       const chatForm = document.getElementById('chatForm');
       if (chatForm) chatForm.addEventListener('submit', async (ev) => {
         ev.preventDefault();
@@ -576,40 +594,7 @@ Content-Type: application/json
         if (!msg) return;
         appendMessage(msg, 'me');
         msgInput.value = '';
-
-        if (window.jarvisShowLoader) jarvisShowLoader();
-        try {
-          // Prefer the Command API
-          window.jarvisEmit('command.sent', { text: msg, type: lastInputType });
-          const isBrief = (msg || '').trim().toLowerCase() === 'briefing' || (msg || '').trim().toLowerCase() === '/brief';
-          const data = await (window.jarvisApi ? window.jarvisApi.post('/api/command', { text: msg, type: lastInputType }, { cacheTTL: isBrief ? 30000 : null }) : (async ()=>{ const r=await fetch('/api/command',{method:'POST',headers:{'Content-Type':'application/json','Authorization': token? 'Bearer '+token : ''},body:JSON.stringify({text:msg,type:lastInputType})}); return r.json(); })());
-
-          if (data && typeof data.jarvis_response === 'string' && data.jarvis_response.trim() !== ''){
-            appendMessage(data.jarvis_response, 'jarvis');
-            speakText(data.jarvis_response);
-            showNotification(data.jarvis_response);
-            window.jarvisEmit('command.response', data);
-            // Invalidate notifications list and fetch fresh
-            if (window.jarvisInvalidateNotifications) window.jarvisInvalidateNotifications();
-            return;
-          }
-        } catch(e){
-          // continue to fallback
-        } finally { if (window.jarvisHideLoader) jarvisHideLoader(); }
-
-        // Fallback: send to Slack via /api/messages if JWT available (uses default channel)
-        try {
-          if (window.jarvisShowLoader) jarvisShowLoader();
-          const data2 = await (window.jarvisApi ? window.jarvisApi.post('/api/messages', { message: msg }) : (async ()=>{ const r2=await fetch('/api/messages',{method:'POST',headers:{'Content-Type':'application/json','Authorization': token? 'Bearer '+token : ''},body:JSON.stringify({message:msg})}); return r2.json(); })());
-          if (data2 && data2.ok) {
-            appendMessage('Sent to Slack (default channel)', 'jarvis');
-            if (enableNotif.checked && Notification.permission === 'granted') showNotification('Slack message sent: '+msg);
-            window.jarvisEmit('message.sent', { message: msg, slack: data2.slack || null });
-          } else {
-            appendMessage('Failed to send to Slack', 'jarvis');
-          }
-        } catch(e){ appendMessage('Failed to send message', 'jarvis'); }
-        finally { if (window.jarvisHideLoader) jarvisHideLoader(); }
+        await sendCommand(msg, lastInputType);
       });
 
       // On load, request notification permission quietly
