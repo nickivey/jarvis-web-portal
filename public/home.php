@@ -924,7 +924,8 @@ Content-Type: application/json
 
       // Centralized AJAX command sender used by text + voice
       async function sendCommand(msg, type='text', meta={}){
-        if (!msg || !(msg||'').trim()) return null;
+        // allow empty msg for voice-only submissions when voice_input_id is provided
+        if ((!msg || !(msg||'').trim()) && !(type === 'voice' && meta && meta.voice_input_id)) return null;
         const sendBtn = document.getElementById('sendBtn');
         msgInput.disabled = true; if (sendBtn) sendBtn.disabled = true;
         // if (window.jarvisShowLoader) jarvisShowLoader();
@@ -948,6 +949,19 @@ Content-Type: application/json
 
           if (data && typeof data.jarvis_response === 'string' && data.jarvis_response.trim() !== ''){
             appendMessage(data.jarvis_response, 'jarvis');
+            // If server returned a voice_input_id, fetch the audio and append it as an audio bubble
+            if (data && data.voice_input_id) {
+              (async ()=>{
+                try{
+                  const headers = token ? { 'Authorization': 'Bearer ' + token } : {};
+                  const r = await fetch('/api/voice/' + data.voice_input_id + '/download', { method: 'GET', headers });
+                  if (r && r.ok) {
+                    const blob = await r.blob();
+                    appendAudioMessage(blob, 'jarvis', data.voice_transcript || null);
+                  }
+                }catch(e){ console.error('fetch voice blob failed', e); }
+              })();
+            }
             // Update weather UI if present in cards
             try {
               const cards = data.cards || {};
@@ -1009,7 +1023,7 @@ Content-Type: application/json
 
       const chatForm = document.getElementById('chatForm');
       if (chatForm) chatForm.addEventListener('submit', async (ev) => {
-        ev.preventDefault();
+        ev.preventDefault(); ev.stopPropagation(); ev.stopImmediatePropagation && ev.stopImmediatePropagation();
         // If there's a pending recorded audio, send that instead of text if present
         try{
           if (sendBtn && sendBtn.dataset && sendBtn.dataset.pendingVoice) {

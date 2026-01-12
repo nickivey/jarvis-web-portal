@@ -203,6 +203,9 @@ if ($path === '/api/command') {
     jarvis_audit($userId, 'COMMAND_VOICE_SUBMIT', 'voice', array_merge($clientMeta, ['voice_input_id'=>$voiceId, 'question'=>$text]));
   }
 
+  // Response metadata to include voice linkage when applicable
+  $respMeta = $voiceId ? array_filter(['voice_input_id' => $voiceId, 'voice_transcript' => ($clientMeta['voice_transcript'] ?? null)]) : [];
+
 // ----------------------------
 // Voice inputs: save audio blobs + transcript for deep dictation analysis
 // ----------------------------
@@ -307,7 +310,7 @@ if (preg_match('#^/api/voice/([0-9]+)/download$#', $path, $m)) {
     jarvis_log_command($userId, 'system', $text, $response, $clientMeta);
     jarvis_audit($userId, 'COMMAND_WHOAMI', 'command', $auditMeta(['answer'=>$response]));
     jarvis_log_api_request($userId, 'desktop', $path, $method, $in, ['jarvis_response'=>$response], 200);
-    jarvis_respond(200, ['jarvis_response'=>$response]);
+    jarvis_respond(200, array_merge(['jarvis_response'=>$response], $respMeta));
   }
 
   if ($lower === 'last login' || $lower === 'when did i last login' || $lower === 'last login time') {
@@ -315,7 +318,7 @@ if (preg_match('#^/api/voice/([0-9]+)/download$#', $path, $m)) {
     jarvis_log_command($userId, 'system', $text, $response, $clientMeta);
     jarvis_audit($userId, 'COMMAND_LAST_LOGIN', 'command', $auditMeta(['answer'=>$response]));
     jarvis_log_api_request($userId, 'desktop', $path, $method, $in, ['jarvis_response'=>$response], 200);
-    jarvis_respond(200, ['jarvis_response'=>$response]);
+    jarvis_respond(200, array_merge(['jarvis_response'=>$response], $respMeta));
   }
 
   if ($lower === 'notifications' || $lower === 'unread notifications') {
@@ -324,7 +327,7 @@ if (preg_match('#^/api/voice/([0-9]+)/download$#', $path, $m)) {
     jarvis_log_command($userId, 'system', $text, $response, $clientMeta);
     jarvis_audit($userId, 'COMMAND_NOTIF_COUNT', 'command', $auditMeta(['answer'=>$response,'count'=>$count]));
     jarvis_log_api_request($userId, 'desktop', $path, $method, $in, ['jarvis_response'=>$response], 200);
-    jarvis_respond(200, ['jarvis_response'=>$response]);
+    jarvis_respond(200, array_merge(['jarvis_response'=>$response], $respMeta));
   }
 
   // Time / Date
@@ -333,7 +336,7 @@ if (preg_match('#^/api/voice/([0-9]+)/download$#', $path, $m)) {
     else $response = "It is " . date('l, F jS, Y');
     jarvis_log_command($userId, 'system', $text, $response, $clientMeta);
     jarvis_audit($userId, 'COMMAND_TIME', 'command', $auditMeta(['answer'=>$response]));
-    jarvis_respond(200, ['jarvis_response'=>$response]);
+    jarvis_respond(200, array_merge(['jarvis_response'=>$response], $respMeta));
   }
 
   // Home Automation Voice Control
@@ -363,11 +366,11 @@ if (preg_match('#^/api/voice/([0-9]+)/download$#', $path, $m)) {
         jarvis_log_command($userId, 'home_control', $text, $response, array_merge($clientMeta, ['device_id'=>$matched['id']]));
         jarvis_audit($userId, 'HOME_DEVICE_TOGGLE', 'home_device', ['device_id'=>$matched['id'], 'new_status'=>$action, 'trigger'=>'voice']);
         // Refresh client UI
-        jarvis_respond(200, ['jarvis_response'=>$response]);
+        jarvis_respond(200, array_merge(['jarvis_response'=>$response], $respMeta));
     } else {
         $response = "I could not find a device named '$target'.";
         jarvis_log_command($userId, 'home_control', $text, $response, $clientMeta);
-        jarvis_respond(200, ['jarvis_response'=>$response]);
+        jarvis_respond(200, array_merge(['jarvis_response'=>$response], $respMeta));
     }
   }
   
@@ -383,7 +386,7 @@ if (preg_match('#^/api/voice/([0-9]+)/download$#', $path, $m)) {
       }
       jarvis_log_command($userId, 'calendar', $text, $response, array_merge($clientMeta, ['events_count'=>count($events)]));
       jarvis_audit($userId, 'COMMAND_CALENDAR', 'command', $auditMeta(['answer'=>$response]));
-      jarvis_respond(200, ['jarvis_response'=>$response]);
+      jarvis_respond(200, array_merge(['jarvis_response'=>$response], $respMeta));
   }
 
   // General conversational responses
@@ -394,7 +397,7 @@ if (preg_match('#^/api/voice/([0-9]+)/download$#', $path, $m)) {
     jarvis_log_command($userId, 'system', $text, $response, $clientMeta);
     jarvis_audit($userId, 'COMMAND_CHAT', 'command', $auditMeta(['answer'=>$response]));
     jarvis_log_api_request($userId, 'desktop', $path, $method, $in, ['jarvis_response'=>$response], 200);
-    jarvis_respond(200, ['jarvis_response'=>$response]);
+    jarvis_respond(200, array_merge(['jarvis_response'=>$response], $respMeta));
   }
 
   if (strpos($lower, 'how are you') !== false) {
@@ -402,7 +405,7 @@ if (preg_match('#^/api/voice/([0-9]+)/download$#', $path, $m)) {
     jarvis_log_command($userId, 'system', $text, $response, $clientMeta);
     jarvis_audit($userId, 'COMMAND_CHAT', 'command', $auditMeta(['answer'=>$response]));
     jarvis_log_api_request($userId, 'desktop', $path, $method, $in, ['jarvis_response'=>$response], 200);
-    jarvis_respond(200, ['jarvis_response'=>$response]);
+    jarvis_respond(200, array_merge(['jarvis_response'=>$response], $respMeta));
   }
   
   if (strpos($lower, 'thank you') !== false || strpos($lower, 'thanks') !== false) {
@@ -410,7 +413,7 @@ if (preg_match('#^/api/voice/([0-9]+)/download$#', $path, $m)) {
     jarvis_log_command($userId, 'system', $text, $response, $clientMeta);
     jarvis_audit($userId, 'COMMAND_CHAT', 'command', $auditMeta(['answer'=>$response]));
     jarvis_log_api_request($userId, 'desktop', $path, $method, $in, ['jarvis_response'=>$response], 200);
-    jarvis_respond(200, ['jarvis_response'=>$response]);
+    jarvis_respond(200, array_merge(['jarvis_response'=>$response], $respMeta));
   }
 
   // Existing behaviours
@@ -422,7 +425,7 @@ if (preg_match('#^/api/voice/([0-9]+)/download$#', $path, $m)) {
     jarvis_log_command($userId, 'briefing', $text, $response, array_merge($clientMeta, ['cards'=>$cards]));
     jarvis_audit($userId, 'COMMAND_BRIEFING', 'command', $auditMeta(['answer'=>$response]));
     jarvis_log_api_request($userId, 'desktop', $path, $method, $in, ['jarvis_response'=>$response,'cards'=>$cards], 200);
-    jarvis_respond(200, ['jarvis_response'=>$response, 'cards'=>$cards]);
+    jarvis_respond(200, array_merge(['jarvis_response'=>$response, 'cards'=>$cards], $respMeta));
   }
 
   // Wake mode: produce a wake briefing (includes immediate weather and integrations)
@@ -434,7 +437,7 @@ if (preg_match('#^/api/voice/([0-9]+)/download$#', $path, $m)) {
     jarvis_log_command($userId, 'wake', $text, $response, array_merge($clientMeta, ['cards'=>$cards]));
     jarvis_audit($userId, 'COMMAND_WAKE', 'command', $auditMeta(['answer'=>$response]));
     jarvis_log_api_request($userId, 'desktop', $path, $method, $in, ['jarvis_response'=>$response,'cards'=>$cards], 200);
-    jarvis_respond(200, ['jarvis_response'=>$response, 'cards'=>$cards]);
+    jarvis_respond(200, array_merge(['jarvis_response'=>$response, 'cards'=>$cards], $respMeta));
   }
 
   if ($lower === 'check ig' || $lower === '/ig') {
@@ -450,7 +453,7 @@ if (preg_match('#^/api/voice/([0-9]+)/download$#', $path, $m)) {
     jarvis_log_command($userId, 'integration', $text, $response, $cards);
     jarvis_audit($userId, 'COMMAND_INSTAGRAM_CHECK', 'command', ['type'=>$inputType, 'question'=>$text, 'answer'=>$response, 'ok'=>(bool)($ig['ok'] ?? false)]);
     jarvis_log_api_request($userId, 'desktop', $path, $method, $in, ['jarvis_response'=>$response,'cards'=>$cards], 200);
-    jarvis_respond(200, ['jarvis_response'=>$response, 'cards'=>$cards]);
+    jarvis_respond(200, array_merge(['jarvis_response'=>$response, 'cards'=>$cards], $respMeta));
   }
 
   $response = "Command not recognized. Try: briefing, check ig.";
@@ -458,7 +461,7 @@ if (preg_match('#^/api/voice/([0-9]+)/download$#', $path, $m)) {
   jarvis_log_command($userId, 'system', $text, $response, $clientMeta);
   jarvis_audit($userId, 'COMMAND_UNRECOGNIZED', 'command', $auditMeta(['answer'=>$response]));
   jarvis_log_api_request($userId, 'desktop', $path, $method, $in, ['jarvis_response'=>$response], 200);
-  jarvis_respond(200, ['jarvis_response'=>$response]);
+  jarvis_respond(200, array_merge(['jarvis_response'=>$response], $respMeta));
 }
 
 // ----------------------------
