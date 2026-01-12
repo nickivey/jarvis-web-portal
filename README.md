@@ -185,13 +185,26 @@ Run `sql/schema.sql` in your MySQL DB before first use.
 
 - The portal now supports **voice input** (browser Speech Recognition) and **voice output** (TTS).
 - On `/public/home.php` there's a microphone button in the JARVIS Chat panel. Click to start/stop voice input; recognized speech populates the message box.
-- The app requests **Notification** permission (for browser notifications) and **Microphone** permission when you use voice input.
+- The app requests **Notification** permission (for browser notifications) and **Microphone** permission when you use voice input. The "Request access" CTA will request microphone, camera, geolocation, and notification permissions in a single gesture for convenience.
 - JARVIS command responses (via `POST /api/command`) are spoken aloud automatically when "Speak responses" is enabled.
 
 Server-side TTS
 
-- A simple server-side endpoint at `/public/tts.php` proxies a TTS service and returns an MP3 audio stream. For production, consider installing a robust PHP TTS library or using a cloud TTS provider.
-- Example libraries (optional): `stichoza/google-tts-php` (Google Translate TTS wrapper) or official cloud SDKs (Google Cloud Text-to-Speech, Amazon Polly). After installing, update `public/tts.php` to use the library for higher quality and auth support.
+- A simple server-side endpoint at `/tts.php` proxies a TTS service and returns an MP3 audio stream. For production, consider installing a robust PHP TTS library or using a cloud TTS provider.
+- Example libraries (optional): `stichoza/google-tts-php` (Google Translate TTS wrapper) or official cloud SDKs (Google Cloud Text-to-Speech, Amazon Polly). After installing, update `/tts.php` to use the library for higher quality and auth support.
+
+E2E (Playwright) tests
+
+- A minimal Playwright test scaffold is included to smoke test the Home permission flow and a simple voice command. To run locally:
+
+```bash
+# install deps
+npm install
+# run e2e tests
+npm run test:e2e
+```
+
+- The test will create a test user using `scripts/create-e2e-user.php` (username `e2e_bot`, password `password`) and then run a simple smoke test that logs in and verifies chat and notification controls.
 
 ## Device registration (for iOS / mobile apps)
 
