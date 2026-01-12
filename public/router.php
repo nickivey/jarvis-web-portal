@@ -2,6 +2,12 @@
 // Router script for PHP built-in server
 $path = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
 
+// Redirect root to home.php
+if ($path === '/' || $path === '') {
+    header('Location: /home.php');
+    exit;
+}
+
 // Serve static files and existing scripts in public/ directly
 if (file_exists(__DIR__ . $path) && is_file(__DIR__ . $path)) {
     return false;
