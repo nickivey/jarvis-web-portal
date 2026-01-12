@@ -75,14 +75,23 @@ function jwk_to_pem(string $n, string $e): string {
   $exponent = base64url_decode_no_eq($e);
   $modulus = ltrim($modulus, "\x00");
 
-  $modulusPart = pack('Ca*a*', 0x02, encode_length(strlen($modulus)) . $modulus);
-  $exponentPart = pack('Ca*a*', 0x02, encode_length(strlen($exponent)) . $exponent);
-  $components = $modulusPart . $exponentPart;
-  $sequence = pack('Ca*a*', 0x30, encode_length(strlen($components)) . $components);
+  // Build ASN.1 INTEGERs for modulus and exponent
+  $modulusPart = "\x02" . encode_length(strlen($modulus)) . $modulus;
+  $exponentPart = "\x02" . encode_length(strlen($exponent)) . $exponent;
 
-  $bitstring = chr(0x00) . $sequence;
+  // Sequence of modulus+exponent
+  $components = $modulusPart . $exponentPart;
+  $sequence = "\x30" . encode_length(strlen($components)) . $components;
+
+  // Bit string wrapper
+  $bitstring = "\x00" . $sequence;
+
+  // Algorithm identifier for rsaEncryption
   $algorithm = pack('H*', '300d06092a864886f70d0101010500');
-  $subject = pack('Ca*a*', 0x30, encode_length(strlen($algorithm . pack('Ca*a*', 0x03, encode_length(strlen($bitstring)) . $bitstring))) . $algorithm . pack('Ca*a*', 0x03, encode_length(strlen($bitstring)) . $bitstring);
+
+  // Subject: sequence(algorithm, bitstring)
+  $subjectBody = $algorithm . "\x03" . encode_length(strlen($bitstring)) . $bitstring;
+  $subject = "\x30" . encode_length(strlen($subjectBody)) . $subjectBody;
 
   return "-----BEGIN PUBLIC KEY-----\n" . chunk_split(base64_encode($subject),64) . "-----END PUBLIC KEY-----\n";
 }

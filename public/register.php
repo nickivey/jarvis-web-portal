@@ -3,6 +3,8 @@ session_start();
 require_once __DIR__ . '/../helpers.php';
 require_once __DIR__ . '/../db.php';
 
+$googleConfigured = (bool)(getenv('GOOGLE_CLIENT_ID') && getenv('GOOGLE_CLIENT_SECRET'));
+
 if (isset($_SESSION['username'])) { header('Location: home.php'); exit; }
 
 $errors=[];
@@ -83,6 +85,17 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
         <input type="password" name="password" required />
         <button type="submit">Create account</button>
       </form>
+
+      <?php if ($googleConfigured): ?>
+      <div style="margin-top:12px;text-align:center;">
+        <a href="connect_google.php" style="display:inline-block;padding:8px 12px;border-radius:6px;border:1px solid #ddd;background:#fff;color:#222;text-decoration:none;font-weight:600;">
+          Sign up with Google
+        </a>
+      </div>
+      <?php else: ?>
+      <div style="margin-top:12px;text-align:center;color:#888;font-size:13px;">Google Sign-in not configured</div>
+      <?php endif; ?>
+
       <div class="nav-links"><a href="login.php">Already have an account? Log in</a></div>
     </div>
   </div>

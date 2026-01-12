@@ -1,6 +1,7 @@
 <?php
 session_start();
 require_once __DIR__ . '/../db.php';
+require_once __DIR__ . '/../helpers.php';
 
 $clientId = getenv('GOOGLE_CLIENT_ID') ?: '';
 $redirect = getenv('GOOGLE_REDIRECT_URI') ?: (jarvis_site_url() ? jarvis_site_url() . '/public/google_callback.php' : '');

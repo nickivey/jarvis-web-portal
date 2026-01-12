@@ -46,7 +46,28 @@ php -S localhost:8000
 * `/public/login.php`
 * `/public/home.php`
 * `/public/siri.php`
+---
 
+Automated setup script
+
+You can use the included `scripts/setup.sh` to automate common setup tasks: create the database and user (if the `mysql` client is installed), import `sql/schema.sql`, generate a `JWT_SECRET` and start the PHP built-in server.
+
+Usage:
+```bash
+# basic: generates JWT (if missing) and starts server
+./scripts/setup.sh
+
+# attempt to install mysql client first (requires apt and root/sudo)
+./scripts/setup.sh --install-mysql
+
+# run composer install if you have a PHP project with composer.json
+./scripts/setup.sh --composer
+```
+
+Notes:
+* The script will append a generated `JWT_SECRET` to `.env` if absent.
+* Installing the MySQL client requires `apt` and appropriate permissions; the script will try `default-mysql-client` then `mariadb-client`.
+* You can still run the SQL in `sql/schema.sql` manually if you prefer.
 ## REST endpoints
 
 ### Auth
@@ -87,7 +108,7 @@ Run `sql/schema.sql` in your MySQL DB before first use.
 - Create an **OAuth 2.0 Client ID (Web application)** in the Google Cloud Console: https://console.cloud.google.com/apis/credentials
 - Add an **Authorized redirect URI**: `SITE_URL/public/google_callback.php` (or set `GOOGLE_REDIRECT_URI` in `env`)
 - Set env variables `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` (see `env` file)
-- Visit `/public/login.php` and click **Sign in with Google** — Jarvis will create a user if the email doesn't exist, mark the email as verified, and store OAuth tokens in `oauth_tokens`.
+- Visit `/public/login.php` or `/` (the register page also shows a **Sign up with Google** button when Google is configured). Click **Sign in with Google** / **Sign up with Google** — Jarvis will create a user if the email doesn't exist, mark the email as verified, and store OAuth tokens in `oauth_tokens`.
 - You can also link or unlink your Google account from `/public/preferences.php` after signing in; tokens will be stored in `oauth_tokens` and disconnect removes them.
 
 ## Voice input & output

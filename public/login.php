@@ -60,10 +60,15 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
         <button class="btn" type="submit">Enter JARVIS</button>
       </form>
 
+      <?php $googleConfigured = (bool)(getenv('GOOGLE_CLIENT_ID') && getenv('GOOGLE_CLIENT_SECRET')); ?>
       <div style="margin-top:12px;text-align:center;">
+        <?php if ($googleConfigured): ?>
         <a href="connect_google.php" style="display:inline-block;padding:8px 12px;border-radius:6px;border:1px solid #ddd;background:#fff;color:#222;text-decoration:none;font-weight:600;">
           Sign in with Google
         </a>
+        <?php else: ?>
+        <div style="color:#888;font-size:13px;">Google Sign-in not configured</div>
+        <?php endif; ?>
       </div>
 
       <div class="nav-links"><a href="register.php">Create an account</a></div>
