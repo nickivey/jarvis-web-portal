@@ -179,7 +179,6 @@ $notifs = jarvis_recent_notifications($userId, 8);
 // Bottom-right panel content
 $restLogs = [];
 
-$defaultChannel = (string)($prefs['default_slack_channel'] ?? '');
 $phone = (string)($dbUser['phone_e164'] ?? '');
 ?>
 <!doctype html>
@@ -297,6 +296,7 @@ $phone = (string)($dbUser['phone_e164'] ?? '');
               <textarea name="message" id="messageInput" placeholder="Type a message to Slack..." style="flex:1"></textarea>
               <div style="display:flex;flex-direction:column;gap:8px;">
                 <button type="button" id="micBtn" class="btn" title="Start/Stop voice input">🎤</button>
+                <button type="button" id="voiceCmdBtn" class="btn" title="Voice-only command">🎙️ Voice Cmd</button>
                 <button type="submit" name="send_chat" value="1" id="sendBtn" class="btn">Send</button>
               </div>
             </div>
@@ -327,11 +327,7 @@ Content-Type: application/json
       <!-- 4 -->
       <div class="card">
         <h3>User Settings</h3>
-        <form method="post">
-          <label>Default Slack Channel ID</label>
-          <input name="default_channel" value="<?php echo htmlspecialchars($defaultChannel); ?>" />
-          <button type="submit" name="save_channel" value="1">Save</button>
-        </form>
+        <p class="muted">Manage Slack channel in <a href="preferences.php">Preferences</a>.</p>
         <form method="post" style="margin-top:12px">
           <label>Phone Number (for SMS)</label>
           <input name="phone_number" value="<?php echo htmlspecialchars($phone); ?>" placeholder="+1..." />
@@ -520,6 +516,32 @@ Content-Type: application/json
           if (recognition) recognition.start();
           recognizing = true; micBtn.classList.add('active');
         } catch(e) { recognizing=false; micBtn.classList.remove('active'); }
+      });
+
+      // Voice-only command: capture speech and immediately send to /api/command
+      const voiceCmdBtn = document.getElementById('voiceCmdBtn');
+      if (voiceCmdBtn) voiceCmdBtn.addEventListener('click', async ()=>{
+        if (!recognition) recognition = initRecognition();
+        if (!recognition) { alert('Voice recognition not supported in this browser.'); return; }
+        recognition.onresult = async (evt) => {
+          const text = evt.results[0][0].transcript || '';
+          if (!text.trim()) return;
+          appendMessage(text, 'me');
+          lastInputType = 'voice';
+          try {
+            const r = await fetch('/api/command', {
+              method: 'POST', headers: { 'Content-Type':'application/json', 'Authorization': token ? 'Bearer '+token : '' }, body: JSON.stringify({ text, type: 'voice' })
+            });
+            const data = await r.json().catch(()=>null);
+            if (data && typeof data.jarvis_response === 'string' && data.jarvis_response.trim() !== ''){
+              appendMessage(data.jarvis_response, 'jarvis');
+              speakText(data.jarvis_response);
+              showNotification(data.jarvis_response);
+            }
+          } catch(e) {}
+        };
+        try { recognition.start(); recognizing = true; voiceCmdBtn.classList.add('active'); }
+        catch(e){ recognizing=false; voiceCmdBtn.classList.remove('active'); }
       });
 
       // Append message to chat log
