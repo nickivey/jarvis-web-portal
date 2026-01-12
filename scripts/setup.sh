@@ -172,7 +172,8 @@ if [ -f "$pidfile" ]; then
 fi
 
 echo "Starting PHP server at http://$host:$port (docroot: public/)"
-php -S "${host}:${port}" -t public > "$logfile" 2>&1 & echo $! > "$pidfile"
+# Use the router script so /api/* requests are routed to ../index.php
+php -S "${host}:${port}" -t public public/router.php > "$logfile" 2>&1 & echo $! > "$pidfile"
 sleep 1
 if command -v curl >/dev/null 2>&1; then
   echo "Checking server response..."

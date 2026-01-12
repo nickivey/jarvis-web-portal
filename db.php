@@ -10,10 +10,10 @@ function jarvis_pdo(): ?PDO {
   static $pdo = null;
   if ($pdo) return $pdo;
 
-  $host = 'localhost';
-  $name = 'nickive2_jarvisp';
-  $user = 'nickive2_jarvisp';
-  $pass = 'ZDT?^PK}aMO)#}qU';
+  $host = getenv('DB_HOST') ?: '127.0.0.1';
+  $name = getenv('DB_NAME') ?: 'nickive2_jarvisp';
+  $user = getenv('DB_USER') ?: 'nickive2_jarvisp';
+  $pass = getenv('DB_PASS') ?: 'ZDT?^PK}aMO)#}qU';
   if (!$host || !$name || !$user) return null;
 
   try {

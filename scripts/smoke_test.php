@@ -13,7 +13,7 @@ $token = trim(shell_exec('php scripts/generate_test_jwt.php 2>/dev/null'));
 if (!$token) fail('Unable to generate test JWT (scripts/generate_test_jwt.php)');
 ok('Generated test JWT');
 
-$base = 'http://127.0.0.1:8000';
+$base = getenv('TEST_BASE') ?: 'http://localhost:8000';
 
 // Ping
 $r = @file_get_contents($base . '/api/ping');
