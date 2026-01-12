@@ -237,7 +237,7 @@ $phone = (string)($dbUser['phone_e164'] ?? '');
                   <button type="button" id="voiceCmdBtn" class="btn" title="Voice-only command">🎙️ Voice Cmd</button>
                 </div>
                 <div style="display:flex;gap:8px;align-items:center">
-                  <button type="button" name="send_chat" value="1" id="sendBtn" class="btn">Send</button>
+                  <button type="submit" name="send_chat" value="1" id="sendBtn" class="btn">Send</button>
                   <button type="button" id="testVoiceBtn" class="btn" title="Upload sample audio and send">Test Voice</button>
                 </div>
               </div>
@@ -410,7 +410,12 @@ Content-Type: application/json
       }
       // Poll devices occasionally
       setInterval(refreshHomeDevices, 15000);
-      window.jarvisOn('auth.token.set', refreshHomeDevices);
+      // Safely register auth.token.set handler — navbar.js may not have initialized yet
+      if (window.jarvisOn) {
+        window.jarvisOn('auth.token.set', refreshHomeDevices);
+      } else {
+        window.addEventListener('DOMContentLoaded', ()=>{ try { if (window.jarvisOn) window.jarvisOn('auth.token.set', refreshHomeDevices); } catch(e){} });
+      }
 
       // Helper to update weather UI components
       window.jarvisUpdateWeather = function(data){
@@ -656,6 +661,10 @@ Content-Type: application/json
         // mark new for animation
         wrapper.classList.add('new'); bubble.classList.add('new');
         chatLog.appendChild(wrapper);
+        // expose last appended message for tests/debugging
+        try{ if (typeof window !== 'undefined') {
+          try { window._lastAppendedMessage = (typeof content === 'string') ? content : (content instanceof Node ? (content.textContent || '') : JSON.stringify(content)); } catch(e){}
+        } } catch(e){}
         // remove 'new' class after animation completes
         setTimeout(()=>{ wrapper.classList.remove('new'); bubble.classList.remove('new'); }, 900);
         // scroll to bottom
@@ -815,7 +824,10 @@ Content-Type: application/json
 
                     // If there's a pending voice command (voice-only mode), send it now with voice_input_id
                     if (_pendingVoiceCmd && _pendingVoiceCmd.text) {
-                      try{ await sendCommand(_pendingVoiceCmd.text, 'voice', { voice_input_id: resp.id, voice_context_id: _pendingVoiceCmd.contextId }); if (statusEl) statusEl.textContent = 'Sent • id: ' + resp.id; }catch(e){ console.error('sendCommand after upload failed', e); if (statusEl) statusEl.textContent = 'Send failed'; }
+                      try {
+                        await sendCommand(_pendingVoiceCmd.text, 'voice', { voice_input_id: resp.id, voice_context_id: _pendingVoiceCmd.contextId });
+                        if (statusEl) statusEl.textContent = 'Sent • id: ' + resp.id;
+                      } catch(e) { console.error('sendCommand after upload failed', e); if (statusEl) statusEl.textContent = 'Send failed'; }
                       _pendingVoiceCmd = null;
                       try{ if (token) fetch('/api/audit', { method:'POST', headers: { 'Content-Type':'application/json', 'Authorization': 'Bearer '+token }, body: JSON.stringify({ action: 'VOICE_AUTO_SENT', entity: 'voice', metadata: { id: resp.id } }) }); }catch(e){}
                     } else {
@@ -827,7 +839,7 @@ Content-Type: application/json
                         try{ if (token) fetch('/api/audit', { method:'POST', headers: { 'Content-Type':'application/json', 'Authorization': 'Bearer '+token }, body: JSON.stringify({ action: 'VOICE_AUTO_SENT', entity: 'voice', metadata: { id: resp.id } }) }); }catch(e){}
                         // Clear pending
                         window._pendingVoiceToSend = null;
-                      }catch(e){ console.error('auto-send failed', e); if (statusEl) statusEl.textContent = 'Send failed'; }
+                      } catch(e) { console.error('auto-send failed', e); if (statusEl) statusEl.textContent = 'Send failed'; }
                     }
                     try{ if (token) fetch('/api/audit', { method:'POST', headers: { 'Content-Type':'application/json', 'Authorization': 'Bearer '+token }, body: JSON.stringify({ action: 'VOICE_UPLOAD_SUCCESS', entity: 'voice', metadata: { id: resp.id, size: blob.size } }) }); }catch(e){}
                   } else {
@@ -837,10 +849,8 @@ Content-Type: application/json
                     try { const sb = document.getElementById('sendBtn'); if (sb && sb.dataset && sb.dataset.pendingVoice) { delete sb.dataset.pendingVoice; sb.textContent = 'Send'; } } catch(e){}
                     try{ if (token) fetch('/api/audit', { method:'POST', headers:{ 'Content-Type':'application/json','Authorization':'Bearer '+token }, body: JSON.stringify({ action: 'VOICE_UPLOAD_FAILED', entity: 'voice' }) }); }catch(e){}
                   }
-                  }
-                } catch(e){ console.warn('upload voice failed',e); const note = document.createElement('div'); note.className='muted'; note.style.marginTop='6px'; note.textContent = 'Upload failed'; if (container) container.appendChild(note); }
-              }catch(e){}
-            }catch(e){}
+                } catch(e) { console.warn('upload voice failed', e); const note = document.createElement('div'); note.className='muted'; note.style.marginTop='6px'; note.textContent = 'Upload failed'; if (container) container.appendChild(note); }
+              } catch(e) {}
             try{ if (_mediaStream) { _mediaStream.getTracks().forEach(t=>t.stop()); _mediaStream=null; } }catch(e){}
             _mediaRecorder = null; _audioChunks=[]; _lastTranscript=null; _voiceContextId=null; _pendingVoiceCmd = null;
           };
@@ -1104,14 +1114,24 @@ Content-Type: application/json
 
       const chatForm = document.getElementById('chatForm');
       async function handleSendAction(){
-        try{
+        try{ try{ if (typeof window !== 'undefined') window._handleSendActionInvoked = true; }catch(e){}
           if (sendBtn && sendBtn.dataset && sendBtn.dataset.pendingVoice) {
             const pendingId = sendBtn.dataset.pendingVoice;
-            try{ await fetch('/api/voice/'+pendingId+'/download', { method: 'HEAD', headers: sendBtn && token ? { 'Authorization': 'Bearer ' + token } : {} }); }catch(e){}
-            try{ if (token) fetch('/api/audit', { method:'POST', headers:{ 'Content-Type':'application/json','Authorization':'Bearer '+token }, body: JSON.stringify({ action: 'VOICE_SUBMIT', entity: 'voice', metadata: { id: pendingId } }) }); }catch(e){}
-            await sendCommand('', 'voice', { voice_input_id: pendingId });
-            try{ delete sendBtn.dataset.pendingVoice; sendBtn.textContent = 'Send'; window._pendingVoiceToSend = null; }catch(e){}
-            return;
+            // Ensure the uploaded voice file actually exists before sending; if HEAD fails, clear pending and fall through so regular text send works
+            let headOk = false;
+            try{
+              const r = await fetch('/api/voice/'+pendingId+'/download', { method: 'HEAD', headers: sendBtn && token ? { 'Authorization': 'Bearer ' + token } : {} });
+              headOk = !!(r && r.ok);
+            }catch(e){ headOk = false; }
+            if (!headOk) {
+              try { delete sendBtn.dataset.pendingVoice; sendBtn.textContent = 'Send'; window._pendingVoiceToSend = null; } catch(e){}
+              // fall through to regular text send behavior
+            } else {
+              try{ if (token) fetch('/api/audit', { method:'POST', headers:{ 'Content-Type':'application/json','Authorization':'Bearer '+token }, body: JSON.stringify({ action: 'VOICE_SUBMIT', entity: 'voice', metadata: { id: pendingId } }) }); }catch(e){}
+              await sendCommand('', 'voice', { voice_input_id: pendingId });
+              try{ delete sendBtn.dataset.pendingVoice; sendBtn.textContent = 'Send'; window._pendingVoiceToSend = null; }catch(e){}
+              return;
+            }
           }
         }catch(e){ console.error('handleSendAction voice check failed', e); }
 
@@ -1123,9 +1143,16 @@ Content-Type: application/json
       }
 
       if (chatForm) chatForm.addEventListener('submit', async (ev) => {
+        // test/debug hook
+        try{ if (typeof window !== 'undefined') window._chatFormSubmitFired = true; } catch(e){}
         ev.preventDefault(); ev.stopPropagation(); ev.stopImmediatePropagation && ev.stopImmediatePropagation();
         await handleSendAction();
       });
+      // Ensure clicking the Send button triggers the same submit handler reliably (handles some headless/browser race conditions)
+      try {
+        const sendBtnEl = document.getElementById('sendBtn');
+        if (sendBtnEl) sendBtnEl.addEventListener('click', async (ev)=>{ try{ if (typeof window !== 'undefined') window._sendBtnClicked = true; }catch(e){} ev.preventDefault && ev.preventDefault(); await handleSendAction(); });
+      } catch(e) { console.error('attach sendBtn click failed', e); }
 
       // Support Enter-to-send: Enter sends, Shift+Enter inserts a newline, Ctrl/Cmd/Alt+Enter ignored (user-intent modifiers)
       try{

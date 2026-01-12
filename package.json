@@ -6,5 +6,8 @@
   },
   "scripts": {
     "test:e2e": "npx playwright test"
+  },
+  "dependencies": {
+    "acorn": "^8.15.0"
   }
 }
