@@ -88,11 +88,45 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
       <?php if (!empty($showResendPrompt) && $resendEmail): ?>
         <div style="margin-top:12px;text-align:center">
           <p class="muted">Didn't receive your confirmation email?</p>
-          <form method="post" action="resend_confirmation.php" style="display:inline-block">
+          <form method="post" action="resend_confirmation.php" id="resendInlineForm" style="display:inline-block">
             <input type="hidden" name="identifier" value="<?php echo htmlspecialchars($resendEmail, ENT_QUOTES); ?>">
-            <button class="btn secondary" type="submit">Resend confirmation email</button>
+            <button class="btn secondary" type="submit" id="resendInlineBtn">Resend confirmation email</button>
           </form>
+          <div id="resendInlineMessage" style="margin-top:8px"></div>
         </div>
+
+        <script>
+        (function(){
+          const form = document.getElementById('resendInlineForm');
+          const btn = document.getElementById('resendInlineBtn');
+          const msg = document.getElementById('resendInlineMessage');
+          if (form && btn && msg) {
+            form.addEventListener('submit', function(e){
+              e.preventDefault();
+              msg.innerHTML = '';
+              btn.disabled = true;
+              if (window.jarvisShowLoader) jarvisShowLoader();
+              const fd = new FormData(form);
+              fetch('resend_confirmation.php', {
+                method: 'POST',
+                headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' },
+                body: fd
+              }).then(r=>r.json()).then(data=>{
+                if (data && data.success) {
+                  msg.innerHTML = '<div class="success"><p>' + (data.message || 'Confirmation email resent.') + '</p></div>';
+                } else {
+                  msg.innerHTML = '<div class="error"><p>' + (data.message || 'Failed to resend confirmation.') + '</p></div>';
+                }
+              }).catch(err=>{
+                msg.innerHTML = '<div class="error"><p>Network error. Try again later.</p></div>';
+              }).finally(()=>{
+                btn.disabled = false;
+                if (window.jarvisHideLoader) jarvisHideLoader();
+              });
+            });
+          }
+        })();
+        </script>
       <?php endif; ?>
 
       <script>

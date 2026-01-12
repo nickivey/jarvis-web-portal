@@ -8,8 +8,15 @@ $error = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   $identifier = trim((string)($_POST['identifier'] ?? ''));
+  $isAjax = (isset($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest')
+           || (strpos((string)($_SERVER['HTTP_ACCEPT'] ?? ''), 'application/json') !== false);
+
   if ($identifier === '') {
     $error = 'Enter your email or username.';
+    if ($isAjax) {
+      header('Content-Type: application/json'); http_response_code(400);
+      echo json_encode(['success'=>false,'message'=>$error]); exit;
+    }
   } else {
     // Try email first, then username
     $user = null;
@@ -24,16 +31,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       $userId = (int)$user['id'];
       if (!empty($user['email_verified_at'])) {
         $message = 'Email already verified. You can log in.';
+        if ($isAjax) { header('Content-Type: application/json'); echo json_encode(['success'=>true,'message'=>$message]); exit; }
       } else {
         if (jarvis_resend_email_verification($userId)) {
           $message = 'Confirmation email has been resent to ' . htmlspecialchars((string)$user['email']);
+          if ($isAjax) { header('Content-Type: application/json'); echo json_encode(['success'=>true,'message'=>$message]); exit; }
         } else {
           $error = 'Failed to resend confirmation. Try again later.';
+          if ($isAjax) { header('Content-Type: application/json'); http_response_code(500); echo json_encode(['success'=>false,'message'=>$error]); exit; }
         }
       }
     } else {
       // Avoid leaking which accounts exist
       $message = 'If an account exists for that identifier, a confirmation email has been resent.';
+      if ($isAjax) { header('Content-Type: application/json'); echo json_encode(['success'=>true,'message'=>$message]); exit; }
     }
   }
 }
