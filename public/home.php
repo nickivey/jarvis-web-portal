@@ -365,6 +365,30 @@ Content-Type: application/json
 
       // Map management and location refreshing
       let _mainMap = null, _miniMap = null;
+
+      // Helper to update weather UI components
+      window.jarvisUpdateWeather = function(data){
+        if (!data || !data.weather) return;
+        const w = data.weather;
+        const desc = w.desc || '';
+        const temp = w.temp_c !== null ? w.temp_c : null;
+        // Update small badge
+        const badge = document.getElementById('jarvisWeather');
+        if (badge) badge.textContent = desc + ' • ' + (temp !== null ? temp + '°C' : '');
+        // Update main card
+        const card = document.getElementById('weatherSummary');
+        if (card) {
+          card.innerHTML = `
+            <div style="display:flex;align-items:center;gap:12px;margin-top:8px">
+              <div style="font-size:32px">${temp !== null ? temp + '°' : '--'}</div>
+              <div>
+                <div style="font-weight:700">${desc}</div>
+                <div class="muted">Local weather</div>
+              </div>
+            </div>`;
+        }
+      };
+
       function destroyMap(elId, mapRef){ try{ if (mapRef) { mapRef.remove(); } }catch(e){}
         try{ const el = document.getElementById(elId); if (el) el.innerHTML=''; }catch(e){}
       }
@@ -444,9 +468,11 @@ Content-Type: application/json
               body: JSON.stringify(body)
             });
             const data = await r.json().catch(()=>null);
-            const el = document.getElementById('jarvisWeather');
-            if (el && data) {
-              el.textContent = data.weather && data.weather.desc ? (data.weather.desc + ' • ' + (data.weather.temp_c !== null ? data.weather.temp_c + '°C' : '')) : ('Location saved: '+body.lat.toFixed(3)+', '+body.lon.toFixed(3));
+            if (data && data.weather) {
+               if (window.jarvisUpdateWeather) window.jarvisUpdateWeather(data);
+            } else if (data) {
+                const el = document.getElementById('jarvisWeather');
+                if (el) el.textContent = 'Location saved: '+body.lat.toFixed(3)+', '+body.lon.toFixed(3);
             }
             // refresh map after new location
             if (typeof L !== 'undefined') setTimeout(()=>refreshLocations(), 350);
@@ -876,14 +902,13 @@ Content-Type: application/json
             const body = { lat: pos.coords.latitude, lon: pos.coords.longitude, accuracy: pos.coords.accuracy };
             const r = await fetch('/api/location', { method:'POST', headers:{ 'Content-Type':'application/json', 'Authorization': 'Bearer '+token }, body: JSON.stringify(body) });
             const data = await r.json().catch(()=>null);
-            if (data && document.getElementById('jarvisWeather')) {
-              const w = data.weather || data.weather || null;
-              if (w) {
-                const txt = (w.desc ? w.desc + ' • ' : '') + (typeof w.temp_c !== 'undefined' && w.temp_c !== null ? w.temp_c + '°C' : '');
-                if (txt) document.getElementById('jarvisWeather').textContent = txt;
-              } else {
-                document.getElementById('jarvisWeather').textContent = 'Location saved: '+body.lat.toFixed(3)+', '+body.lon.toFixed(3);
-              }
+            if (data && data.weather && window.jarvisUpdateWeather) {
+              window.jarvisUpdateWeather(data);
+            } else if (data && document.getElementById('jarvisWeather')) {
+               // ... fallback logic if weather not present but data is
+               const w = data.weather || null;
+               if (w) { /* handled by updateWeather */ } 
+               else document.getElementById('jarvisWeather').textContent = 'Location saved: '+body.lat.toFixed(3)+', '+body.lon.toFixed(3);
             }
             // Run a wake briefing to surface the new weather & info
             try {
