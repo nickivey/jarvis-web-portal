@@ -1,0 +1,354 @@
+<?php
+session_start();
+require_once __DIR__ . '/../db.php';
+require_once __DIR__ . '/../jwt.php';
+require_once __DIR__ . '/../helpers.php';
+require_once __DIR__ . '/../instagram_basic.php';
+require_once __DIR__ . '/../briefing.php';
+
+if (!isset($_SESSION['username'])) { header('Location: login.php'); exit; }
+$username = $_SESSION['username'];
+
+$userId = (int)($_SESSION['user_id'] ?? 0);
+if ($userId <= 0) { session_destroy(); header('Location: login.php'); exit; }
+
+$dbUser = jarvis_user_by_id($userId);
+if (!$dbUser) { session_destroy(); header('Location: login.php'); exit; }
+$prefs = jarvis_preferences($userId);
+$igToken = jarvis_oauth_get($userId, 'instagram');
+
+// JWT for browser-side API calls (location, command sync, etc.)
+$webJwt = null;
+try { $webJwt = jarvis_jwt_issue($userId, $username, 3600); } catch (Throwable $e) { $webJwt = null; }
+
+
+// Update last seen for auditing + wake logic
+jarvis_update_last_seen($userId);
+
+// Wake prompt if user has been away for >= 6 hours
+$wakePrompt = null;
+$wakeCards = null;
+try {
+  $last = $dbUser['last_login_at'] ?: $dbUser['last_seen_at'];
+  if ($last) {
+    $lastTs = strtotime($last . ' UTC');
+    $awaySeconds = time() - ($lastTs ?: time());
+    if ($awaySeconds >= 6*60*60) {
+      $out = jarvis_compose_briefing($userId, 'wake');
+      $wakePrompt = (string)$out['text'];
+      $wakeCards = (array)($out['cards'] ?? []);
+      jarvis_log_command($userId, 'wake', null, $wakePrompt, ['away_seconds'=>$awaySeconds,'cards'=>$wakeCards]);
+      jarvis_notify($userId, 'info', 'Welcome back', 'Wake sequence completed. Say “briefing” for a full report.', $wakeCards);
+      jarvis_audit($userId, 'WAKE_PROMPT', 'system', ['away_seconds'=>$awaySeconds]);
+    }
+  }
+} catch (Throwable $e) {
+  // non-fatal
+}
+
+$success = ''; $error = '';
+
+function slack_post_message_portal(string $token, string $channel, string $text): array {
+  $ch = curl_init('https://slack.com/api/chat.postMessage');
+  curl_setopt_array($ch,[
+    CURLOPT_RETURNTRANSFER=>true,
+    CURLOPT_POST=>true,
+    CURLOPT_HTTPHEADER=>[
+      'Authorization: Bearer ' . $token,
+      'Content-Type: application/json; charset=utf-8',
+    ],
+    CURLOPT_POSTFIELDS=>json_encode(['channel'=>$channel,'text'=>$text])
+  ]);
+  $resp = curl_exec($ch);
+  $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+  curl_close($ch);
+  $data = json_decode($resp?:'',true);
+  if (!is_array($data)) $data=['ok'=>false,'error'=>'invalid_json','raw'=>$resp];
+  $data['_http']=$code;
+  return $data;
+}
+
+if ($_SERVER['REQUEST_METHOD']==='POST') {
+  if (isset($_POST['save_phone'])) {
+    $phone = trim($_POST['phone_number'] ?? '') ?: null;
+    $pdo = jarvis_pdo();
+    if ($pdo) {
+      $pdo->prepare('UPDATE users SET phone_e164=:p WHERE id=:id')->execute([':p'=>$phone, ':id'=>$userId]);
+      jarvis_audit($userId, 'PROFILE_UPDATE', 'phone', ['phone_set'=>(bool)$phone]);
+      $dbUser = jarvis_user_by_id($userId);
+    }
+    $success = 'Phone number saved.';
+  }
+
+  if (isset($_POST['save_channel'])) {
+    $chan = trim($_POST['default_channel'] ?? '');
+    jarvis_update_preferences($userId, ['default_slack_channel'=>$chan ?: null]);
+    jarvis_audit($userId, 'PREF_UPDATE', 'slack', ['default_slack_channel'=>$chan]);
+    $prefs = jarvis_preferences($userId);
+    $success = 'Default channel saved.';
+  }
+
+  if (isset($_POST['send_chat'])) {
+    $msg = trim($_POST['message'] ?? '');
+    $chan = trim($_POST['channel'] ?? ($prefs['default_slack_channel'] ?? ''));
+    if ($msg === '') {
+      $error = 'Type a message first.';
+    } else {
+      // Local JARVIS commands
+      $lower = strtolower($msg);
+      if ($lower === 'briefing' || $lower === '/brief') {
+        $out = jarvis_compose_briefing($userId, 'briefing');
+        $jarvis = (string)$out['text'];
+        $cards = (array)($out['cards'] ?? []);
+        jarvis_log_command($userId, 'briefing', $msg, $jarvis, $cards);
+        jarvis_audit($userId, 'COMMAND', 'briefing', null);
+        $success = 'Briefing generated.';
+        // Do not forward to Slack
+        goto after_send_chat;
+      }
+
+      if ($lower === 'check ig' || $lower === '/ig') {
+        $ig = jarvis_instagram_check_media_updates($userId);
+        if (!empty($ig['ok'])) {
+          $watch = '@' . ltrim((string)($ig['watch'] ?? ''), '@');
+          $jarvis = "Instagram check complete for {$watch}. New media since last check: " . (int)($ig['new_count'] ?? 0) . ".\nStories: not available in Basic Display.";
+        } else {
+          $jarvis = "Instagram check: " . (string)($ig['note'] ?? 'unable to check');
+        }
+        $cards = ['instagram'=>$ig];
+        jarvis_log_command($userId, 'integration', $msg, $jarvis, $cards);
+        jarvis_audit($userId, 'COMMAND', 'instagram_check', ['ok'=>(bool)($ig['ok'] ?? false)]);
+        $success = 'Instagram check requested.';
+        goto after_send_chat;
+      }
+
+      $token = getenv('SLACK_BOT_TOKEN');
+      $fallbackChan = getenv('SLACK_CHANNEL_ID') ?: '';
+      $useChan = $chan ?: $fallbackChan;
+      if (!$token) {
+        $error = 'SLACK_BOT_TOKEN not configured.';
+      } elseif ($useChan === '') {
+        $error = 'Set a channel or SLACK_CHANNEL_ID.';
+      } else {
+        $resp = slack_post_message_portal($token, $useChan, $msg);
+        jarvis_log_slack_message($userId, $useChan, $msg, $resp);
+        jarvis_audit($userId, 'SLACK_SEND', 'slack', ['channel'=>$useChan, 'ok'=>(bool)($resp['ok'] ?? false)]);
+        if (!empty($resp['ok'])) {
+          $success = 'Message sent.';
+          if (!empty($prefs['notif_inapp'])) {
+            jarvis_notify($userId, 'success', 'Slack message sent', $msg, ['channel'=>$useChan]);
+          }
+          if (!empty($dbUser['phone_e164']) && !empty($prefs['notif_sms'])) {
+            jarvis_send_sms($dbUser['phone_e164'], "JARVIS → Slack: {$msg}");
+          }
+        } else {
+          $error = 'Slack error: ' . htmlspecialchars((string)($resp['error'] ?? 'unknown'));
+        }
+      }
+    }
+  }
+}
+
+after_send_chat:
+
+$recent = jarvis_fetch_messages($userId, 50);
+
+$commands = jarvis_recent_commands($userId, 20);
+$auditItems = jarvis_latest_audit($userId, 12);
+$notifCount = jarvis_unread_notifications_count($userId);
+$notifs = jarvis_recent_notifications($userId, 8);
+
+// Bottom-right panel content
+$restLogs = [];
+
+$defaultChannel = (string)($prefs['default_slack_channel'] ?? '');
+$phone = (string)($dbUser['phone_e164'] ?? '');
+?>
+<!doctype html>
+<html lang="en"><head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>JARVIS • Portal</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="navbar">
+    <div class="brand">
+      <img src="images/logo.svg" alt="JARVIS logo" />
+      <span class="dot" aria-hidden="true"></span>
+      <span>JARVIS</span>
+    </div>
+    <nav>
+      <a href="home.php">Home</a>
+      <a href="preferences.php">Preferences</a>
+      <a href="audit.php">Audit Log</a>
+      <a href="notifications.php">Notifications</a>
+      <a href="siri.php">Add to Siri</a>
+      <a href="logout.php">Logout</a>
+    </nav>
+  </div>
+
+  <div class="hero">
+    <div class="scanlines" aria-hidden="true"></div>
+    <img src="images/hero.svg" alt="" class="hero-ill" aria-hidden="true" />
+    <h1>JARVIS</h1>
+    <p>Blue / Black command portal • REST + Slack messaging • Timestamped logs</p>
+  </div>
+
+  <div class="container">
+    <?php if($success):?><div class="success"><p><?php echo htmlspecialchars($success); ?></p></div><?php endif;?>
+    <?php if($error):?><div class="error"><p><?php echo htmlspecialchars($error); ?></p></div><?php endif;?>
+
+    <div class="grid">
+      <!-- 1 -->
+      <div class="card">
+        <h3>Connection Status</h3>
+        <p class="muted">Slack: <?php echo getenv('SLACK_BOT_TOKEN') ? 'Configured' : 'Not configured'; ?></p>
+        <p class="muted">Instagram (Basic Display): <?php echo $igToken ? 'Connected' : 'Not connected'; ?></p>
+        <p class="muted">MySQL: <?php echo jarvis_pdo() ? 'Connected' : 'Not configured / unavailable'; ?></p>
+        <p class="muted">REST Base: <span class="badge">/api</span></p>
+        <p class="muted">Notifications: <span class="badge"><?php echo (int)$notifCount; ?> unread</span></p>
+        <p class="muted">Weather: <span id="jarvisWeather">(enable location logging in Preferences)</span></p>
+        <?php if ($wakePrompt): ?>
+          <div class="terminal" style="margin-top:12px">
+            <div class="term-title">JARVIS Wake Prompt</div>
+            <pre><?php echo htmlspecialchars($wakePrompt); ?></pre>
+          </div>
+        <?php endif; ?>
+      </div>
+
+      <!-- 2 -->
+      <div class="card">
+        <h3>JARVIS Chat</h3>
+        <div class="chatbox">
+          <div class="chatlog">
+            <?php if(!$recent): ?>
+              <p class="muted">No messages yet. Send your first message below.</p>
+            <?php else: ?>
+              <?php foreach($recent as $m): ?>
+                <div class="msg me">
+                  <div class="bubble">
+                    <div><?php echo htmlspecialchars($m['message_text']); ?></div>
+                    <div class="meta"><?php echo htmlspecialchars($m['created_at']); ?> • <?php echo htmlspecialchars($m['channel_id'] ?? ''); ?></div>
+                  </div>
+                </div>
+              <?php endforeach; ?>
+            <?php endif; ?>
+          </div>
+          <form method="post" class="chatinput">
+            <input name="channel" placeholder="Channel ID (optional)" value="<?php echo htmlspecialchars($defaultChannel); ?>" />
+            <textarea name="message" placeholder="Type a message to Slack..."></textarea>
+            <button type="submit" name="send_chat" value="1">Send</button>
+          </form>
+        </div>
+      </div>
+
+      <!-- 3 -->
+      <div class="card">
+        <h3>REST for .NET Desktop</h3>
+        <p class="muted">Use these endpoints from a desktop app:</p>
+        <pre><code>POST /api/auth/login
+POST /api/command
+POST /api/messages
+POST /api/location
+
+Example: send a Slack message
+Content-Type: application/json
+{
+  "message": "Hello from .NET",
+  "message": "Hello from .NET",
+  "channel": "<?php echo htmlspecialchars(getenv('SLACK_CHANNEL_ID') ?: ''); ?>"
+}</code></pre>
+      </div>
+
+      <!-- 4 -->
+      <div class="card">
+        <h3>User Settings</h3>
+        <form method="post">
+          <label>Default Slack Channel ID</label>
+          <input name="default_channel" value="<?php echo htmlspecialchars($defaultChannel); ?>" />
+          <button type="submit" name="save_channel" value="1">Save</button>
+        </form>
+        <form method="post" style="margin-top:12px">
+          <label>Phone Number (for SMS)</label>
+          <input name="phone_number" value="<?php echo htmlspecialchars($phone); ?>" placeholder="+1..." />
+          <button type="submit" name="save_phone" value="1">Save Phone</button>
+        </form>
+      </div>
+
+      <!-- 5 -->
+      <div class="card">
+        <h3>Shortcuts</h3>
+        <p class="muted">Add “Hey Siri, JARVIS message” to send text hands-free.</p>
+        <div class="nav-links"><a href="siri.php">Open Siri setup</a></div>
+      </div>
+
+      <!-- 6 (BOTTOM RIGHT) -->
+      <div class="card">
+        <h3>Audit & Notifications</h3>
+        <p class="muted">All logins, actions, requests, and JARVIS responses are timestamped and stored in MySQL.</p>
+
+        <div class="terminal" style="margin-top:10px">
+          <div class="term-title">Recent Notifications</div>
+          <div class="term-body" style="max-height:140px; overflow:auto">
+            <?php if(!$notifs): ?>
+              <p class="muted">No notifications yet.</p>
+            <?php else: ?>
+              <?php foreach($notifs as $n): ?>
+                <div class="muted" style="margin-bottom:8px">
+                  <b><?php echo htmlspecialchars($n['title']); ?></b>
+                  <div><?php echo htmlspecialchars((string)($n['body'] ?? '')); ?></div>
+                  <div class="meta"><?php echo htmlspecialchars($n['created_at']); ?><?php echo ((int)$n['is_read']===0) ? ' • UNREAD' : ''; ?></div>
+                </div>
+              <?php endforeach; ?>
+            <?php endif; ?>
+          </div>
+        </div>
+
+        <div class="terminal" style="margin-top:10px">
+          <div class="term-title">Recent Audit Events</div>
+          <div class="term-body" style="max-height:140px; overflow:auto">
+            <?php if(!$auditItems): ?>
+              <p class="muted">No audit events yet.</p>
+            <?php else: ?>
+              <?php foreach($auditItems as $a): ?>
+                <div class="muted" style="margin-bottom:8px">
+                  <b><?php echo htmlspecialchars($a['action']); ?></b> <?php echo htmlspecialchars((string)($a['entity'] ?? '')); ?>
+                  <div class="meta"><?php echo htmlspecialchars($a['created_at']); ?></div>
+                </div>
+              <?php endforeach; ?>
+            <?php endif; ?>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Browser location -> /api/location (logged to MySQL)
+    (function(){
+      const enabled = <?php echo !empty($prefs['location_logging_enabled']) ? 'true' : 'false'; ?>;
+      const token = <?php echo $webJwt ? json_encode($webJwt) : 'null'; ?>;
+      if (!enabled || !token || !navigator.geolocation) return;
+      navigator.geolocation.getCurrentPosition(async (pos)=>{
+        try {
+          const body = {
+            lat: pos.coords.latitude,
+            lon: pos.coords.longitude,
+            accuracy: pos.coords.accuracy
+          };
+          const r = await fetch('/api/location', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer '+token },
+            body: JSON.stringify(body)
+          });
+          const data = await r.json().catch(()=>null);
+          const el = document.getElementById('jarvisWeather');
+          if (el && data) {
+            el.textContent = data.note ? data.note : ('Location saved: '+body.lat.toFixed(3)+', '+body.lon.toFixed(3));
+          }
+        } catch (e) {}
+      }, ()=>{}, { enableHighAccuracy: true, maximumAge: 10*60*1000, timeout: 8000 });
+    })();
+  </script>
+</body></html>
