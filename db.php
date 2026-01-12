@@ -113,6 +113,44 @@ function jarvis_create_user(string $username, string $email, ?string $phoneE164,
   return $userId;
 }
 
+/**
+ * List users with optional search and pagination (admin use)
+ */
+function jarvis_list_users(int $limit = 50, int $offset = 0, ?string $q = null): array {
+  $pdo = jarvis_pdo();
+  if (!$pdo) return [];
+  if ($q) {
+    $like = '%' . str_replace('%','\\%',$q) . '%';
+    $stmt = $pdo->prepare('SELECT id,username,email,role,created_at,last_login_at,email_verified_at FROM users WHERE username LIKE :q OR email LIKE :q ORDER BY id DESC LIMIT :l OFFSET :o');
+    $stmt->bindValue(':q', $like, PDO::PARAM_STR);
+  } else {
+    $stmt = $pdo->prepare('SELECT id,username,email,role,created_at,last_login_at,email_verified_at FROM users ORDER BY id DESC LIMIT :l OFFSET :o');
+  }
+  $stmt->bindValue(':l', $limit, PDO::PARAM_INT);
+  $stmt->bindValue(':o', $offset, PDO::PARAM_INT);
+  $stmt->execute();
+  return $stmt->fetchAll() ?: [];
+}
+
+function jarvis_set_user_role(int $userId, string $role): bool {
+  $pdo = jarvis_pdo();
+  if (!$pdo) return false;
+  $stmt = $pdo->prepare('UPDATE users SET role=:role WHERE id=:id');
+  $stmt->execute([':role'=>$role, ':id'=>$userId]);
+  return true;
+}
+
+function jarvis_delete_user(int $userId): bool {
+  $pdo = jarvis_pdo();
+  if (!$pdo) return false;
+  try {
+    $pdo->prepare('DELETE FROM users WHERE id=:id')->execute([':id'=>$userId]);
+    return true;
+  } catch (Throwable $e) {
+    return false;
+  }
+}
+
 function jarvis_verify_email(string $username, string $token): bool {
   $pdo = jarvis_pdo();
   if (!$pdo) return false;

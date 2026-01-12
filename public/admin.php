@@ -18,7 +18,42 @@ if (!$user || ($user['role'] ?? '') !== 'admin') {
 $notice = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   $action = $_POST['action'] ?? '';
-  if ($action === 'add') {
+
+  // User actions
+  if (in_array($action, ['user_promote','user_demote','user_delete','user_resetpw','user_resend'])) {
+    $uid = isset($_POST['user_id']) ? (int)$_POST['user_id'] : 0;
+    if ($uid <= 0) { $notice = 'User id required.'; }
+    else {
+      if ($action === 'user_promote') {
+        jarvis_set_user_role($uid, 'admin');
+        jarvis_audit((int)$_SESSION['user_id'], 'USER_PROMOTE', 'admin', ['user_id'=>$uid]);
+        $notice = 'User promoted to admin.';
+      } elseif ($action === 'user_demote') {
+        jarvis_set_user_role($uid, 'user');
+        jarvis_audit((int)$_SESSION['user_id'], 'USER_DEMOTE', 'admin', ['user_id'=>$uid]);
+        $notice = 'User demoted to user.';
+      } elseif ($action === 'user_delete') {
+        if (jarvis_delete_user($uid)) { jarvis_audit((int)$_SESSION['user_id'], 'USER_DELETE', 'admin', ['user_id'=>$uid]); $notice = 'User deleted.'; } else { $notice = 'Failed to delete user.'; }
+      } elseif ($action === 'user_resetpw') {
+        // Create a password reset token and email it
+        $u = jarvis_user_by_id($uid);
+        if ($u) {
+          $token = jarvis_initiate_password_reset($u['email']);
+          if ($token) {
+            $resetUrl = jarvis_site_url() . '/public/reset_password.php?token=' . urlencode($token);
+            jarvis_send_email($u['email'], 'Reset your password', "Reset: {$resetUrl}", "<p>Reset: <a href=\"{$resetUrl}\">Reset password</a></p>");
+            jarvis_audit((int)$_SESSION['user_id'], 'USER_RESET_REQUEST', 'admin', ['user_id'=>$uid]);
+            $notice = 'Password reset link sent.';
+          } else { $notice = 'Failed to create reset token.'; }
+        } else { $notice = 'User not found.'; }
+      } elseif ($action === 'user_resend') {
+        if (jarvis_resend_email_verification($uid)) { jarvis_audit((int)$_SESSION['user_id'], 'USER_RESEND_CONFIRM', 'admin', ['user_id'=>$uid]); $notice = 'Confirmation resent.'; }
+        else { $notice = 'Failed to resend confirmation.'; }
+      }
+    }
+
+  // Existing settings actions
+  } elseif ($action === 'add') {
     $k = trim($_POST['key'] ?? '');
     $v = trim($_POST['value'] ?? '');
     if ($k === '') $notice = 'Key required.';
@@ -43,13 +78,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $settings = jarvis_setting_list();
+
+// User management defaults
+$users = jarvis_list_users(50,0, (string)($_GET['q'] ?? ''));
 ?>
 <!doctype html>
 <html>
 <head>
   <meta charset="utf-8" />
-  <title>Admin - Settings</title>
+  <title>Admin - Settings & Users</title>
   <link rel="stylesheet" href="style.css">
+  <style>table td form{display:inline-block;margin:0}</style>
 </head>
 <body>
   <nav>
@@ -59,8 +98,48 @@ $settings = jarvis_setting_list();
   </nav>
 
   <main>
-    <h1>Admin: Settings</h1>
+    <h1>Admin Console</h1>
     <?php if ($notice): ?><p class="notice"><?= htmlspecialchars($notice) ?></p><?php endif; ?>
+
+    <section>
+      <h2>Manage Users</h2>
+      <form method="get" style="margin-bottom:12px">
+        <label>Search by email or username: <input name="q" value="<?= htmlspecialchars((string)($_GET['q'] ?? '')) ?>"></label>
+        <button type="submit">Search</button>
+      </form>
+
+      <?php if (empty($users)): ?>
+        <p class="muted">No users found.</p>
+      <?php else: ?>
+        <table>
+          <thead><tr><th>ID</th><th>Username</th><th>Email</th><th>Role</th><th>Verified</th><th>Last Login</th><th>Actions</th></tr></thead>
+          <tbody>
+            <?php foreach ($users as $u): ?>
+              <tr>
+                <td><?= (int)$u['id'] ?></td>
+                <td><?= htmlspecialchars($u['username']) ?></td>
+                <td><?= htmlspecialchars($u['email']) ?></td>
+                <td><?= htmlspecialchars($u['role']) ?></td>
+                <td><?= $u['email_verified_at'] ? 'Yes' : 'No' ?></td>
+                <td><?= htmlspecialchars($u['last_login_at'] ?? '') ?></td>
+                <td>
+                  <?php if (($u['role'] ?? '') !== 'admin'): ?>
+                    <form method="post" style="display:inline"><input type="hidden" name="action" value="user_promote"><input type="hidden" name="user_id" value="<?= (int)$u['id'] ?>"><button class="btn" type="submit">Promote to Admin</button></form>
+                  <?php else: ?>
+                    <form method="post" style="display:inline"><input type="hidden" name="action" value="user_demote"><input type="hidden" name="user_id" value="<?= (int)$u['id'] ?>"><button class="btn secondary" type="submit">Demote</button></form>
+                  <?php endif; ?>
+                  <form method="post" style="display:inline"><input type="hidden" name="action" value="user_resend"><input type="hidden" name="user_id" value="<?= (int)$u['id'] ?>"><button class="btn secondary" type="submit">Resend Confirmation</button></form>
+                  <form method="post" style="display:inline"><input type="hidden" name="action" value="user_resetpw"><input type="hidden" name="user_id" value="<?= (int)$u['id'] ?>"><button class="btn" type="submit">Send Reset Link</button></form>
+                  <form method="post" style="display:inline" onsubmit="return confirm('Delete user <?= htmlspecialchars($u['username']) ?>?');"><input type="hidden" name="action" value="user_delete"><input type="hidden" name="user_id" value="<?= (int)$u['id'] ?>"><button class="btn secondary" type="submit">Delete</button></form>
+                </td>
+              </tr>
+            <?php endforeach; ?>
+          </tbody>
+        </table>
+      <?php endif; ?>
+    </section>
+
+    <hr>
 
     <section>
       <h2>Add / Update Setting</h2>
