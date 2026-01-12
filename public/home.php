@@ -158,7 +158,6 @@ $phone = (string)($dbUser['phone_e164'] ?? '');
                 </div>
                 <div style="display:flex;gap:8px;align-items:center">
                   <button type="submit" name="send_chat" value="1" id="sendBtn" class="btn">Send</button>
-                  <button type="button" id="testVoiceBtn" class="btn" title="Upload sample audio and send">Test Voice</button>
                 </div>
               </div>
               <div style="margin-top:8px;display:flex;gap:12px;align-items:center;justify-content:flex-start">
@@ -998,26 +997,7 @@ Content-Type: application/json
         } catch(e){ return null; }
       }
 
-      // Upload a remote sample audio file and auto-send as a voice command (for quick testing)
-      document.getElementById('testVoiceBtn')?.addEventListener('click', async ()=>{
-        try{
-          const sampleUrl = 'https://interactive-examples.mdn.mozilla.net/media/examples/t-rex-roar.mp3';
-          const r = await fetch(sampleUrl);
-          if (!r.ok) { appendMessage('Failed to fetch sample audio', 'jarvis'); return; }
-          const blob = await r.blob();
-          appendMessage('Uploading sample audio...', 'me');
-          const statusNote = document.createElement('div'); statusNote.className='muted'; statusNote.textContent = 'Uploading sample...';
-          const container = appendAudioMessage(blob, 'me', 'Sample audio'); if (container) container.appendChild(statusNote);
-          const resp = await sendAudioBlob(blob, 'Sample audio test', Math.floor((blob.size/16000)), 'sample');
-          if (resp && resp.ok && resp.id) {
-            statusNote.textContent = 'Uploaded • id: '+resp.id;
-            // Auto-send blank text with voice_input_id so server will use transcript
-            await sendCommand('', 'voice', { voice_input_id: resp.id });
-          } else {
-            statusNote.textContent = 'Upload failed';
-          }
-        }catch(e){ console.error('test voice upload failed', e); appendMessage('Test voice upload failed: '+(e && e.message ? e.message : String(e)), 'jarvis'); }
-      });
+      // Test Voice button removed
 
       // Try to initialize Web Speech Recognition if available
       function initRecognition(){
