@@ -302,9 +302,10 @@ if (preg_match('#^/api/devices/(\d+)/location$#', $path, $m)) {
   $lon = (float)($in['lon'] ?? 0);
   $acc = isset($in['accuracy']) ? (float)$in['accuracy'] : null;
   if (!$lat || !$lon) jarvis_respond(400, ['error'=>'lat/lon required']);
-  jarvis_update_device_location($userId, $deviceId, $lat, $lon, $acc);
-  jarvis_audit($userId, 'DEVICE_LOCATION_UPDATE', 'device', ['device_id'=>$deviceId,'lat'=>$lat,'lon'=>$lon,'accuracy'=>$acc]);
-  jarvis_respond(200, ['ok'=>true]);
+  $locId = jarvis_update_device_location($userId, $deviceId, $lat, $lon, $acc);
+  jarvis_audit($userId, 'DEVICE_LOCATION_UPDATE', 'device', ['device_id'=>$deviceId,'lat'=>$lat,'lon'=>$lon,'accuracy'=>$acc,'location_id'=>$locId]);
+  jarvis_log_api_request($userId, 'device', $path, $method, $in, ['ok'=>true,'location_id'=>$locId], 200);
+  jarvis_respond(200, ['ok'=>true,'location_id'=>$locId]);
 }
 
 if (preg_match('#^/api/devices/(\d+)$#', $path, $m)) {
