@@ -1106,3 +1106,209 @@ function jarvis_delete_local_event(int $userId, int $eventId): bool {
   }
   return false;
 }
+
+// ========== Event Reminders & Notifications ==========
+
+/**
+ * Get upcoming events for today and tomorrow for reminders
+ */
+function jarvis_get_upcoming_events_for_reminders(int $userId): array {
+  $pdo = jarvis_pdo();
+  if (!$pdo) return [];
+  jarvis_ensure_local_events_table();
+  
+  $today = date('Y-m-d');
+  $tomorrow = date('Y-m-d', strtotime('+1 day'));
+  
+  // Get local events for today and tomorrow
+  $stmt = $pdo->prepare('
+    SELECT id, title, event_date, event_time, location, notes, "local" as source 
+    FROM user_local_events 
+    WHERE user_id = :u AND event_date IN (:today, :tomorrow)
+    ORDER BY event_date ASC, event_time ASC
+  ');
+  $stmt->execute([':u' => $userId, ':today' => $today, ':tomorrow' => $tomorrow]);
+  $localEvents = $stmt->fetchAll() ?: [];
+  
+  // Get Google Calendar events for today and tomorrow
+  $stmt2 = $pdo->prepare('
+    SELECT id, summary as title, start_dt as event_datetime, location, "google" as source
+    FROM user_calendar_events
+    WHERE user_id = :u AND DATE(start_dt) IN (:today, :tomorrow)
+    ORDER BY start_dt ASC
+  ');
+  $stmt2->execute([':u' => $userId, ':today' => $today, ':tomorrow' => $tomorrow]);
+  $googleEvents = $stmt2->fetchAll() ?: [];
+  
+  // Combine and format
+  $events = [];
+  foreach ($localEvents as $e) {
+    $events[] = [
+      'id' => $e['id'],
+      'title' => $e['title'],
+      'date' => $e['event_date'],
+      'time' => $e['event_time'],
+      'location' => $e['location'],
+      'source' => 'local',
+      'is_today' => ($e['event_date'] === $today),
+      'is_tomorrow' => ($e['event_date'] === $tomorrow),
+    ];
+  }
+  foreach ($googleEvents as $e) {
+    $dt = $e['event_datetime'] ?? null;
+    $events[] = [
+      'id' => $e['id'],
+      'title' => $e['title'],
+      'date' => $dt ? date('Y-m-d', strtotime($dt)) : null,
+      'time' => $dt ? date('H:i:s', strtotime($dt)) : null,
+      'location' => $e['location'],
+      'source' => 'google',
+      'is_today' => $dt && date('Y-m-d', strtotime($dt)) === $today,
+      'is_tomorrow' => $dt && date('Y-m-d', strtotime($dt)) === $tomorrow,
+    ];
+  }
+  
+  // Sort by date/time
+  usort($events, function($a, $b) {
+    $aKey = ($a['date'] ?? '') . ' ' . ($a['time'] ?? '00:00:00');
+    $bKey = ($b['date'] ?? '') . ' ' . ($b['time'] ?? '00:00:00');
+    return strcmp($aKey, $bKey);
+  });
+  
+  return $events;
+}
+
+/**
+ * Create event reminder notifications for upcoming events
+ * Should be called on login or page load
+ */
+function jarvis_create_event_reminders(int $userId): int {
+  $pdo = jarvis_pdo();
+  if (!$pdo) return 0;
+  
+  $events = jarvis_get_upcoming_events_for_reminders($userId);
+  $created = 0;
+  
+  foreach ($events as $event) {
+    // Check if we already sent a reminder today for this event
+    $checkKey = 'event_reminder_' . $event['source'] . '_' . $event['id'] . '_' . date('Y-m-d');
+    $stmt = $pdo->prepare('SELECT id FROM notifications WHERE user_id = :u AND title LIKE :key AND DATE(created_at) = CURDATE() LIMIT 1');
+    $stmt->execute([':u' => $userId, ':key' => '%' . $event['title'] . '%']);
+    if ($stmt->fetch()) continue; // Already sent
+    
+    $timeStr = $event['time'] ? date('g:i A', strtotime($event['time'])) : 'All day';
+    $locationStr = $event['location'] ? ' at ' . $event['location'] : '';
+    
+    if ($event['is_today']) {
+      $title = '📅 Today: ' . $event['title'];
+      $body = 'You have an event today at ' . $timeStr . $locationStr;
+      $type = 'event';
+      jarvis_notify($userId, $type, $title, $body, [
+        'event_id' => $event['id'],
+        'event_source' => $event['source'],
+        'event_date' => $event['date'],
+        'event_time' => $event['time'],
+      ]);
+      jarvis_audit($userId, 'EVENT_REMINDER_SENT', 'calendar', [
+        'event_id' => $event['id'],
+        'event_title' => $event['title'],
+        'reminder_type' => 'today',
+      ]);
+      $created++;
+    } elseif ($event['is_tomorrow']) {
+      $title = '🔔 Tomorrow: ' . $event['title'];
+      $body = 'Upcoming event tomorrow at ' . $timeStr . $locationStr;
+      $type = 'reminder';
+      jarvis_notify($userId, $type, $title, $body, [
+        'event_id' => $event['id'],
+        'event_source' => $event['source'],
+        'event_date' => $event['date'],
+        'event_time' => $event['time'],
+      ]);
+      jarvis_audit($userId, 'EVENT_REMINDER_SENT', 'calendar', [
+        'event_id' => $event['id'],
+        'event_title' => $event['title'],
+        'reminder_type' => 'tomorrow',
+      ]);
+      $created++;
+    }
+  }
+  
+  return $created;
+}
+
+/**
+ * Get notifications with enhanced data including event info
+ */
+function jarvis_recent_notifications_enhanced(int $userId, int $limit = 20): array {
+  $pdo = jarvis_pdo();
+  if (!$pdo) return [];
+  $stmt = $pdo->prepare('
+    SELECT id, type, title, body, metadata_json, is_read, created_at, read_at 
+    FROM notifications 
+    WHERE user_id = :u 
+    ORDER BY id DESC 
+    LIMIT :l
+  ');
+  $stmt->bindValue(':u', $userId, PDO::PARAM_INT);
+  $stmt->bindValue(':l', $limit, PDO::PARAM_INT);
+  $stmt->execute();
+  $rows = $stmt->fetchAll() ?: [];
+  
+  // Parse metadata and add computed fields
+  foreach ($rows as &$row) {
+    $row['metadata'] = $row['metadata_json'] ? json_decode($row['metadata_json'], true) : [];
+    $row['time_ago'] = jarvis_time_ago($row['created_at']);
+    $row['icon'] = jarvis_notification_icon($row['type']);
+  }
+  
+  return $rows;
+}
+
+/**
+ * Get notification icon based on type
+ */
+function jarvis_notification_icon(string $type): string {
+  $icons = [
+    'info' => 'ℹ️',
+    'success' => '✅',
+    'warning' => '⚠️',
+    'error' => '❌',
+    'event' => '📅',
+    'reminder' => '🔔',
+    'alert' => '🚨',
+    'message' => '💬',
+    'sync' => '🔄',
+    'system' => '⚙️',
+  ];
+  return $icons[$type] ?? '📌';
+}
+
+/**
+ * Human-readable time ago
+ */
+function jarvis_time_ago(string $datetime): string {
+  $time = strtotime($datetime);
+  $diff = time() - $time;
+  
+  if ($diff < 60) return 'just now';
+  if ($diff < 3600) return floor($diff / 60) . 'm ago';
+  if ($diff < 86400) return floor($diff / 3600) . 'h ago';
+  if ($diff < 604800) return floor($diff / 86400) . 'd ago';
+  return date('M j', $time);
+}
+
+/**
+ * Mark all notifications as read
+ */
+function jarvis_mark_all_notifications_read(int $userId): int {
+  $pdo = jarvis_pdo();
+  if (!$pdo) return 0;
+  $stmt = $pdo->prepare('UPDATE notifications SET is_read = 1, read_at = :t WHERE user_id = :u AND is_read = 0');
+  $stmt->execute([':t' => jarvis_now_sql(), ':u' => $userId]);
+  $count = $stmt->rowCount();
+  if ($count > 0) {
+    jarvis_audit($userId, 'NOTIFICATIONS_MARKED_READ', 'notifications', ['count' => $count]);
+  }
+  return $count;
+}

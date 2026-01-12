@@ -26,6 +26,13 @@ try { $webJwt = jarvis_jwt_issue($userId, $username, 3600); } catch (Throwable $
 // Update last seen for auditing + wake logic
 jarvis_update_last_seen($userId);
 
+// Create event reminders for upcoming events
+try {
+  jarvis_create_event_reminders($userId);
+} catch (Throwable $e) {
+  // non-fatal
+}
+
 // Wake prompt if user has been away for >= 6 hours
 $wakePrompt = null;
 $wakeCards = null;
@@ -105,7 +112,8 @@ $calendarEvents = jarvis_list_calendar_events($userId, 6);
 $commands = jarvis_recent_commands($userId, 20);
 $auditItems = jarvis_latest_audit($userId, 12);
 $notifCount = jarvis_unread_notifications_count($userId);
-$notifs = jarvis_recent_notifications($userId, 8);
+$notifs = jarvis_recent_notifications_enhanced($userId, 12);
+$upcomingEvents = jarvis_get_upcoming_events_for_reminders($userId);
 
 // Google Calendar connection status
 $googleToken = jarvis_oauth_get($userId, 'google');
@@ -204,41 +212,76 @@ $phone = (string)($dbUser['phone_e164'] ?? '');
       </div>
 
       <!-- 1 -->
-      <div class="card">
-        <h3>Audit & Notifications</h3>
-        <p class="muted">All logins, actions, requests, and JARVIS responses are timestamped and stored in MySQL.</p>
-
-        <div class="terminal" style="margin-top:10px">
-          <div class="term-title">Recent Notifications</div>
-          <div class="term-body" id="notifList" style="max-height:140px; overflow:auto">
-            <?php if(!$notifs): ?>
-              <p class="muted">No notifications yet.</p>
-            <?php else: ?>
-              <?php foreach($notifs as $n): ?>
-                <div class="muted" style="margin-bottom:8px">
-                  <b><?php echo htmlspecialchars($n['title']); ?></b>
-                  <div><?php echo htmlspecialchars((string)($n['body'] ?? '')); ?></div>
-                  <div class="meta"><?php echo htmlspecialchars($n['created_at']); ?><?php echo ((int)$n['is_read']===0) ? ' • UNREAD' : ''; ?></div>
-                </div>
-              <?php endforeach; ?>
-            <?php endif; ?>
-          </div>
+      <div class="card notification-card">
+        <div class="card-header-row">
+          <h3>🔔 Notifications</h3>
+          <?php if ($notifCount > 0): ?>
+            <span class="notif-badge"><?php echo (int)$notifCount; ?> unread</span>
+          <?php endif; ?>
+          <a href="notifications.php" class="btn btn-sm secondary" style="margin-left:auto">View All</a>
         </div>
 
-        <div class="terminal" style="margin-top:10px">
-          <div class="term-title">Recent Audit Events</div>
-          <div class="term-body" style="max-height:140px; overflow:auto">
-            <?php if(!$auditItems): ?>
-              <p class="muted">No audit events yet.</p>
-            <?php else: ?>
-              <?php foreach($auditItems as $a): ?>
-                <div class="muted" style="margin-bottom:8px">
-                  <b><?php echo htmlspecialchars($a['action']); ?></b> <?php echo htmlspecialchars((string)($a['entity'] ?? '')); ?>
-                  <div class="meta"><?php echo htmlspecialchars($a['created_at']); ?></div>
-                </div>
-              <?php endforeach; ?>
-            <?php endif; ?>
+        <?php if (!empty($upcomingEvents)): ?>
+        <div class="upcoming-events-alert">
+          <div class="alert-header">
+            <span class="alert-icon">📅</span>
+            <span class="alert-title">Upcoming Events</span>
           </div>
+          <div class="upcoming-events-list">
+            <?php foreach (array_slice($upcomingEvents, 0, 3) as $evt): ?>
+              <div class="upcoming-event-item <?php echo $evt['is_today'] ? 'today' : 'tomorrow'; ?>">
+                <div class="event-badge"><?php echo $evt['is_today'] ? 'Today' : 'Tomorrow'; ?></div>
+                <div class="event-info">
+                  <strong><?php echo htmlspecialchars($evt['title']); ?></strong>
+                  <span class="event-time"><?php echo $evt['time'] ? date('g:i A', strtotime($evt['time'])) : 'All day'; ?></span>
+                </div>
+              </div>
+            <?php endforeach; ?>
+          </div>
+        </div>
+        <?php endif; ?>
+
+        <div class="notifications-list" id="notifList">
+          <?php if(!$notifs): ?>
+            <p class="muted">No notifications yet.</p>
+          <?php else: ?>
+            <?php foreach($notifs as $n): ?>
+              <div class="notification-item <?php echo ((int)$n['is_read'] === 0) ? 'unread' : 'read'; ?> type-<?php echo htmlspecialchars($n['type']); ?>">
+                <div class="notif-icon"><?php echo $n['icon']; ?></div>
+                <div class="notif-content">
+                  <div class="notif-title"><?php echo htmlspecialchars($n['title']); ?></div>
+                  <?php if (!empty($n['body'])): ?>
+                    <div class="notif-body"><?php echo htmlspecialchars(mb_substr((string)$n['body'], 0, 100)); ?><?php echo mb_strlen((string)$n['body']) > 100 ? '...' : ''; ?></div>
+                  <?php endif; ?>
+                  <div class="notif-meta"><?php echo htmlspecialchars($n['time_ago']); ?></div>
+                </div>
+                <?php if ((int)$n['is_read'] === 0): ?>
+                  <span class="unread-dot"></span>
+                <?php endif; ?>
+              </div>
+            <?php endforeach; ?>
+          <?php endif; ?>
+        </div>
+      </div>
+
+      <!-- Audit Log Card -->
+      <div class="card audit-card">
+        <div class="card-header-row">
+          <h3>📋 Audit Log</h3>
+          <a href="audit.php" class="btn btn-sm secondary" style="margin-left:auto">View All</a>
+        </div>
+        <div class="audit-list">
+          <?php if(!$auditItems): ?>
+            <p class="muted">No audit events yet.</p>
+          <?php else: ?>
+            <?php foreach($auditItems as $a): ?>
+              <div class="audit-item">
+                <div class="audit-action"><?php echo htmlspecialchars($a['action']); ?></div>
+                <div class="audit-entity"><?php echo htmlspecialchars((string)($a['entity'] ?? '')); ?></div>
+                <div class="audit-time"><?php echo htmlspecialchars($a['created_at']); ?></div>
+              </div>
+            <?php endforeach; ?>
+          <?php endif; ?>
         </div>
       </div>
 
