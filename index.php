@@ -10,9 +10,14 @@ require_once __DIR__ . '/briefing.php';
 $path = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/';
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 // Debugging: log incoming requests to help diagnose route mismatches (temporary)
-@file_put_contents('/tmp/jarvis_req.log', json_encode(['ts'=>time(),'path'=>$path,'method'=>$method,'headers'=>getallheaders()]) . PHP_EOL, FILE_APPEND);
+@file_put_contents('/tmp/jarvis_req.log', json_encode(['ts'=>time(),'path'=>$path,'method'=>$method,'uri'=>($_SERVER['REQUEST_URI'] ?? '')]) . PHP_EOL, FILE_APPEND);
 
 if ($path !== '/' && substr($path, -1) === '/') $path = rtrim($path, '/');
+
+// DEBUG: Test if /api/photos can be matched
+if (strpos($path, '/api/photos') === 0 && $method === 'GET') {
+  @file_put_contents('/tmp/jarvis_debug.log', "HIT: $path $method\n", FILE_APPEND);
+}
 
 function slack_post_message_api(string $token, string $channel, string $text): array {
   $ch = curl_init('https://slack.com/api/chat.postMessage');

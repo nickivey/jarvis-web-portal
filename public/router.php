@@ -13,10 +13,10 @@ if (file_exists(__DIR__ . $path) && is_file(__DIR__ . $path)) {
     return false;
 }
 
-// Route /api requests to the root index.php
-if (strpos($path, '/api/') === 0) {
+// Route /api requests to the root index.php (match both /api/ and /api)
+if (strpos($path, '/api/') === 0 || $path === '/api') {
     require_once __DIR__ . '/../index.php';
-    return;
+    exit;
 }
 
 // Otherwise, 404
