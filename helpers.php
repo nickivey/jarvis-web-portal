@@ -247,8 +247,9 @@ function jarvis_import_google_calendar(int $userId): array {
 function jarvis_fetch_weather(float $lat, float $lon): ?array {
   // Use Open-Meteo API (free, no API key required)
   // Docs: https://open-meteo.com/en/docs
+  // Request Fahrenheit and mph units for US users
   $url = sprintf(
-    'https://api.open-meteo.com/v1/forecast?latitude=%s&longitude=%s&current=temperature_2m,weather_code,wind_speed_10m,relative_humidity_2m,is_day&daily=temperature_2m_max,temperature_2m_min,weather_code&timezone=auto',
+    'https://api.open-meteo.com/v1/forecast?latitude=%s&longitude=%s&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m,relative_humidity_2m,is_day&daily=temperature_2m_max,temperature_2m_min,weather_code&timezone=auto&temperature_unit=fahrenheit&wind_speed_unit=mph',
     urlencode((string)$lat),
     urlencode((string)$lon)
   );
@@ -331,6 +332,8 @@ function jarvis_fetch_weather(float $lat, float $lon): ?array {
         'day' => $dayName,
         'high_c' => isset($data['daily']['temperature_2m_max'][$i]) ? (float)$data['daily']['temperature_2m_max'][$i] : null,
         'low_c' => isset($data['daily']['temperature_2m_min'][$i]) ? (float)$data['daily']['temperature_2m_min'][$i] : null,
+        'high_f' => isset($data['daily']['temperature_2m_max'][$i]) ? (float)$data['daily']['temperature_2m_max'][$i] : null, // Now in Fahrenheit from API
+        'low_f' => isset($data['daily']['temperature_2m_min'][$i]) ? (float)$data['daily']['temperature_2m_min'][$i] : null, // Now in Fahrenheit from API
         'weather_code' => $dayCode,
         'desc' => $dayInfo['desc'],
         'icon' => $dayInfo['icon_day'],
@@ -341,14 +344,18 @@ function jarvis_fetch_weather(float $lat, float $lon): ?array {
   
   return [
     'temp_c' => isset($current['temperature_2m']) ? (float)$current['temperature_2m'] : null,
+    'temp_f' => isset($current['temperature_2m']) ? (float)$current['temperature_2m'] : null, // Now in Fahrenheit from API
     'high_c' => $highTemp,
+    'high_f' => $highTemp, // Now in Fahrenheit from API
     'low_c' => $lowTemp,
+    'low_f' => $lowTemp, // Now in Fahrenheit from API
+    'feels_like_f' => isset($current['apparent_temperature']) ? (float)$current['apparent_temperature'] : null,
     'desc' => $desc,
     'icon' => $icon,
     'icon_anim' => $animClass,
     'is_day' => $isDay,
     'humidity' => isset($current['relative_humidity_2m']) ? (int)$current['relative_humidity_2m'] : null,
-    'wind_speed' => isset($current['wind_speed_10m']) ? (float)$current['wind_speed_10m'] : null,
+    'wind_speed' => isset($current['wind_speed_10m']) ? (float)$current['wind_speed_10m'] : null, // Now in mph from API
     'weather_code' => $weatherCode,
     'forecast' => $forecast,
     'raw' => $data,

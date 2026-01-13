@@ -1,8 +1,15 @@
 <?php
+session_start();
 require_once __DIR__ . '/../db.php';
 require_once __DIR__ . '/../jwt.php';
 require_once __DIR__ . '/../helpers.php';
-[$uid, $u] = require_jwt_user();
+
+if (!isset($_SESSION['username'])) { header('Location: login.php'); exit; }
+$uid = (int)($_SESSION['user_id'] ?? 0);
+if ($uid <= 0) { session_destroy(); header('Location: login.php'); exit; }
+$u = jarvis_user_by_id($uid);
+if (!$u) { session_destroy(); header('Location: login.php'); exit; }
+
 $defaultChannel = 'local:rhats';
 ?>
 <!doctype html>

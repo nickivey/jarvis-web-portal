@@ -406,8 +406,8 @@ $phone = (string)($dbUser['phone_e164'] ?? '');
               <div class="weather-hero-content">
                 <div class="weather-current-label">CURRENT CONDITIONS</div>
                 <div class="weather-temp-display">
-                  <span class="temp-value"><?php echo ($lastWeather['temp_c'] !== null) ? round($lastWeather['temp_c']) : '--'; ?></span>
-                  <span class="temp-degree">°C</span>
+                  <span class="temp-value"><?php echo ($lastWeather['temp_f'] !== null) ? round($lastWeather['temp_f']) : '--'; ?></span>
+                  <span class="temp-degree">°F</span>
                 </div>
                 <div class="weather-condition-text"><?php echo htmlspecialchars($lastWeather['desc'] ?? 'Unknown'); ?></div>
                 <?php if ($locationStr): ?>
@@ -416,12 +416,12 @@ $phone = (string)($dbUser['phone_e164'] ?? '');
               </div>
               
               <div class="weather-meta-panel">
-                <?php if ($lastWeather['high_c'] !== null && $lastWeather['low_c'] !== null): ?>
+                <?php if ($lastWeather['high_f'] !== null && $lastWeather['low_f'] !== null): ?>
                 <div class="meta-item">
                   <div class="meta-icon">🌡️</div>
                   <div class="meta-content">
                     <div class="meta-label">High / Low</div>
-                    <div class="meta-value"><?php echo round($lastWeather['high_c']); ?>° / <?php echo round($lastWeather['low_c']); ?>°</div>
+                    <div class="meta-value"><?php echo round($lastWeather['high_f']); ?>° / <?php echo round($lastWeather['low_f']); ?>°</div>
                   </div>
                 </div>
                 <?php endif; ?>
@@ -439,16 +439,16 @@ $phone = (string)($dbUser['phone_e164'] ?? '');
                   <div class="meta-icon">💨</div>
                   <div class="meta-content">
                     <div class="meta-label">Wind Speed</div>
-                    <div class="meta-value"><?php echo round($lastWeather['wind_speed']); ?> km/h</div>
+                    <div class="meta-value"><?php echo round($lastWeather['wind_speed']); ?> mph</div>
                   </div>
                 </div>
                 <?php endif; ?>
-                <?php if (isset($lastWeather['feels_like_c'])): ?>
+                <?php if (isset($lastWeather['feels_like_f'])): ?>
                 <div class="meta-item">
                   <div class="meta-icon">🤒</div>
                   <div class="meta-content">
                     <div class="meta-label">Feels Like</div>
-                    <div class="meta-value"><?php echo round($lastWeather['feels_like_c']); ?>°C</div>
+                    <div class="meta-value"><?php echo round($lastWeather['feels_like_f']); ?>°F</div>
                   </div>
                 </div>
                 <?php endif; ?>
@@ -466,8 +466,8 @@ $phone = (string)($dbUser['phone_e164'] ?? '');
                     <div class="forecast-day-name"><?php echo htmlspecialchars($day['day']); ?></div>
                     <div class="forecast-icon"><?php echo $day['icon']; ?></div>
                     <div class="forecast-temps">
-                      <span class="forecast-high"><?php echo round($day['high_c']); ?>°</span>
-                      <span class="forecast-low"><?php echo round($day['low_c']); ?>°</span>
+                      <span class="forecast-high"><?php echo round($day['high_f'] ?? $day['high_c']); ?>°</span>
+                      <span class="forecast-low"><?php echo round($day['low_f'] ?? $day['low_c']); ?>°</span>
                     </div>
                   </div>
                 <?php endforeach; ?>
@@ -744,7 +744,7 @@ Content-Type: application/json
         <p class="muted">MySQL: <?php echo jarvis_pdo() ? 'Connected' : 'Not configured / unavailable'; ?></p>
         <p class="muted">REST Base: <span class="badge">/api</span></p>
         <p class="muted">Notifications: <span class="badge"><?php echo (int)$notifCount; ?> unread</span></p>
-        <p class="muted">Weather: <span id="jarvisWeather"><?php if ($lastWeather) { echo htmlspecialchars($lastWeather['desc'] . ' • ' . ($lastWeather['temp_c'] !== null ? $lastWeather['temp_c'].'°C' : '')); } else { echo ($weatherConfigured ? '(no weather data for current location)' : '(OPENWEATHER_API_KEY not configured; add it in Admin > Settings)'); } ?></span></p>
+        <p class="muted">Weather: <span id="jarvisWeather"><?php if ($lastWeather) { echo htmlspecialchars($lastWeather['desc'] . ' • ' . ($lastWeather['temp_f'] !== null ? round($lastWeather['temp_f']).'°F' : '')); } else { echo ($weatherConfigured ? '(no weather data for current location)' : '(OPENWEATHER_API_KEY not configured; add it in Admin > Settings)'); } ?></span></p>
         <?php if ($wakePrompt): ?>
           <div class="terminal" style="margin-top:12px">
             <div class="term-title">JARVIS Wake Prompt</div>
@@ -851,29 +851,6 @@ Content-Type: application/json
             <?php endif; ?>
           </div>
         </div>
-        
-        <!-- Add Event Modal -->
-        <div id="addEventModal" class="modal" style="display:none">
-          <div class="modal-content">
-            <h4>Add Local Event</h4>
-            <form id="addLocalEventForm">
-              <label>Event Title</label>
-              <input type="text" name="title" required placeholder="Meeting, Birthday, etc." />
-              <label>Date</label>
-              <input type="date" name="event_date" required value="<?php echo $today->format('Y-m-d'); ?>" />
-              <label>Time</label>
-              <input type="time" name="event_time" value="09:00" />
-              <label>Location (optional)</label>
-              <input type="text" name="location" placeholder="Office, Home, etc." />
-              <label>Notes (optional)</label>
-              <textarea name="notes" rows="2" placeholder="Additional details..."></textarea>
-              <div style="display:flex;gap:8px;margin-top:12px">
-                <button type="submit" class="btn">Save Event</button>
-                <button type="button" class="btn secondary" id="closeEventModal">Cancel</button>
-              </div>
-            </form>
-          </div>
-        </div>
       <?php endif; ?>
     </div>
 
@@ -954,16 +931,16 @@ Content-Type: application/json
         if (!data || !data.weather) return;
         const w = data.weather;
         const desc = w.desc || '';
-        const temp = w.temp_c !== null ? w.temp_c : null;
+        const temp = w.temp_f !== null ? w.temp_f : null;
         // Update small badge
         const badge = document.getElementById('jarvisWeather');
-        if (badge) badge.textContent = desc + ' • ' + (temp !== null ? temp + '°C' : '');
+        if (badge) badge.textContent = desc + ' • ' + (temp !== null ? Math.round(temp) + '°F' : '');
         // Update main card
         const card = document.getElementById('weatherSummary');
         if (card) {
           card.innerHTML = `
             <div style="display:flex;align-items:center;gap:12px;margin-top:8px">
-              <div style="font-size:32px">${temp !== null ? temp + '°' : '--'}</div>
+              <div style="font-size:32px">${temp !== null ? Math.round(temp) + '°' : '--'}</div>
               <div>
                 <div style="font-weight:700">${desc}</div>
                 <div class="muted">Local weather</div>
@@ -1164,7 +1141,7 @@ Content-Type: application/json
 
       // Pre-fill weather info if server-side fetched
       if (lastWeather && document.getElementById('jarvisWeather')) {
-        document.getElementById('jarvisWeather').textContent = lastWeather.desc + ' • ' + (lastWeather.temp_c !== null ? lastWeather.temp_c + '°C' : '');
+        document.getElementById('jarvisWeather').textContent = lastWeather.desc + ' • ' + (lastWeather.temp_f !== null ? Math.round(lastWeather.temp_f) + '°F' : '');
       }
 
       // Show connect calendar prompt if not connected
@@ -1205,8 +1182,14 @@ Content-Type: application/json
     const closeBtn = document.getElementById('closeEventModal');
     const form = document.getElementById('addLocalEventForm');
     
+    // Set default date to today when modal opens
     if (addBtn && modal) {
       addBtn.addEventListener('click', () => {
+        const dateInput = form ? form.querySelector('input[name="event_date"]') : null;
+        if (dateInput && !dateInput.value) {
+          const today = new Date().toISOString().split('T')[0];
+          dateInput.value = today;
+        }
         modal.style.display = 'flex';
       });
     }
@@ -1807,7 +1790,7 @@ Content-Type: application/json
               const w = cards.weather || cards['weather'] || null;
               if (w && document.getElementById('jarvisWeather')) {
                 let txt = '';
-                if (typeof w.desc === 'string' && typeof w.temp_c !== 'undefined') txt = w.desc + ' • ' + (w.temp_c !== null ? w.temp_c + '°C' : '');
+                if (typeof w.desc === 'string' && typeof w.temp_f !== 'undefined') txt = w.desc + ' • ' + (w.temp_f !== null ? Math.round(w.temp_f) + '°F' : '');
                 else if (w && w.main && w.weather) {
                   const desc = (w.weather && w.weather[0] && w.weather[0].description) ? w.weather[0].description : '';
                   const t = (w.main && typeof w.main.temp !== 'undefined') ? Math.round(w.main.temp) : null;
@@ -2523,4 +2506,28 @@ Content-Type: application/json
 
   })();
   </script>
+
+<!-- Add Event Modal (moved outside of card structure for proper overlay) -->
+<div id="addEventModal" class="modal" style="display:none">
+  <div class="modal-content">
+    <h4>Add Local Event</h4>
+    <form id="addLocalEventForm">
+      <label>Event Title</label>
+      <input type="text" name="title" required placeholder="Meeting, Birthday, etc." />
+      <label>Date</label>
+      <input type="date" name="event_date" required />
+      <label>Time</label>
+      <input type="time" name="event_time" value="09:00" />
+      <label>Location (optional)</label>
+      <input type="text" name="location" placeholder="Office, Home, etc." />
+      <label>Notes (optional)</label>
+      <textarea name="notes" rows="2" placeholder="Additional details..."></textarea>
+      <div style="display:flex;gap:8px;margin-top:12px">
+        <button type="submit" class="btn">Save Event</button>
+        <button type="button" class="btn secondary" id="closeEventModal">Cancel</button>
+      </div>
+    </form>
+  </div>
+</div>
+
 </body></html>
