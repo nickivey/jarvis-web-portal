@@ -148,6 +148,26 @@ $phone = (string)($dbUser['phone_e164'] ?? '');
   <canvas id="fxCanvas" class="fx-canvas" aria-hidden="true"></canvas>
 
   <div class="container">
+    <!-- Welcome Greeting Dialog (appears on login) -->
+    <div id="welcomeGreetingDialog" class="welcome-greeting-modal" style="display:none">
+      <div class="welcome-greeting-content">
+        <div class="greeting-header">
+          <h2>🤖 Welcome Back, <?php echo htmlspecialchars($username); ?></h2>
+          <p class="greeting-subtitle">JARVIS Command Center Online</p>
+        </div>
+        <div class="greeting-message" id="greetingMessage">
+          <p id="greetingText"></p>
+        </div>
+        <div class="greeting-controls">
+          <button type="button" id="playGreetingBtn" class="btn btn-primary" title="Play greeting">
+            <span id="playBtnIcon">🔊</span> <span id="playBtnText">Play Greeting</span>
+          </button>
+          <button type="button" id="closeGreetingBtn" class="btn btn-secondary">Continue</button>
+        </div>
+        <audio id="greetingAudio" preload="auto"></audio>
+      </div>
+    </div>
+
     <!-- Permission banner (hidden when not needed) -->
     <div id="permBanner" class="perm-banner" style="display:none">
       <div class="list"><div style="font-weight:700">Permissions required:</div><div id="permList" style="display:flex;gap:8px;align-items:center;margin-left:8px"></div></div>
@@ -2611,8 +2631,156 @@ Content-Type: application/json
   })();
   </script>
 
-<!-- Add Event Modal (moved outside of card structure for proper overlay) -->
-<div id="addEventModal" class="modal" style="display:none">
+  <style>
+    /* Welcome Greeting Modal Styles */
+    .welcome-greeting-modal {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.85);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 9999;
+      animation: fadeIn 0.3s ease-in;
+    }
+
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+      }
+      to {
+        opacity: 1;
+      }
+    }
+
+    .welcome-greeting-content {
+      background: linear-gradient(135deg, #0a0e27 0%, #1a1d2e 100%);
+      border: 2px solid #00d4ff;
+      border-radius: 12px;
+      padding: 40px;
+      max-width: 500px;
+      width: 90%;
+      box-shadow: 0 0 30px rgba(0, 212, 255, 0.2),
+                  0 0 60px rgba(0, 212, 255, 0.1),
+                  inset 0 0 20px rgba(0, 212, 255, 0.05);
+      animation: slideUp 0.4s ease-out;
+    }
+
+    @keyframes slideUp {
+      from {
+        transform: translateY(30px);
+        opacity: 0;
+      }
+      to {
+        transform: translateY(0);
+        opacity: 1;
+      }
+    }
+
+    .greeting-header {
+      text-align: center;
+      margin-bottom: 24px;
+      border-bottom: 1px solid rgba(0, 212, 255, 0.3);
+      padding-bottom: 16px;
+    }
+
+    .greeting-header h2 {
+      color: #00d4ff;
+      font-size: 24px;
+      margin: 0 0 8px 0;
+      text-shadow: 0 0 10px rgba(0, 212, 255, 0.5);
+    }
+
+    .greeting-subtitle {
+      color: #7fb3d5;
+      font-size: 12px;
+      margin: 0;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+
+    .greeting-message {
+      background: rgba(0, 0, 0, 0.4);
+      border-left: 3px solid #00ff00;
+      padding: 16px;
+      margin: 20px 0;
+      border-radius: 4px;
+      min-height: 60px;
+      display: flex;
+      align-items: center;
+    }
+
+    .greeting-message p {
+      color: #e0e0e0;
+      font-size: 14px;
+      line-height: 1.6;
+      margin: 0;
+      font-family: 'Courier New', monospace;
+    }
+
+    .greeting-controls {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      margin-top: 24px;
+    }
+
+    .greeting-controls button {
+      padding: 12px 24px;
+      border: none;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, #00d4ff 0%, #0099cc 100%);
+      color: #000;
+      box-shadow: 0 0 15px rgba(0, 212, 255, 0.4);
+    }
+
+    .btn-primary:hover {
+      transform: scale(1.05);
+      box-shadow: 0 0 25px rgba(0, 212, 255, 0.6);
+    }
+
+    .btn-primary:active {
+      transform: scale(0.98);
+    }
+
+    .btn-secondary {
+      background: transparent;
+      color: #00d4ff;
+      border: 2px solid #00d4ff;
+    }
+
+    .btn-secondary:hover {
+      background: rgba(0, 212, 255, 0.1);
+    }
+
+    #playBtnIcon {
+      display: inline-block;
+      transition: transform 0.2s ease;
+    }
+
+    .playing #playBtnIcon {
+      animation: pulse 0.6s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% {
+        transform: scale(1);
+      }
+      50% {
+        transform: scale(1.1);
+      }
+    }
+  </style>
   <div class="modal-content">
     <h4>Add Local Event</h4>
     <form id="addLocalEventForm">

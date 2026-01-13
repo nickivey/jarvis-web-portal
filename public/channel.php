@@ -876,6 +876,14 @@ function wireMessageHandlers() {
         });
         
         if (response.ok) {
+          // Audit log for message deletion
+          if (window.jarvisApi && window.jarvisApi.auditLog) {
+            window.jarvisApi.auditLog('CHANNEL_MESSAGE_DELETED_BY_USER', 'channel', {
+              message_id: msgId,
+              channel: currentChannel,
+              timestamp: new Date().toISOString()
+            });
+          }
           loadMessages();
         }
       } catch (error) {
@@ -891,6 +899,15 @@ function wireMessageHandlers() {
       const input = document.getElementById('messageInput');
       input.value = `@${author} `;
       input.focus();
+      
+      // Audit log for reply action
+      if (window.jarvisApi && window.jarvisApi.auditLog) {
+        window.jarvisApi.auditLog('CHANNEL_REPLY_INITIATED', 'channel', {
+          recipient: author,
+          channel: currentChannel,
+          timestamp: new Date().toISOString()
+        });
+      }
     });
   });
   
@@ -901,6 +918,32 @@ function wireMessageHandlers() {
       const input = document.getElementById('messageInput');
       input.value += `#${tag} `;
       input.focus();
+      
+      // Audit log for hashtag interaction
+      if (window.jarvisApi && window.jarvisApi.auditLog) {
+        window.jarvisApi.auditLog('CHANNEL_HASHTAG_CLICKED', 'channel', {
+          hashtag: tag,
+          channel: currentChannel,
+          timestamp: new Date().toISOString()
+        });
+      }
+    });
+  });
+  
+  // Reaction buttons
+  document.querySelectorAll('.reaction-msg').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const msgEl = e.target.closest('.message-item');
+      const msgId = msgEl ? msgEl.dataset.id : 'unknown';
+      
+      // Audit log for reaction
+      if (window.jarvisApi && window.jarvisApi.auditLog) {
+        window.jarvisApi.auditLog('CHANNEL_REACTION_INITIATED', 'channel', {
+          message_id: msgId,
+          channel: currentChannel,
+          timestamp: new Date().toISOString()
+        });
+      }
     });
   });
 }
@@ -923,6 +966,20 @@ async function sendMessage() {
   sendBtn.disabled = true;
   
   try {
+    // Parse metadata for audit tracking
+    const tags = [];
+    const mentions = [];
+    const hashtagRegex = /#([A-Za-z0-9_\-]+)/g;
+    const mentionRegex = /@([A-Za-z0-9_\-]+)/g;
+    
+    let match;
+    while ((match = hashtagRegex.exec(message)) !== null) {
+      tags.push(match[1]);
+    }
+    while ((match = mentionRegex.exec(message)) !== null) {
+      mentions.push(match[1]);
+    }
+    
     const response = await fetch('/api/messages', {
       method: 'POST',
       headers: {
@@ -936,12 +993,31 @@ async function sendMessage() {
         metadata: {
           uploaded_file: selectedFile ? selectedFile.name : null,
           client_timestamp: new Date().toISOString(),
-          user_agent: navigator.userAgent
+          user_agent: navigator.userAgent,
+          tags: tags.length > 0 ? tags : undefined,
+          mentions: mentions.length > 0 ? mentions : undefined,
+          file_size: selectedFile ? selectedFile.size : null
         }
       })
     });
     
     if (response.ok) {
+      const data = await response.json();
+      
+      // Log channel activity for audit trail
+      if (window.jarvisApi && window.jarvisApi.auditLog) {
+        window.jarvisApi.auditLog('CHANNEL_MESSAGE_SENT', 'channel', {
+          channel: currentChannel,
+          message_length: message.length,
+          tags: tags,
+          mentions: mentions,
+          has_file: !!selectedFile,
+          file_name: selectedFile ? selectedFile.name : null,
+          file_size: selectedFile ? selectedFile.size : null,
+          timestamp: new Date().toISOString()
+        });
+      }
+      
       input.value = '';
       selectedFile = null;
       document.getElementById('filePreview').classList.remove('active');
@@ -984,6 +1060,15 @@ function switchChannel(channel) {
   // Update input placeholder
   document.getElementById('messageInput').placeholder = `Message ${channel.startsWith('dm:') ? '@' : '#'}${channelName}...`;
   
+  // Audit log for channel switch
+  if (window.jarvisApi && window.jarvisApi.auditLog) {
+    window.jarvisApi.auditLog('CHANNEL_SWITCHED', 'channel', {
+      channel: channel,
+      channel_type: channel.startsWith('dm:') ? 'direct_message' : 'group',
+      timestamp: new Date().toISOString()
+    });
+  }
+  
   loadMessages();
 }
 
@@ -1021,6 +1106,17 @@ document.getElementById('fileInput').addEventListener('change', (e) => {
     document.getElementById('fileName').textContent = file.name;
     document.getElementById('fileSize').textContent = (file.size / 1024 / 1024).toFixed(2) + ' MB';
     document.getElementById('filePreview').classList.add('active');
+    
+    // Audit log for file attachment
+    if (window.jarvisApi && window.jarvisApi.auditLog) {
+      window.jarvisApi.auditLog('CHANNEL_FILE_ATTACHED', 'channel', {
+        file_name: file.name,
+        file_size: file.size,
+        file_type: file.type,
+        channel: currentChannel,
+        timestamp: new Date().toISOString()
+      });
+    }
   }
 });
 
@@ -1034,6 +1130,15 @@ document.getElementById('removeFile').addEventListener('click', () => {
 document.getElementById('emojiBtn').addEventListener('click', () => {
   const picker = document.getElementById('emojiPicker');
   picker.classList.toggle('active');
+  
+  if (picker.classList.contains('active')) {
+    if (window.jarvisApi && window.jarvisApi.auditLog) {
+      window.jarvisApi.auditLog('CHANNEL_EMOJI_PICKER_OPENED', 'channel', {
+        channel: currentChannel,
+        timestamp: new Date().toISOString()
+      });
+    }
+  }
 });
 
 document.querySelectorAll('.emoji-item').forEach(item => {
@@ -1042,6 +1147,16 @@ document.querySelectorAll('.emoji-item').forEach(item => {
     const input = document.getElementById('messageInput');
     input.value += emoji + ' ';
     input.focus();
+    
+    // Audit log for emoji selection
+    if (window.jarvisApi && window.jarvisApi.auditLog) {
+      window.jarvisApi.auditLog('CHANNEL_EMOJI_ADDED', 'channel', {
+        emoji: emoji,
+        channel: currentChannel,
+        timestamp: new Date().toISOString()
+      });
+    }
+    
     document.getElementById('emojiPicker').classList.remove('active');
     updateInputHeight();
   });
@@ -1052,6 +1167,14 @@ document.getElementById('mentionBtn').addEventListener('click', () => {
   const input = document.getElementById('messageInput');
   input.value += '@';
   input.focus();
+  
+  if (window.jarvisApi && window.jarvisApi.auditLog) {
+    window.jarvisApi.auditLog('CHANNEL_MENTION_TRIGGERED', 'channel', {
+      channel: currentChannel,
+      timestamp: new Date().toISOString()
+    });
+  }
+  
   updateInputHeight();
 });
 
@@ -1060,6 +1183,14 @@ document.getElementById('hashtagBtn').addEventListener('click', () => {
   const input = document.getElementById('messageInput');
   input.value += '#';
   input.focus();
+  
+  if (window.jarvisApi && window.jarvisApi.auditLog) {
+    window.jarvisApi.auditLog('CHANNEL_HASHTAG_TRIGGERED', 'channel', {
+      channel: currentChannel,
+      timestamp: new Date().toISOString()
+    });
+  }
+  
   updateInputHeight();
 });
 
@@ -1068,6 +1199,16 @@ document.getElementById('newChannelBtn').addEventListener('click', () => {
   const channelName = prompt('Enter new channel name (e.g., "meetings", "ideas"):');
   if (channelName && channelName.trim()) {
     const newChannel = 'local:' + channelName.trim().toLowerCase().replace(/[^a-z0-9-_]/g, '');
+    
+    // Audit log for channel creation
+    if (window.jarvisApi && window.jarvisApi.auditLog) {
+      window.jarvisApi.auditLog('CHANNEL_CREATED', 'channel', {
+        channel: newChannel,
+        display_name: channelName,
+        timestamp: new Date().toISOString()
+      });
+    }
+    
     switchChannel(newChannel);
     
     // Add to sidebar
