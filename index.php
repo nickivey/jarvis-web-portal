@@ -646,7 +646,24 @@ if (preg_match('#^/api/device_tokens/([0-9]+)$#', $path, $m)) {
 
 if (preg_match('#^/api/photos/(\d+)/download$#', $path, $m)) {
   $id = (int)$m[1];
-  [$userId, $u] = require_jwt_user();
+  // Support both JWT and session-based authentication for image loading
+  $userId = 0; $u = null;
+  $bearer = jarvis_bearer_token();
+  if ($bearer) {
+    $payload = jarvis_jwt_verify($bearer);
+    if ($payload && !empty($payload['sub'])) {
+      $userId = (int)$payload['sub'];
+      $u = jarvis_user_by_id($userId);
+    }
+  }
+  // Fallback to session auth (for <img> tags that can't send Authorization headers)
+  if (!$userId && session_status() === PHP_SESSION_NONE) @session_start();
+  if (!$userId && !empty($_SESSION['user_id'])) {
+    $userId = (int)$_SESSION['user_id'];
+    $u = jarvis_user_by_id($userId);
+  }
+  if (!$userId || !$u) jarvis_respond(401, ['error'=>'Unauthorized']);
+  
   $photo = jarvis_get_photo_by_id($id);
   if (!$photo) jarvis_respond(404, ['error'=>'not found']);
   if ((int)$photo['user_id'] !== (int)$userId && ($u['role'] ?? '') !== 'admin') jarvis_respond(403, ['error'=>'forbidden']);

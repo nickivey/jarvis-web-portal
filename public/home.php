@@ -930,22 +930,126 @@ Content-Type: application/json
       window.jarvisUpdateWeather = function(data){
         if (!data || !data.weather) return;
         const w = data.weather;
+        const addr = data.address || {};
         const desc = w.desc || '';
         const temp = w.temp_f !== null ? w.temp_f : null;
+        const high = w.high_f !== null ? w.high_f : null;
+        const low = w.low_f !== null ? w.low_f : null;
+        const feelsLike = w.feels_like_f !== null ? w.feels_like_f : null;
+        const humidity = w.humidity !== null ? w.humidity : null;
+        const windSpeed = w.wind_speed !== null ? w.wind_speed : null;
+        const forecast = w.forecast || [];
+        const iconAnim = w.icon_anim || 'cloudy';
+        
+        // Build location string
+        const city = addr.city || '';
+        const state = addr.state || '';
+        const locationStr = city && state ? `${city}, ${state}` : (city || state || '');
+        
         // Update small badge
         const badge = document.getElementById('jarvisWeather');
         if (badge) badge.textContent = desc + ' • ' + (temp !== null ? Math.round(temp) + '°F' : '');
-        // Update main card
+        
+        // Determine weather condition class for dynamic background
+        let weatherCondition = 'default';
+        if (['sunny'].includes(iconAnim)) weatherCondition = 'sunny';
+        else if (['moon'].includes(iconAnim)) weatherCondition = 'night';
+        else if (['partly-cloudy'].includes(iconAnim)) weatherCondition = 'partly-cloudy';
+        else if (['cloudy', 'foggy'].includes(iconAnim)) weatherCondition = 'cloudy';
+        else if (['rainy', 'stormy'].includes(iconAnim)) weatherCondition = 'rainy';
+        else if (['thunderstorm'].includes(iconAnim)) weatherCondition = 'stormy';
+        else if (['snowy'].includes(iconAnim)) weatherCondition = 'snowy';
+        
+        // Update card background class
+        const weatherCard = document.getElementById('weatherCard');
+        if (weatherCard) {
+          weatherCard.className = weatherCard.className.replace(/\b(sunny|night|partly-cloudy|cloudy|rainy|stormy|snowy|default)\b/g, '').trim();
+          weatherCard.classList.add(weatherCondition);
+          
+          // Update background effects
+          const bgEffects = weatherCard.querySelector('.weather-bg-effects');
+          if (bgEffects) {
+            let bgHtml = '<div class="weather-bg-gradient"></div>';
+            if (weatherCondition === 'sunny') bgHtml += '<div class="sun-rays-bg"></div>';
+            else if (weatherCondition === 'night') bgHtml += '<div class="stars-bg"></div>';
+            else if (weatherCondition === 'rainy' || weatherCondition === 'stormy') bgHtml += '<div class="rain-bg"></div>';
+            else if (weatherCondition === 'snowy') bgHtml += '<div class="snow-bg"></div>';
+            bgEffects.innerHTML = bgHtml;
+          }
+          
+          // Update animated weather icon in header
+          const iconWrapper = weatherCard.querySelector('.weather-icon-wrapper');
+          if (iconWrapper) {
+            let iconHtml = '';
+            if (iconAnim === 'sunny') {
+              iconHtml = '<div class="weather-icon-animated sunny"><div class="sun"><div class="sun-rays"></div></div></div>';
+            } else if (iconAnim === 'moon') {
+              iconHtml = '<div class="weather-icon-animated moon"><div class="moon"><div class="moon-crater"></div><div class="moon-crater c2"></div></div></div>';
+            } else if (iconAnim === 'partly-cloudy') {
+              iconHtml = '<div class="weather-icon-animated partly-cloudy"><div class="sun small"><div class="sun-rays"></div></div><div class="cloud front"></div></div>';
+            } else if (iconAnim === 'cloudy') {
+              iconHtml = '<div class="weather-icon-animated cloudy"><div class="cloud"></div><div class="cloud back"></div></div>';
+            } else if (iconAnim === 'foggy') {
+              iconHtml = '<div class="weather-icon-animated foggy"><div class="fog-line"></div><div class="fog-line f2"></div><div class="fog-line f3"></div></div>';
+            } else if (iconAnim === 'rainy') {
+              iconHtml = '<div class="weather-icon-animated rainy"><div class="cloud"></div><div class="rain"><div class="drop"></div><div class="drop d2"></div><div class="drop d3"></div></div></div>';
+            } else if (iconAnim === 'stormy') {
+              iconHtml = '<div class="weather-icon-animated stormy"><div class="cloud dark"></div><div class="rain heavy"><div class="drop"></div><div class="drop d2"></div><div class="drop d3"></div><div class="drop d4"></div></div></div>';
+            } else if (iconAnim === 'snowy') {
+              iconHtml = '<div class="weather-icon-animated snowy"><div class="cloud"></div><div class="snow"><div class="flake"></div><div class="flake f2"></div><div class="flake f3"></div></div></div>';
+            } else if (iconAnim === 'thunderstorm') {
+              iconHtml = '<div class="weather-icon-animated thunderstorm"><div class="cloud dark"></div><div class="lightning"></div><div class="rain heavy"><div class="drop"></div><div class="drop d2"></div><div class="drop d3"></div></div></div>';
+            } else {
+              iconHtml = '<div class="weather-icon-placeholder">🌤️</div>';
+            }
+            iconWrapper.innerHTML = iconHtml;
+          }
+        }
+        
+        // Update main card content with full weather display
         const card = document.getElementById('weatherSummary');
         if (card) {
+          let metaHtml = '';
+          if (high !== null && low !== null) {
+            metaHtml += `<div class="meta-item"><div class="meta-icon">🌡️</div><div class="meta-content"><div class="meta-label">High / Low</div><div class="meta-value">${Math.round(high)}° / ${Math.round(low)}°</div></div></div>`;
+          }
+          if (humidity !== null) {
+            metaHtml += `<div class="meta-item"><div class="meta-icon">💧</div><div class="meta-content"><div class="meta-label">Humidity</div><div class="meta-value">${Math.round(humidity)}%</div></div></div>`;
+          }
+          if (windSpeed !== null) {
+            metaHtml += `<div class="meta-item"><div class="meta-icon">💨</div><div class="meta-content"><div class="meta-label">Wind Speed</div><div class="meta-value">${Math.round(windSpeed)} mph</div></div></div>`;
+          }
+          if (feelsLike !== null) {
+            metaHtml += `<div class="meta-item"><div class="meta-icon">🤒</div><div class="meta-content"><div class="meta-label">Feels Like</div><div class="meta-value">${Math.round(feelsLike)}°F</div></div></div>`;
+          }
+          
+          let forecastHtml = '';
+          if (forecast.length > 0) {
+            forecastHtml = `<div class="weather-forecast-section"><div class="forecast-header"><h4>📅 7-Day Forecast</h4></div><div class="forecast-grid">`;
+            forecast.forEach(day => {
+              const dayHigh = day.high_f !== null ? Math.round(day.high_f) : (day.high_c !== null ? Math.round(day.high_c) : '--');
+              const dayLow = day.low_f !== null ? Math.round(day.low_f) : (day.low_c !== null ? Math.round(day.low_c) : '--');
+              forecastHtml += `<div class="forecast-card"><div class="forecast-day-name">${day.day || ''}</div><div class="forecast-icon">${day.icon || '🌡️'}</div><div class="forecast-temps"><span class="forecast-high">${dayHigh}°</span><span class="forecast-low">${dayLow}°</span></div></div>`;
+            });
+            forecastHtml += `</div></div>`;
+          }
+          
           card.innerHTML = `
-            <div style="display:flex;align-items:center;gap:12px;margin-top:8px">
-              <div style="font-size:32px">${temp !== null ? Math.round(temp) + '°' : '--'}</div>
-              <div>
-                <div style="font-weight:700">${desc}</div>
-                <div class="muted">Local weather</div>
+            <div class="weather-hero">
+              <div class="weather-hero-content">
+                <div class="weather-current-label">CURRENT CONDITIONS</div>
+                <div class="weather-temp-display">
+                  <span class="temp-value">${temp !== null ? Math.round(temp) : '--'}</span>
+                  <span class="temp-degree">°F</span>
+                </div>
+                <div class="weather-condition-text">${desc}</div>
+                ${locationStr ? `<div class="weather-location-text">📍 ${locationStr}</div>` : ''}
               </div>
-            </div>`;
+              <div class="weather-meta-panel">
+                ${metaHtml}
+              </div>
+            </div>
+            ${forecastHtml}`;
         }
       };
 
