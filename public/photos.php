@@ -53,9 +53,42 @@ if ($pdo) {
   <link rel="stylesheet" href="/style.css">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
   <style>
+    html, body {
+      background: radial-gradient(1200px 600px at 15% 10%, rgba(30,120,255,.22), transparent 55%),
+                 radial-gradient(800px 500px at 85% 20%, rgba(0,212,255,.16), transparent 55%),
+                 linear-gradient(180deg, #01040b, #020712);
+      min-height: 100vh;
+    }
+    
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(30,120,255,.08) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0,212,255,.06) 1px, transparent 1px);
+      background-size: 36px 36px;
+      opacity: .10;
+      pointer-events: none;
+      mix-blend-mode: screen;
+      z-index: 1;
+    }
+    
     .gallery-page {
       max-width: 1400px;
       margin: 0 auto;
+      position: relative;
+      z-index: 2;
+    }
+    
+    /* FX canvas overlay for pixel-dust animations */
+    .fx-canvas {
+      position: fixed;
+      inset: 0;
+      z-index: 5;
+      pointer-events: none;
+      filter: contrast(110%) saturate(110%);
+      mix-blend-mode: screen;
     }
     
     /* Gallery Header */
@@ -615,8 +648,9 @@ if ($pdo) {
     .video-grid {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-      gap: 16px;
-    }
+  <canvas id="fxCanvas" class="fx-canvas" aria-hidden="true"></canvas>
+  <?php include __DIR__ . '/navbar.php'; ?>
+      }
     
     /* Loading */
     .loading-grid {
