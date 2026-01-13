@@ -703,7 +703,7 @@ $phone = (string)($dbUser['phone_e164'] ?? '');
         <div class="photos-footer">
           <div class="photos-stats" id="photosStats"></div>
           <div class="photos-links">
-            <a href="/public/photos.php" class="photos-link-btn">
+            <a href="photos.php" class="photos-link-btn">
               <span>🖼️</span> Full Gallery
             </a>
             <a href="/public/ios_photos.php" class="photos-link-btn">
@@ -791,12 +791,12 @@ Content-Type: application/json
         </div>
         <p class="muted">Quick access to common areas and actions.</p>
         <div class="shortcut-grid">
-          <a class="shortcut-tile" href="/public/channel.php" data-shortcut="open_channels">
+          <a class="shortcut-tile" href="channel.php" data-shortcut="open_channels">
             <div class="shortcut-icon">#</div>
             <div class="shortcut-title">Channels</div>
             <div class="shortcut-sub">Chat with JARVIS</div>
           </a>
-          <a class="shortcut-tile" href="/public/photos.php" data-shortcut="open_photos">
+          <a class="shortcut-tile" href="photos.php" data-shortcut="open_photos">
             <div class="shortcut-icon">🖼️</div>
             <div class="shortcut-title">Photos</div>
             <div class="shortcut-sub">Gallery & timeline</div>
@@ -944,7 +944,7 @@ Content-Type: application/json
       <h3>Channels & Activity</h3>
       <div style="display:flex;gap:14px;align-items:flex-start;">
         <div style="flex:1">
-          <div style="margin-bottom:8px"><strong>Channel:</strong> <span id="caChannel">local:rhats</span> • <a href="/public/channel.php">Open Channels</a></div>
+          <div style="margin-bottom:8px"><strong>Channel:</strong> <span id="caChannel">local:rhats</span> • <a href="channel.php">Open Channels</a></div>
           <div id="caMessages" style="display:flex;flex-direction:column;gap:8px;max-height:260px;overflow:auto;padding:6px;border-radius:8px;border:1px solid rgba(255,255,255,.02);background:linear-gradient(180deg, rgba(255,255,255,.01), rgba(255,255,255,.00));"></div>
         </div>
         <div style="width:320px">
