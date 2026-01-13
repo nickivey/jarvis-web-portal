@@ -45,7 +45,11 @@ if ($pdo) {
 <html>
 <head>
   <meta charset="utf-8">
-  <title>Photos & Videos — JARVIS</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Photos & Videos Gallery • JARVIS Media Manager | Simple Functioning Solutions</title>
+  <meta name="description" content="Browse and manage your photos and videos in JARVIS. Intelligent media organization and sharing. Powered by Simple Functioning Solutions, Orlando." />
+  <meta name="keywords" content="photo gallery, video management, media storage, cloud backup" />
+  <meta name="author" content="Simple Functioning Solutions" />
   <link rel="stylesheet" href="/style.css">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
   <style>

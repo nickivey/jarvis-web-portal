@@ -131,7 +131,14 @@ $phone = (string)($dbUser['phone_e164'] ?? '');
 <html lang="en"><head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>JARVIS • Portal</title>
+  <title>JARVIS Portal • AI Command Center | Simple Functioning Solutions - Orlando</title>
+  <meta name="description" content="Your intelligent command center for smart home automation, voice control, media management, and real-time notifications. JARVIS brings AI-powered simplicity to your connected life—built by Simple Functioning Solutions in Orlando." />
+  <meta name="keywords" content="home automation, AI assistant, voice control, smart home, media management, IoT control, Orlando, Simple Functioning Solutions" />
+  <meta name="author" content="Simple Functioning Solutions" />
+  <meta property="og:title" content="JARVIS Portal • AI-Powered Smart Home Command Center" />
+  <meta property="og:description" content="Control your smart home with voice commands, manage media, track locations, and stay connected—all from one intelligent platform." />
+  <meta property="og:site_name" content="JARVIS by Simple Functioning Solutions" />
+  <meta property="og:type" content="website" />
   <link rel="stylesheet" href="style.css" />
   <!-- Using embedded third-party maps (Google Maps iframe) for location previews -->
 </head>
@@ -142,7 +149,7 @@ $phone = (string)($dbUser['phone_e164'] ?? '');
     <div class="scanlines" aria-hidden="true"></div>
     <img src="images/hero.svg" alt="" class="hero-ill" aria-hidden="true" />
     <h1>JARVIS</h1>
-    <p>Blue / Black command portal • REST + Slack messaging • Timestamped logs</p>
+    <p>Your intelligent personal assistant • Voice-powered smart home control • Seamless media & location management • Real-time notifications & communications</p>
   </div>
   <!-- Pixel Dust FX Canvas -->
   <canvas id="fxCanvas" class="fx-canvas" aria-hidden="true"></canvas>
@@ -977,11 +984,11 @@ Content-Type: application/json
                 ></textarea>
                 <div class="hc-input-toolbar">
                   <div class="hc-input-actions">
-                    <button class="hc-input-btn" id="hcAttachBtn" title="Attach photo">📎</button>
+                    <button class="hc-input-btn" id="hcAttachBtn" title="Attach photo/video">📎</button>
                     <button class="hc-input-btn" id="hcEmojiBtn" title="Add emoji">😊</button>
                     <button class="hc-input-btn" id="hcMentionBtn" title="Mention">@</button>
                     <button class="hc-input-btn" id="hcHashtagBtn" title="Hashtag">#</button>
-                    <input type="file" id="hcFileInput" style="display:none" accept="image/*">
+                    <input type="file" id="hcFileInput" style="display:none" accept="image/*,video/*">
                   </div>
                   <button class="hc-send-btn" id="hcSendBtn" disabled>Send</button>
                 </div>
@@ -1005,12 +1012,17 @@ Content-Type: application/json
   <div class="annotation-modal" id="hcAnnotationModal">
     <div class="annotation-container">
       <div class="annotation-header">
-        <h3>✏️ Draw on Image</h3>
+        <h3 id="hcAnnotationTitle">✏️ Draw on Image</h3>
         <button class="annotation-close" id="hcCloseAnnotation">×</button>
       </div>
       <div class="annotation-body">
         <div class="annotation-canvas-wrapper">
+          <video id="hcAnnotationVideo" style="display:none; max-width:100%; max-height:calc(90vh - 200px)" controls></video>
           <canvas id="hcAnnotationCanvas"></canvas>
+          <div class="video-controls" id="hcVideoControls" style="display:none; margin-top:12px">
+            <button class="tool-btn" id="hcCaptureFrame" style="width:100%">📸 Capture This Frame to Draw</button>
+            <div style="margin-top:8px; font-size:0.85rem; color:rgba(255,255,255,0.5); text-align:center" id="hcVideoTime"></div>
+          </div>
         </div>
         <div class="annotation-toolbar">
           <div class="tool-group">
@@ -1577,16 +1589,16 @@ Content-Type: application/json
           const today = new Date().toISOString().split('T')[0];
           dateInput.value = today;
         }
-        modal.style.display = 'flex';
+        modal.classList.add('active');
       });
     }
     
     if (closeBtn && modal) {
       closeBtn.addEventListener('click', () => {
-        modal.style.display = 'none';
+        modal.classList.remove('active');
       });
       modal.addEventListener('click', (e) => {
-        if (e.target === modal) modal.style.display = 'none';
+        if (e.target === modal) modal.classList.remove('active');
       });
     }
     
@@ -2971,11 +2983,21 @@ Content-Type: application/json
             
             hcFileInput.addEventListener('change', (e)=>{
               const file = e.target.files[0];
-              if (file && file.type.startsWith('image/')) {
-                hcOriginalFile = file;
-                const modal = document.getElementById('hcAnnotationModal');
-                hcAnnotationCanvas = document.getElementById('hcAnnotationCanvas');
-                hcAnnotationCtx = hcAnnotationCanvas.getContext('2d');
+              if (!file) return;
+              
+              hcOriginalFile = file;
+              const modal = document.getElementById('hcAnnotationModal');
+              hcAnnotationCanvas = document.getElementById('hcAnnotationCanvas');
+              hcAnnotationCtx = hcAnnotationCanvas.getContext('2d');
+              
+              if (file.type.startsWith('image/')) {
+                // Image annotation
+                const video = document.getElementById('hcAnnotationVideo');
+                const videoControls = document.getElementById('hcVideoControls');
+                video.style.display = 'none';
+                videoControls.style.display = 'none';
+                hcAnnotationCanvas.style.display = 'block';
+                document.getElementById('hcAnnotationTitle').textContent = '✏️ Draw on Image';
                 
                 const reader = new FileReader();
                 reader.onload = (ev)=>{
@@ -2995,9 +3017,58 @@ Content-Type: application/json
                   img.src = ev.target.result;
                 };
                 reader.readAsDataURL(file);
+              } else if (file.type.startsWith('video/')) {
+                // Video annotation
+                const video = document.getElementById('hcAnnotationVideo');
+                const videoControls = document.getElementById('hcVideoControls');
+                const videoTime = document.getElementById('hcVideoTime');
+                video.style.display = 'block';
+                videoControls.style.display = 'block';
+                hcAnnotationCanvas.style.display = 'none';
+                document.getElementById('hcAnnotationTitle').textContent = '🎬 Select Frame from Video';
+                
+                const reader = new FileReader();
+                reader.onload = (ev)=>{
+                  video.src = ev.target.result;
+                  video.load();
+                  video.addEventListener('timeupdate', ()=>{
+                    const current = Math.floor(video.currentTime);
+                    const duration = Math.floor(video.duration) || 0;
+                    videoTime.textContent = `${current}s / ${duration}s - Pause and click "Capture Frame" to annotate`;
+                  });
+                  modal.classList.add('active');
+                  if (window.jarvisApi && window.jarvisApi.auditLog) window.jarvisApi.auditLog('HOME_CHANNEL_VIDEO_ANNOTATION','home_channel',{file_name:file.name, timestamp:new Date().toISOString()});
+                };
+                reader.readAsDataURL(file);
               }
             });
           }
+          
+          // Capture frame from video (home widget)
+          document.getElementById('hcCaptureFrame')?.addEventListener('click', ()=>{
+            const video = document.getElementById('hcAnnotationVideo');
+            const canvas = document.getElementById('hcAnnotationCanvas');
+            if (!video || !canvas || !hcAnnotationCtx) return;
+            
+            const maxW = Math.min(window.innerWidth*.6, video.videoWidth);
+            const maxH = Math.min(window.innerHeight*.6, video.videoHeight);
+            const scale = Math.min(maxW/video.videoWidth, maxH/video.videoHeight, 1);
+            canvas.width = video.videoWidth*scale;
+            canvas.height = video.videoHeight*scale;
+            hcAnnotationCtx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            
+            const img = new Image();
+            img.onload = ()=>{
+              hcAnnotationImage = img;
+              hcDrawHistory = [canvas.toDataURL()];
+              video.style.display = 'none';
+              document.getElementById('hcVideoControls').style.display = 'none';
+              canvas.style.display = 'block';
+              document.getElementById('hcAnnotationTitle').textContent = '✏️ Draw on Video Frame';
+              if (window.jarvisApi && window.jarvisApi.auditLog) window.jarvisApi.auditLog('HOME_CHANNEL_VIDEO_FRAME_CAPTURED','home_channel',{timestamp:new Date().toISOString(), video_time:Math.floor(video.currentTime)});
+            };
+            img.src = canvas.toDataURL();
+          });
           
           // Drawing
           document.getElementById('hcAnnotationCanvas')?.addEventListener('mousedown', (e)=>{
@@ -3472,26 +3543,36 @@ Content-Type: application/json
     .btn-save { background:linear-gradient(135deg,#d946ef,#ec4899); border:none; color:#fff }
     .btn-save:hover { transform:translateY(-1px); box-shadow:0 4px 12px rgba(217,70,239,.4) }
     @media(max-width:900px){ .annotation-body { flex-direction:column } .annotation-toolbar { min-width:auto } }
+    #addEventModal { position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,.5); display:none; align-items:center; justify-content:center; z-index:9999 }
+    #addEventModal.active { display:flex }
+    #addEventModal .modal-content { background:linear-gradient(135deg,#1a1a2e,#16213e); border:1px solid rgba(255,255,255,.1); border-radius:12px; padding:24px; max-width:500px; width:90%; box-shadow:0 20px 60px rgba(0,0,0,.5) }
+    #addEventModal h4 { margin:0 0 20px 0; font-size:1.25rem; color:#fff }
+    #addEventModal label { display:block; margin-top:12px; margin-bottom:6px; font-weight:500; color:rgba(255,255,255,.9) }
+    #addEventModal input, #addEventModal textarea { width:100%; padding:10px 12px; background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.1); border-radius:6px; color:#fff; font-family:inherit; margin-bottom:8px }
+    #addEventModal input:focus, #addEventModal textarea:focus { outline:none; background:rgba(255,255,255,.08); border-color:rgba(29,155,209,.4) }
   </style>
-  <div class="modal-content">
-    <h4>Add Local Event</h4>
-    <form id="addLocalEventForm">
-      <label>Event Title</label>
-      <input type="text" name="title" required placeholder="Meeting, Birthday, etc." />
-      <label>Date</label>
-      <input type="date" name="event_date" required />
-      <label>Time</label>
-      <input type="time" name="event_time" value="09:00" />
-      <label>Location (optional)</label>
-      <input type="text" name="location" placeholder="Office, Home, etc." />
-      <label>Notes (optional)</label>
-      <textarea name="notes" rows="2" placeholder="Additional details..."></textarea>
-      <div style="display:flex;gap:8px;margin-top:12px">
-        <button type="submit" class="btn">Save Event</button>
-        <button type="button" class="btn secondary" id="closeEventModal">Cancel</button>
-      </div>
-    </form>
+
+  <!-- Add Local Event Modal -->
+  <div id="addEventModal" class="modal">
+    <div class="modal-content">
+      <h4>Add Local Event</h4>
+      <form id="addLocalEventForm">
+        <label>Event Title</label>
+        <input type="text" name="title" required placeholder="Meeting, Birthday, etc." />
+        <label>Date</label>
+        <input type="date" name="event_date" required />
+        <label>Time</label>
+        <input type="time" name="event_time" value="09:00" />
+        <label>Location (optional)</label>
+        <input type="text" name="location" placeholder="Office, Home, etc." />
+        <label>Notes (optional)</label>
+        <textarea name="notes" rows="2" placeholder="Additional details..."></textarea>
+        <div style="display:flex;gap:8px;margin-top:12px">
+          <button type="submit" class="btn">Save Event</button>
+          <button type="button" class="btn secondary" id="closeEventModal">Cancel</button>
+        </div>
+      </form>
+    </div>
   </div>
-</div>
 
 </body></html>

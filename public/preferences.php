@@ -65,7 +65,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <html lang="en"><head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>JARVIS • Preferences</title>
+  <title>User Preferences • Settings & Configuration | JARVIS</title>
+  <meta name="description" content="Customize your JARVIS experience with personalized preferences, notifications, and device settings. Simple Functioning Solutions, Orlando." />
+  <meta name="keywords" content="user settings, preferences, configuration, notifications" />
+  <meta name="author" content="Simple Functioning Solutions" />
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>

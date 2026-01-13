@@ -24,7 +24,10 @@ $voiceInputs = jarvis_recent_voice_inputs($userId, 50);
 <html lang="en"><head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>JARVIS • Audit Log</title>
+  <title>Audit Log • System Activity Tracking | JARVIS by Simple Functioning Solutions</title>
+  <meta name="description" content="Monitor all system activities and user actions through JARVIS audit log. Security and transparency for your smart home platform. Simple Functioning Solutions, Orlando." />
+  <meta name="keywords" content="audit log, activity tracking, system security, user monitoring" />
+  <meta name="author" content="Simple Functioning Solutions" />
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>

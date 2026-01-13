@@ -182,7 +182,12 @@ $users = jarvis_list_users(50,0, (string)($_GET['q'] ?? ''));
 <html>
 <head>
   <meta charset="utf-8" />
-  <title>Admin - Settings & Users</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Admin Panel • System Management | JARVIS by Simple Functioning Solutions</title>
+  <meta name="description" content="Administrative control panel for JARVIS system. Manage users, settings, and platform configuration. Simple Functioning Solutions, Orlando." />
+  <meta name="keywords" content="admin panel, system administration, user management, platform settings" />
+  <meta name="author" content="Simple Functioning Solutions" />
+  <meta name="robots" content="noindex, nofollow" />
   <link rel="stylesheet" href="style.css">
   <style>
     table td form{display:inline-block;margin:0}

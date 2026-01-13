@@ -63,7 +63,10 @@ $totalCount = count(jarvis_recent_notifications_enhanced($userId, 500));
 <html lang="en"><head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>JARVIS • Notifications</title>
+  <title>Notifications • Real-Time Alerts | JARVIS by Simple Functioning Solutions</title>
+  <meta name="description" content="Manage and view all your JARVIS notifications. Real-time alerts from automations, messages, and system events. Simple Functioning Solutions, Orlando." />
+  <meta name="keywords" content="notifications, alerts, real-time updates, system events" />
+  <meta name="author" content="Simple Functioning Solutions" />
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>

@@ -79,7 +79,12 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
 <html lang="en"><head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>JARVIS • Login</title>
+  <title>JARVIS Login • Secure Portal Access | Simple Functioning Solutions</title>
+  <meta name="description" content="Access your JARVIS command center—control smart devices, manage photos & videos, send voice commands, and stay connected from anywhere. Secure login powered by Simple Functioning Solutions in Orlando." />
+  <meta name="author" content="Simple Functioning Solutions" />
+  <meta name="robots" content="noindex, nofollow" />
+  <meta property="og:title" content="Sign in to JARVIS" />
+  <meta property="og:description" content="Your intelligent home automation and personal assistant platform awaits." />
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>

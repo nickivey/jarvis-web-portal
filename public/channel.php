@@ -17,7 +17,11 @@ $username = $u['username'] ?? 'user';
 <html>
 <head>
   <meta charset="utf-8">
-  <title>Channels — JARVIS</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Channels & Messaging • JARVIS Communications | Simple Functioning Solutions</title>
+  <meta name="description" content="Real-time messaging and channel communication through JARVIS. Collaborate seamlessly with integrated Slack-like messaging. Simple Functioning Solutions, Orlando." />
+  <meta name="keywords" content="messaging platform, channels, real-time communication, collaboration" />
+  <meta name="author" content="Simple Functioning Solutions" />
   <link rel="stylesheet" href="/style.css">
   <style>
     * { box-sizing: border-box; }
@@ -925,12 +929,17 @@ $username = $u['username'] ?? 'user';
 <div class="annotation-modal" id="annotationModal">
   <div class="annotation-container">
     <div class="annotation-header">
-      <h3>✏️ Draw on Image</h3>
+      <h3 id="annotationTitle">✏️ Draw on Image</h3>
       <button class="annotation-close" id="closeAnnotation">×</button>
     </div>
     <div class="annotation-body">
       <div class="annotation-canvas-wrapper">
+        <video id="annotationVideo" style="display:none; max-width:100%; max-height:calc(90vh - 200px)" controls></video>
         <canvas id="annotationCanvas"></canvas>
+        <div class="video-controls" id="videoControls" style="display:none; margin-top:12px">
+          <button class="tool-btn" id="captureFrame" style="width:100%">📸 Capture This Frame to Draw</button>
+          <div style="margin-top:8px; font-size:0.85rem; color:rgba(255,255,255,0.5); text-align:center" id="videoTime"></div>
+        </div>
       </div>
       <div class="annotation-toolbar">
         <div class="tool-group">
@@ -1358,11 +1367,13 @@ document.getElementById('attachBtn').addEventListener('click', () => {
 document.getElementById('fileInput').addEventListener('change', (e) => {
   const file = e.target.files[0];
   if (file) {
-    // Check if it's an image - open annotation modal
+    // Check if it's an image or video - open annotation modal
     if (file.type.startsWith('image/')) {
       openImageAnnotation(file);
+    } else if (file.type.startsWith('video/')) {
+      openVideoAnnotation(file);
     } else {
-      // Non-image files go directly to preview
+      // Non-image/video files go directly to preview
       selectedFile = file;
       document.getElementById('fileName').textContent = file.name;
       document.getElementById('fileSize').textContent = (file.size / 1024 / 1024).toFixed(2) + ' MB';
@@ -1501,8 +1512,16 @@ let lastX = 0, lastY = 0;
 function openImageAnnotation(file) {
   originalFile = file;
   const modal = document.getElementById('annotationModal');
+  const video = document.getElementById('annotationVideo');
+  const videoControls = document.getElementById('videoControls');
   annotationCanvas = document.getElementById('annotationCanvas');
   annotationCtx = annotationCanvas.getContext('2d');
+  
+  // Hide video elements, show canvas
+  video.style.display = 'none';
+  videoControls.style.display = 'none';
+  annotationCanvas.style.display = 'block';
+  document.getElementById('annotationTitle').textContent = '✏️ Draw on Image';
   
   // Load image
   const reader = new FileReader();
@@ -1540,6 +1559,90 @@ function openImageAnnotation(file) {
   };
   reader.readAsDataURL(file);
 }
+
+function openVideoAnnotation(file) {
+  originalFile = file;
+  const modal = document.getElementById('annotationModal');
+  const video = document.getElementById('annotationVideo');
+  const videoControls = document.getElementById('videoControls');
+  const videoTime = document.getElementById('videoTime');
+  annotationCanvas = document.getElementById('annotationCanvas');
+  annotationCtx = annotationCanvas.getContext('2d');
+  
+  // Show video, hide canvas initially
+  video.style.display = 'block';
+  videoControls.style.display = 'block';
+  annotationCanvas.style.display = 'none';
+  document.getElementById('annotationTitle').textContent = '🎬 Select Frame from Video';
+  
+  // Load video
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    video.src = e.target.result;
+    video.load();
+    
+    // Update time display
+    video.addEventListener('timeupdate', () => {
+      const current = Math.floor(video.currentTime);
+      const duration = Math.floor(video.duration) || 0;
+      videoTime.textContent = `${current}s / ${duration}s - Pause and click "Capture Frame" to annotate`;
+    });
+    
+    // Show modal
+    modal.classList.add('active');
+    
+    // Audit
+    if (window.jarvisApi && window.jarvisApi.auditLog) {
+      window.jarvisApi.auditLog('CHANNEL_VIDEO_ANNOTATION_OPENED', 'channel', {
+        file_name: file.name,
+        timestamp: new Date().toISOString()
+      });
+    }
+  };
+  reader.readAsDataURL(file);
+}
+
+// Capture frame from video
+document.getElementById('captureFrame')?.addEventListener('click', () => {
+  const video = document.getElementById('annotationVideo');
+  const canvas = document.getElementById('annotationCanvas');
+  const ctx = annotationCtx;
+  
+  if (!video || !canvas || !ctx) return;
+  
+  // Set canvas size to match video
+  const maxWidth = Math.min(window.innerWidth * 0.6, video.videoWidth);
+  const maxHeight = Math.min(window.innerHeight * 0.6, video.videoHeight);
+  const scale = Math.min(maxWidth / video.videoWidth, maxHeight / video.videoHeight, 1);
+  
+  canvas.width = video.videoWidth * scale;
+  canvas.height = video.videoHeight * scale;
+  
+  // Draw current video frame to canvas
+  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+  
+  // Create image from canvas for annotation
+  const img = new Image();
+  img.onload = () => {
+    annotationImage = img;
+    drawHistory = [canvas.toDataURL()];
+    
+    // Hide video, show canvas for annotation
+    video.style.display = 'none';
+    document.getElementById('videoControls').style.display = 'none';
+    canvas.style.display = 'block';
+    document.getElementById('annotationTitle').textContent = '✏️ Draw on Video Frame';
+    
+    // Audit
+    if (window.jarvisApi && window.jarvisApi.auditLog) {
+      window.jarvisApi.auditLog('CHANNEL_VIDEO_FRAME_CAPTURED', 'channel', {
+        timestamp: new Date().toISOString(),
+        video_time: Math.floor(video.currentTime)
+      });
+    }
+  };
+  img.src = canvas.toDataURL();
+});
 
 // Drawing functionality
 annotationCanvas?.addEventListener('mousedown', (e) => {

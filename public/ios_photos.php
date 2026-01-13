@@ -15,7 +15,11 @@ if (isset($_GET['token']) && $_GET['token'] === '1' && ($u['role'] ?? '') === 'a
 <html>
 <head>
   <meta charset="utf-8">
-  <title>iOS Photo Upload — JARVIS</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>iOS Photo Upload • iPhone Photo Backup | JARVIS</title>
+  <meta name="description" content="Seamlessly upload photos from your iPhone to JARVIS. Automatic backup and cloud storage for your iOS photos. Simple Functioning Solutions, Orlando." />
+  <meta name="keywords" content="iPhone backup, photo upload, iOS integration, cloud storage" />
+  <meta name="author" content="Simple Functioning Solutions" />
   <link rel="stylesheet" href="/style.css">
 </head>
 <body>

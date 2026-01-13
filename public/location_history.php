@@ -29,7 +29,11 @@ $focusLon = isset($_GET['lon']) ? (float)$_GET['lon'] : null;
 <html>
 <head>
   <meta charset="utf-8" />
-  <title>Location History</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Location History • Movement Timeline | JARVIS by Simple Functioning Solutions</title>
+  <meta name="description" content="View and manage your location history with JARVIS. Track movements, geofencing, and location-based automations. Simple Functioning Solutions, Orlando." />
+  <meta name="keywords" content="location tracking, geofencing, movement history, GPS data" />
+  <meta name="author" content="Simple Functioning Solutions" />
   <link rel="stylesheet" href="style.css" />
   <!-- Embedded map (Google Maps iframe) will be used for location previews -->
 </head>
