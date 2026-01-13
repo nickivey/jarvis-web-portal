@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 48 48">
+  <defs>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="2" result="b"/>
+      <feMerge>
+        <feMergeNode in="b"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  <rect width="48" height="48" fill="#050814"/>
+  <path d="M24 6 L40 15 L40 33 L24 42 L8 33 L8 15 Z" fill="#0b1020" stroke="#38bdf8" stroke-width="2" filter="url(#glow)"/>
+  <path d="M24 12 L36 18 L36 30 L24 36 L12 30 L12 18 Z" fill="none" stroke="#22d3ee" stroke-opacity="0.45" stroke-width="1"/>
+  <text x="24" y="28" text-anchor="middle" font-family="Arial" font-size="12" font-weight="800" fill="#e0f2fe">J</text>
+</svg>

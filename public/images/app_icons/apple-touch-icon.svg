@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="180" height="180" viewBox="0 0 180 180">
+  <defs>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="4" result="b"/>
+      <feMerge>
+        <feMergeNode in="b"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  <rect width="180" height="180" rx="40" fill="#050814"/>
+  <path d="M90 27 L150 52 L150 128 L90 153 L30 128 L30 52 Z" fill="#0b1020" stroke="#38bdf8" stroke-width="5" filter="url(#glow)"/>
+  <path d="M90 42 L135 62 L135 118 L90 138 L45 118 L45 62 Z" fill="none" stroke="#22d3ee" stroke-opacity="0.45" stroke-width="3"/>
+  <text x="90" y="105" text-anchor="middle" font-family="Arial" font-size="42" font-weight="800" fill="#e0f2fe">J</text>
+  <text x="90" y="125" text-anchor="middle" font-family="Arial" font-size="8" letter-spacing="2" fill="#7dd3fc" opacity="0.9">SYSTEM</text>
+</svg>

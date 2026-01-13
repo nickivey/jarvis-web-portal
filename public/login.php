@@ -78,13 +78,54 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
 <!doctype html>
 <html lang="en"><head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>JARVIS Login • Secure Portal Access | Simple Functioning Solutions</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <meta name="theme-color" content="#1e78ff" />
+  
+  <!-- Primary Meta Tags -->
+  <title>JARVIS Login • Secure Portal Access | AI Command Center</title>
+  <meta name="title" content="JARVIS Login • Secure Portal Access | AI Command Center" />
   <meta name="description" content="Access your JARVIS command center—control smart devices, manage photos & videos, send voice commands, and stay connected from anywhere. Secure login powered by Simple Functioning Solutions in Orlando." />
   <meta name="author" content="Simple Functioning Solutions" />
+  <meta name="keywords" content="JARVIS login, AI assistant login, smart home login, home automation portal, voice control access, secure login" />
   <meta name="robots" content="noindex, nofollow" />
-  <meta property="og:title" content="Sign in to JARVIS" />
-  <meta property="og:description" content="Your intelligent home automation and personal assistant platform awaits." />
+  
+  <!-- Open Graph / Facebook -->
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://jarvis.simplefunctioningsolutions.com/login.php" />
+  <meta property="og:title" content="Sign in to JARVIS • AI Command Center" />
+  <meta property="og:description" content="Your intelligent home automation and personal assistant platform awaits. Access smart home control, voice commands, media management, and more." />
+  <meta property="og:image" content="https://jarvis.simplefunctioningsolutions.com/images/social/og-image-login.svg" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="JARVIS AI Command Center Login Portal" />
+  <meta property="og:site_name" content="JARVIS by Simple Functioning Solutions" />
+  <meta property="og:locale" content="en_US" />
+  
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:url" content="https://jarvis.simplefunctioningsolutions.com/login.php" />
+  <meta name="twitter:title" content="Sign in to JARVIS • AI Command Center" />
+  <meta name="twitter:description" content="Access your intelligent home automation platform. Control smart devices, manage media, and stay connected with AI-powered assistance." />
+  <meta name="twitter:image" content="https://jarvis.simplefunctioningsolutions.com/images/social/og-image-login.svg" />
+  <meta name="twitter:image:alt" content="JARVIS AI Command Center Login Portal" />
+  
+  <!-- Favicons & App Icons -->
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/app_icons/icon-32x32.svg" />
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/app_icons/icon-16x16.svg" />
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/app_icons/apple-touch-icon.svg" />
+  <link rel="manifest" href="/manifest.json" />
+  
+  <!-- iOS Meta Tags -->
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="JARVIS" />
+  
+  <!-- Microsoft Tiles -->
+  <meta name="msapplication-TileColor" content="#1e78ff" />
+  <meta name="msapplication-TileImage" content="/images/app_icons/icon-144x144.svg" />
+  <meta name="msapplication-config" content="/browserconfig.xml" />
+  
   <link rel="stylesheet" href="style.css" />
   <style>
     .login-hero {

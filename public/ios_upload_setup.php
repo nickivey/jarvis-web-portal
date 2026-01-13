@@ -19,9 +19,34 @@ $apiEndpoint = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off' ? 'https
   <title>iOS Photo Upload Setup — JARVIS</title>
   <link rel="stylesheet" href="/style.css">
   <style>
+    html, body {
+      background: radial-gradient(1200px 900px at 15% 0%, rgba(0, 150, 255, 0.3), transparent 50%),
+                 radial-gradient(900px 800px at 85% 100%, rgba(88, 86, 214, 0.25), transparent 50%),
+                 radial-gradient(700px 700px at 50% 50%, rgba(34, 197, 255, 0.08), transparent 60%),
+                 linear-gradient(180deg, #001a33 0%, #0a1f4d 50%, #050f33 100%);
+      min-height: 100vh;
+      color: var(--txt);
+    }
+    
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(34, 197, 255, 0.04) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0, 150, 255, 0.03) 1px, transparent 1px);
+      background-size: 40px 40px;
+      opacity: 0.06;
+      pointer-events: none;
+      mix-blend-mode: overlay;
+      z-index: 1;
+    }
+    
     .ios-setup-page {
       max-width: 1100px;
       margin: 0 auto;
+      position: relative;
+      z-index: 2;
     }
     
     /* Hero Section */
@@ -165,6 +190,15 @@ $apiEndpoint = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off' ? 'https
       gap: 10px;
       flex-wrap: wrap;
     }
+    @media (max-width: 600px) {
+      .token-actions {
+        flex-direction: column;
+      }
+      .token-btn {
+        flex: none;
+        width: 100%;
+      }
+    }
     .token-btn {
       flex: 1;
       min-width: 140px;
@@ -175,11 +209,12 @@ $apiEndpoint = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off' ? 'https
       color: #5ac8fa;
       cursor: pointer;
       font-size: 0.9rem;
-      display: flex;
+      display: inline-flex;
       align-items: center;
       justify-content: center;
       gap: 8px;
       transition: all 0.2s ease;
+      text-decoration: none;
     }
     .token-btn:hover {
       background: rgba(0, 122, 255, 0.25);
@@ -281,6 +316,15 @@ $apiEndpoint = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off' ? 'https
       display: flex;
       flex-direction: column;
       gap: 20px;
+      height: fit-content;
+      position: sticky;
+      top: 80px;
+    }
+    @media (max-width: 900px) {
+      .ios-sidebar {
+        position: relative;
+        top: auto;
+      }
     }
     
     /* API Info */
@@ -402,7 +446,6 @@ $apiEndpoint = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off' ? 'https
       margin-bottom: 6px;
     }
     
-    /* Curl Sample Modal */
     .curl-modal {
       position: fixed;
       inset: 0;
@@ -413,6 +456,7 @@ $apiEndpoint = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off' ? 'https
       backdrop-filter: blur(8px);
       z-index: 9999;
       padding: 24px;
+      overflow-y: auto;
     }
     .curl-modal-content {
       background: rgba(30, 30, 45, 0.98);
@@ -421,6 +465,8 @@ $apiEndpoint = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off' ? 'https
       padding: 24px;
       max-width: 700px;
       width: 100%;
+      max-height: 90vh;
+      overflow-y: auto;
     }
     .curl-modal h3 {
       margin: 0 0 16px 0;
@@ -443,6 +489,15 @@ $apiEndpoint = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off' ? 'https
       gap: 12px;
       margin-top: 16px;
       justify-content: flex-end;
+      flex-wrap: wrap;
+    }
+    @media (max-width: 480px) {
+      .curl-modal-actions {
+        flex-direction: column;
+      }
+      .curl-code {
+        font-size: 0.75rem;
+      }
     }
   </style>
 </head>
@@ -624,11 +679,11 @@ $apiEndpoint = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off' ? 'https
       
       <!-- Quick Links -->
       <div style="display:flex;flex-direction:column;gap:10px">
-        <a href="/public/photos.php" class="token-btn" style="text-decoration:none">
-          <span>🖼️</span> View Photo Gallery
+        <a href="/public/photos.php" class="token-btn" style="text-decoration:none;width:100%">
+          <span>🖼️</span> View Gallery
         </a>
-        <a href="/docs/ios-photo-upload.md" class="token-btn" style="text-decoration:none" target="_blank">
-          <span>📄</span> Full Documentation
+        <a href="/docs/ios-photo-upload.md" class="token-btn" style="text-decoration:none;width:100%" target="_blank">
+          <span>📄</span> Documentation
         </a>
       </div>
     </div>

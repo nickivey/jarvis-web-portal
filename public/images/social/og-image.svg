@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <defs>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="10" result="b"/>
+      <feMerge>
+        <feMergeNode in="b"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#020712;stop-opacity:1" />
+      <stop offset="50%" style="stop-color:#05102a;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#020712;stop-opacity:1" />
+    </linearGradient>
+    <radialGradient id="spotlight1" cx="20%" cy="30%">
+      <stop offset="0%" style="stop-color:#1e78ff;stop-opacity:0.4" />
+      <stop offset="100%" style="stop-color:#1e78ff;stop-opacity:0" />
+    </radialGradient>
+    <radialGradient id="spotlight2" cx="80%" cy="50%">
+      <stop offset="0%" style="stop-color:#00d4ff;stop-opacity:0.3" />
+      <stop offset="100%" style="stop-color:#00d4ff;stop-opacity:0" />
+    </radialGradient>
+  </defs>
+  
+  <!-- Background -->
+  <rect width="1200" height="630" fill="url(#bgGradient)"/>
+  <rect width="1200" height="630" fill="url(#spotlight1)"/>
+  <rect width="1200" height="630" fill="url(#spotlight2)"/>
+  
+  <!-- Grid pattern -->
+  <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+    <rect width="40" height="40" fill="none"/>
+    <path d="M 40 0 L 0 0 0 40" fill="none" stroke="rgba(30,120,255,0.08)" stroke-width="1"/>
+  </pattern>
+  <rect width="1200" height="630" fill="url(#grid)" opacity="0.3"/>
+  
+  <!-- Main hexagon logo -->
+  <g transform="translate(250, 315)">
+    <path d="M0,-150 L130,-75 L130,75 L0,150 L-130,75 L-130,-75 Z" 
+          fill="#0b1020" stroke="#38bdf8" stroke-width="8" filter="url(#glow)"/>
+    <path d="M0,-120 L104,-60 L104,60 L0,120 L-104,60 L-104,-60 Z" 
+          fill="none" stroke="#22d3ee" stroke-opacity="0.45" stroke-width="4"/>
+  </g>
+  
+  <!-- Title and tagline -->
+  <text x="520" y="240" font-family="Segoe UI, Arial" font-size="120" font-weight="800" fill="#e0f2fe">JARVIS</text>
+  <text x="520" y="300" font-family="Segoe UI, Arial" font-size="24" letter-spacing="8" fill="#7dd3fc" opacity="0.9">SYSTEM ONLINE</text>
+  
+  <!-- Subtitle -->
+  <text x="520" y="360" font-family="Segoe UI, Arial" font-size="32" font-weight="600" fill="#9bb4d6">AI Command Center</text>
+  <text x="520" y="400" font-family="Segoe UI, Arial" font-size="24" fill="#9bb4d6" opacity="0.8">Smart Home Automation • Voice Control • Media Management</text>
+  
+  <!-- Bottom branding -->
+  <text x="520" y="540" font-family="Segoe UI, Arial" font-size="18" fill="#7dd3fc" opacity="0.7">Simple Functioning Solutions • Orlando, FL</text>
+  
+  <!-- Decorative elements -->
+  <circle cx="950" cy="150" r="4" fill="#00d4ff" opacity="0.6"/>
+  <circle cx="1000" cy="200" r="3" fill="#38bdf8" opacity="0.5"/>
+  <circle cx="920" cy="480" r="4" fill="#22d3ee" opacity="0.6"/>
+  <circle cx="1050" cy="520" r="3" fill="#1e78ff" opacity="0.5"/>
+</svg>

@@ -130,15 +130,56 @@ $phone = (string)($dbUser['phone_e164'] ?? '');
 <!doctype html>
 <html lang="en"><head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <meta name="theme-color" content="#1e78ff" />
+  
+  <!-- Primary Meta Tags -->
   <title>JARVIS Portal • AI Command Center | Simple Functioning Solutions - Orlando</title>
+  <meta name="title" content="JARVIS Portal • AI Command Center | Smart Home Automation" />
   <meta name="description" content="Your intelligent command center for smart home automation, voice control, media management, and real-time notifications. JARVIS brings AI-powered simplicity to your connected life—built by Simple Functioning Solutions in Orlando." />
-  <meta name="keywords" content="home automation, AI assistant, voice control, smart home, media management, IoT control, Orlando, Simple Functioning Solutions" />
+  <meta name="keywords" content="home automation, AI assistant, voice control, smart home, media management, IoT control, Orlando, Simple Functioning Solutions, JARVIS, command center" />
   <meta name="author" content="Simple Functioning Solutions" />
+  
+  <!-- Open Graph / Facebook -->
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://jarvis.simplefunctioningsolutions.com/" />
   <meta property="og:title" content="JARVIS Portal • AI-Powered Smart Home Command Center" />
   <meta property="og:description" content="Control your smart home with voice commands, manage media, track locations, and stay connected—all from one intelligent platform." />
+  <meta property="og:image" content="https://jarvis.simplefunctioningsolutions.com/images/social/og-image.svg" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="JARVIS AI Command Center Dashboard" />
   <meta property="og:site_name" content="JARVIS by Simple Functioning Solutions" />
-  <meta property="og:type" content="website" />
+  <meta property="og:locale" content="en_US" />
+  
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:url" content="https://jarvis.simplefunctioningsolutions.com/" />
+  <meta name="twitter:title" content="JARVIS Portal • AI-Powered Smart Home Command Center" />
+  <meta name="twitter:description" content="Control your smart home with voice commands, manage media, track locations, and stay connected—all from one intelligent AI platform." />
+  <meta name="twitter:image" content="https://jarvis.simplefunctioningsolutions.com/images/social/og-image.svg" />
+  <meta name="twitter:image:alt" content="JARVIS AI Command Center Dashboard" />
+  
+  <!-- Favicons & App Icons -->
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/app_icons/icon-32x32.svg" />
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/app_icons/icon-16x16.svg" />
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/app_icons/apple-touch-icon.svg" />
+  <link rel="manifest" href="/manifest.json" />
+  
+  <!-- iOS Meta Tags -->
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="JARVIS" />
+  
+  <!-- Microsoft Tiles -->
+  <meta name="msapplication-TileColor" content="#1e78ff" />
+  <meta name="msapplication-TileImage" content="/images/app_icons/icon-144x144.svg" />
+  <meta name="msapplication-config" content="/browserconfig.xml" />
+  
+  <!-- Canonical URL -->
+  <link rel="canonical" href="https://jarvis.simplefunctioningsolutions.com/" />
+  
   <link rel="stylesheet" href="style.css" />
   <!-- Using embedded third-party maps (Google Maps iframe) for location previews -->
 </head>
@@ -1576,89 +1617,146 @@ Content-Type: application/json
   <!-- Local Calendar Events Script -->
   <script>
   (function(){
-    const addBtn = document.getElementById('addLocalEventBtn');
-    const modal = document.getElementById('addEventModal');
-    const closeBtn = document.getElementById('closeEventModal');
-    const form = document.getElementById('addLocalEventForm');
-    
-    // Set default date to today when modal opens
-    if (addBtn && modal) {
+    try {
+      const addBtn = document.getElementById('addLocalEventBtn');
+      const modal = document.getElementById('addEventModal');
+      const closeBtn = document.getElementById('closeEventModal');
+      const form = document.getElementById('addLocalEventForm');
+      
+      if (!addBtn || !modal || !form) {
+        console.warn('Add event elements not found on page');
+        return;
+      }
+      
+      // Set default date to today when modal opens
       addBtn.addEventListener('click', () => {
-        const dateInput = form ? form.querySelector('input[name="event_date"]') : null;
-        if (dateInput && !dateInput.value) {
-          const today = new Date().toISOString().split('T')[0];
-          dateInput.value = today;
+        try {
+          const dateInput = form.querySelector('input[name="event_date"]');
+          if (dateInput && !dateInput.value) {
+            const today = new Date().toISOString().split('T')[0];
+            dateInput.value = today;
+          }
+          modal.classList.add('active');
+        } catch (e) {
+          console.error('Error opening add event modal:', e);
         }
-        modal.classList.add('active');
       });
-    }
-    
-    if (closeBtn && modal) {
-      closeBtn.addEventListener('click', () => {
-        modal.classList.remove('active');
-      });
+      
+      // Close modal handlers
+      if (closeBtn) {
+        closeBtn.addEventListener('click', () => {
+          try {
+            modal.classList.remove('active');
+          } catch (e) {
+            console.error('Error closing event modal:', e);
+          }
+        });
+      }
+      
       modal.addEventListener('click', (e) => {
-        if (e.target === modal) modal.classList.remove('active');
+        try {
+          if (e.target === modal) modal.classList.remove('active');
+        } catch (e) {
+          console.error('Error handling modal click:', e);
+        }
       });
-    }
-    
-    if (form) {
+      
+      // Form submission handler
       form.addEventListener('submit', async (e) => {
         e.preventDefault();
-        const formData = new FormData(form);
-        const data = {
-          title: formData.get('title'),
-          event_date: formData.get('event_date'),
-          event_time: formData.get('event_time'),
-          location: formData.get('location'),
-          notes: formData.get('notes')
-        };
-        
         try {
-          const token = window.jarvisJwt || '';
-          const resp = await (window.jarvisApi ? window.jarvisApi.post('/api/local-events', data) : fetch('/api/local-events', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
-            body: JSON.stringify(data)
-          }).then(r => r.json()));
+          const formData = new FormData(form);
+          const data = {
+            title: (formData.get('title') || '').trim(),
+            event_date: (formData.get('event_date') || '').trim(),
+            event_time: (formData.get('event_time') || '').trim() || null,
+            location: (formData.get('location') || '').trim() || null,
+            notes: (formData.get('notes') || '').trim() || null
+          };
           
-          if (resp && resp.ok) {
+          // Validate required fields
+          if (!data.title || !data.event_date) {
+            alert('Please fill in event title and date');
+            return;
+          }
+          
+          const token = window.jarvisJwt || '';
+          if (!token) {
+            alert('Authentication token not available');
+            console.warn('No JWT token available for add event');
+            return;
+          }
+          
+          const fetchOptions = {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer ' + token
+            },
+            body: JSON.stringify(data)
+          };
+          
+          const response = await fetch('/api/local-events', fetchOptions);
+          const respData = await response.json();
+          
+          if (response.ok && respData && respData.ok) {
+            modal.classList.remove('active');
+            form.reset();
             window.location.reload();
           } else {
-            alert('Failed to add event: ' + (resp.error || 'Unknown error'));
+            const errorMsg = (respData && respData.error) || response.statusText || 'Unknown error';
+            alert('Failed to add event: ' + errorMsg);
+            console.error('Add event error:', respData);
           }
         } catch (err) {
-          alert('Error adding event: ' + err.message);
+          alert('Error adding event: ' + (err.message || 'Unknown error'));
+          console.error('Add event exception:', err);
         }
       });
+      
+      // Delete event handlers
+      document.querySelectorAll('.delete-local-event').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+          e.preventDefault();
+          try {
+            const eventId = btn.getAttribute('data-id');
+            if (!eventId) {
+              console.warn('No event ID found on delete button');
+              return;
+            }
+            
+            if (!confirm('Delete this event?')) return;
+            
+            const token = window.jarvisJwt || '';
+            if (!token) {
+              alert('Authentication token not available');
+              return;
+            }
+            
+            const response = await fetch('/api/local-events/' + eventId, {
+              method: 'DELETE',
+              headers: { 'Authorization': 'Bearer ' + token }
+            });
+            
+            const respData = await response.json();
+            
+            if (response.ok && respData && respData.ok) {
+              const eventEl = btn.closest('.calendar-event');
+              if (eventEl) eventEl.remove();
+            } else {
+              const errorMsg = (respData && respData.error) || response.statusText || 'Unknown error';
+              alert('Failed to delete event: ' + errorMsg);
+              console.error('Delete event error:', respData);
+            }
+          } catch (err) {
+            alert('Error deleting event: ' + (err.message || 'Unknown error'));
+            console.error('Delete event exception:', err);
+          }
+        });
+      });
+    } catch (err) {
+      console.error('Error initializing event handlers:', err);
     }
-    
-    // Delete event handlers
-    document.querySelectorAll('.delete-local-event').forEach(btn => {
-      btn.addEventListener('click', async (e) => {
-        e.preventDefault();
-        const eventId = btn.getAttribute('data-id');
-        if (!eventId) return;
-        
-        if (!confirm('Delete this event?')) return;
-        
-        try {
-          const token = window.jarvisJwt || '';
-          const resp = await (window.jarvisApi ? window.jarvisApi.delete('/api/local-events/' + eventId) : fetch('/api/local-events/' + eventId, {
-            method: 'DELETE',
-            headers: { 'Authorization': 'Bearer ' + token }
-          }).then(r => r.json()));
-          
-          if (resp && resp.ok) {
-            btn.closest('.calendar-event').remove();
-          } else {
-            alert('Failed to delete event');
-          }
-        } catch (err) {
-          alert('Error deleting event: ' + err.message);
-        }
-      });
-    });
   })();
   </script>
   
@@ -2733,16 +2831,33 @@ Content-Type: application/json
     }
 
     document.getElementById('permRequestBtn')?.addEventListener('click', async ()=>{
-      // Request mic/cam/geo as before
-      try{ 
-        await navigator.mediaDevices.getUserMedia({ audio:true }); 
-        // Auto-start dictation if permission granted
-        const mb = document.getElementById('micBtn');
-        if(mb && !mb.classList.contains('active')) mb.click();
-      }catch(e){}
-      try{ await navigator.mediaDevices.getUserMedia({ video:true }); }catch(e){}
-      try{ await new Promise((res)=> navigator.geolocation.getCurrentPosition(()=>res(),()=>res(), {timeout:8000})); }catch(e){}
-      // Also request notification permission explicitly (user gesture)
+      // On mobile, request geolocation first
+      const isMobile = window.innerWidth <= 599;
+      
+      if (isMobile) {
+        // Mobile: request geolocation first
+        try{ 
+          await new Promise((res)=> navigator.geolocation.getCurrentPosition(()=>res(),()=>res(), {timeout:8000})); 
+        }catch(e){}
+        try{ 
+          await navigator.mediaDevices.getUserMedia({ audio:true }); 
+          // Auto-start dictation if permission granted
+          const mb = document.getElementById('micBtn');
+          if(mb && !mb.classList.contains('active')) mb.click();
+        }catch(e){}
+        try{ await navigator.mediaDevices.getUserMedia({ video:true }); }catch(e){}
+      } else {
+        // Desktop: request mic/cam/geo as before
+        try{ 
+          await navigator.mediaDevices.getUserMedia({ audio:true }); 
+          // Auto-start dictation if permission granted
+          const mb = document.getElementById('micBtn');
+          if(mb && !mb.classList.contains('active')) mb.click();
+        }catch(e){}
+        try{ await navigator.mediaDevices.getUserMedia({ video:true }); }catch(e){}
+        try{ await new Promise((res)=> navigator.geolocation.getCurrentPosition(()=>res(),()=>res(), {timeout:8000})); }catch(e){}
+      }
+      
       try{ await ensureNotificationPermission(); }catch(e){}
       // update UI (e.g., enableNotif checkbox) after permission attempt
       if (document.getElementById('enableNotif')) {

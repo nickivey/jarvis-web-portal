@@ -89,7 +89,8 @@ paths:
       summary: Reprocess photo; optionally override GPS (test)
       parameters:
         - in: path
-          name: id
+          name: id          <?php
+          jarvis_respond(201, ['ok' => true, 'event_id' => $eventId]);
           required: true
           schema: { type: integer }
       requestBody:

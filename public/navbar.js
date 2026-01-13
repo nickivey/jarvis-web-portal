@@ -10,6 +10,32 @@
       });
     });
 
+    // Close mobile menu when a link is clicked
+    document.querySelectorAll('.navbar nav a').forEach(link => {
+      link.addEventListener('click', function() {
+        const navbar = this.closest('.navbar');
+        if (navbar && window.innerWidth <= 599) {
+          navbar.classList.remove('nav-open');
+          const btn = navbar.querySelector('.nav-toggle');
+          if (btn) btn.textContent = '☰';
+        }
+      });
+    });
+
+    // Close menu when clicking outside
+    document.addEventListener('click', function(e) {
+      if (window.innerWidth <= 599) {
+        const navbar = e.target.closest('.navbar');
+        if (!navbar) {
+          document.querySelectorAll('.navbar.nav-open').forEach(nb => {
+            nb.classList.remove('nav-open');
+            const btn = nb.querySelector('.nav-toggle');
+            if (btn) btn.textContent = '☰';
+          });
+        }
+      }
+    });
+
     // Inject loader overlay once per page
     if (!document.querySelector('.loader-overlay')) {
       const overlay = document.createElement('div');

@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <defs>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="8" result="b"/>
+      <feMerge>
+        <feMergeNode in="b"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#020712;stop-opacity:1" />
+      <stop offset="50%" style="stop-color:#07122a;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#020712;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="cardGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:rgba(7,18,42,0.95);stop-opacity:1" />
+      <stop offset="100%" style="stop-color:rgba(5,16,42,0.92);stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  
+  <rect width="1200" height="630" fill="url(#bgGradient)"/>
+  
+  <!-- Login card preview -->
+  <g transform="translate(360, 100)">
+    <rect x="0" y="0" width="480" height="430" rx="12" fill="url(#cardGradient)" 
+          stroke="#38bdf8" stroke-width="2" filter="url(#glow)"/>
+    
+    <!-- Accent line -->
+    <rect x="0" y="0" width="480" height="3" rx="12" fill="url(#spotlight1)"/>
+    <linearGradient id="spotlight1">
+      <stop offset="0%" style="stop-color:transparent" />
+      <stop offset="50%" style="stop-color:#00d4ff;stop-opacity:0.8" />
+      <stop offset="100%" style="stop-color:transparent" />
+    </linearGradient>
+    
+    <!-- Title -->
+    <text x="240" y="80" text-anchor="middle" font-family="Arial" font-size="36" font-weight="700" fill="#e0f2fe">Welcome Back</text>
+    <text x="240" y="110" text-anchor="middle" font-family="Arial" font-size="16" fill="#9bb4d6">Sign in to your command center</text>
+    
+    <!-- Form mockup -->
+    <rect x="40" y="150" width="400" height="48" rx="6" fill="rgba(2,7,18,0.7)" 
+          stroke="rgba(30,120,255,0.3)" stroke-width="1"/>
+    <text x="50" y="178" font-family="Arial" font-size="14" fill="#9bb4d6">email@example.com</text>
+    
+    <rect x="40" y="220" width="400" height="48" rx="6" fill="rgba(2,7,18,0.7)" 
+          stroke="rgba(30,120,255,0.3)" stroke-width="1"/>
+    <text x="50" y="248" font-family="Arial" font-size="20" fill="#9bb4d6">••••••••</text>
+    
+    <!-- Button -->
+    <rect x="40" y="290" width="400" height="48" rx="6" 
+          fill="url(#btnGradient)" stroke="rgba(0,212,255,0.5)" stroke-width="1"/>
+    <linearGradient id="btnGradient">
+      <stop offset="0%" style="stop-color:rgba(30,120,255,0.85)" />
+      <stop offset="100%" style="stop-color:rgba(0,212,255,0.7)" />
+    </linearGradient>
+    <text x="240" y="320" text-anchor="middle" font-family="Arial" font-size="16" font-weight="600" fill="#fff">Enter JARVIS</text>
+  </g>
+  
+  <!-- Logo -->
+  <g transform="translate(140, 315)">
+    <path d="M0,-80 L69,-40 L69,40 L0,80 L-69,40 L-69,-40 Z" 
+          fill="#0b1020" stroke="#38bdf8" stroke-width="4" filter="url(#glow)"/>
+  </g>
+  
+  <text x="600" y="580" text-anchor="middle" font-family="Arial" font-size="20" fill="#7dd3fc" opacity="0.8">JARVIS • AI Command Center</text>
+</svg>

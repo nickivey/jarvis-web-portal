@@ -54,10 +54,12 @@ if ($pdo) {
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
   <style>
     html, body {
-      background: radial-gradient(1200px 600px at 15% 10%, rgba(30,120,255,.22), transparent 55%),
-                 radial-gradient(800px 500px at 85% 20%, rgba(0,212,255,.16), transparent 55%),
-                 linear-gradient(180deg, #01040b, #020712);
+      background: radial-gradient(1200px 800px at 20% 0%, rgba(168, 85, 247, 0.25), transparent 50%),
+                 radial-gradient(1000px 800px at 80% 100%, rgba(236, 72, 153, 0.2), transparent 50%),
+                 radial-gradient(600px 600px at 50% 50%, rgba(139, 92, 246, 0.1), transparent 60%),
+                 linear-gradient(180deg, #0a0315 0%, #1a0033 50%, #0f0720 100%);
       min-height: 100vh;
+      color: var(--txt);
     }
     
     body::before {
@@ -65,12 +67,12 @@ if ($pdo) {
       position: fixed;
       inset: 0;
       background-image:
-        linear-gradient(rgba(30,120,255,.08) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(0,212,255,.06) 1px, transparent 1px);
-      background-size: 36px 36px;
-      opacity: .10;
+        linear-gradient(rgba(139, 92, 246, 0.05) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(168, 85, 247, 0.03) 1px, transparent 1px);
+      background-size: 40px 40px;
+      opacity: 0.08;
       pointer-events: none;
-      mix-blend-mode: screen;
+      mix-blend-mode: overlay;
       z-index: 1;
     }
     
