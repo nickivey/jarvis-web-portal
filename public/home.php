@@ -940,17 +940,59 @@ Content-Type: application/json
       <?php endif; ?>
     </div>
 
-    <div class="card" style="margin-top:14px" id="channelsActivity">
-      <h3>Channels & Activity</h3>
-      <div style="display:flex;gap:14px;align-items:flex-start;">
-        <div style="flex:1">
-          <div style="margin-bottom:8px"><strong>Channel:</strong> <span id="caChannel">local:rhats</span> • <a href="channel.php">Open Channels</a></div>
-          <div id="caMessages" style="display:flex;flex-direction:column;gap:8px;max-height:260px;overflow:auto;padding:6px;border-radius:8px;border:1px solid rgba(255,255,255,.02);background:linear-gradient(180deg, rgba(255,255,255,.01), rgba(255,255,255,.00));"></div>
+    <div class="card" style="margin-top:14px;padding:0;overflow:hidden" id="channelsActivity">
+      <div class="home-channels-widget">
+        <!-- Compact Channel Header -->
+        <div class="hc-header">
+          <div class="hc-title">
+            <h3 style="margin:0">💬 Channels & Activity</h3>
+            <a href="channel.php" class="btn btn-sm secondary">Open Full View</a>
+          </div>
         </div>
-        <div style="width:320px">
-          <div class="card">
-            <h4>Recent Audit Log</h4>
-            <div id="caAudit" style="max-height:240px;overflow:auto;padding:6px"></div>
+        
+        <!-- Two Column Layout: Messages + Sidebar -->
+        <div class="hc-body">
+          <!-- Left: Messages Area -->
+          <div class="hc-main">
+            <div class="hc-channel-bar">
+              <select id="hcChannelSelect" class="hc-channel-dropdown">
+                <option value="local:rhats"># rhats</option>
+                <option value="local:general"># general</option>
+                <option value="local:jarvis"># jarvis</option>
+                <option value="local:projects"># projects</option>
+              </select>
+            </div>
+            
+            <div class="hc-messages" id="hcMessages">
+              <div class="loading-messages">Loading messages...</div>
+            </div>
+            
+            <div class="hc-input-container">
+              <div class="hc-input-wrapper">
+                <textarea 
+                  id="hcMessageInput" 
+                  class="hc-message-input" 
+                  placeholder="Message #rhats (@ for mentions, # for tags)"
+                  rows="1"
+                ></textarea>
+                <div class="hc-input-toolbar">
+                  <div class="hc-input-actions">
+                    <button class="hc-input-btn" id="hcEmojiBtn" title="Add emoji">😊</button>
+                    <button class="hc-input-btn" id="hcMentionBtn" title="Mention">@</button>
+                    <button class="hc-input-btn" id="hcHashtagBtn" title="Hashtag">#</button>
+                  </div>
+                  <button class="hc-send-btn" id="hcSendBtn" disabled>Send</button>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Right: Audit Log Sidebar -->
+          <div class="hc-sidebar">
+            <div class="hc-sidebar-header">
+              <h4 style="margin:0;font-size:14px">Recent Audit Log</h4>
+            </div>
+            <div class="hc-audit" id="hcAudit"></div>
           </div>
         </div>
       </div>
@@ -2670,21 +2712,203 @@ Content-Type: application/json
         const emptyState = document.getElementById('photosEmptyState');
         const statsEl = document.getElementById('photosStats');
 
-        // Also load channels activity preview (small recent messages + audit)
+        // Home Channels Widget: Full implementation
         try{
-          const ca = document.getElementById('caMessages'); if (ca) {
-            const r = await fetch('/api/messages?channel=local:rhats&limit=6', { headers: { 'Authorization': 'Bearer ' + (window.jarvisJwt || '') } });
-            const j = await r.json().catch(()=>null);
-            if (j && Array.isArray(j.messages)) {
-              j.messages.forEach(m=>{
-                const im = document.createElement('div'); im.style.display='flex'; im.style.justifyContent='space-between'; im.style.alignItems='center'; im.style.gap='12px'; im.style.padding='8px'; im.style.borderRadius='8px';
-                const left = document.createElement('div'); left.style.flex='1'; left.innerHTML = '<div style="font-weight:700">'+(m.username||'you')+'</div><div style="color:var(--muted);font-size:13px">'+(m.message_text||'').replace(/(#([A-Za-z0-9_\-]+))/g, '<span style="color:var(--blue2)">$1</span>').replace(/@([A-Za-z0-9_\-]+)/g,'<span style="color:var(--ok)">$&</span>')+'</div>';
-                const meta = document.createElement('div'); meta.style.fontSize='12px'; meta.style.color='var(--muted)'; meta.textContent = new Date(m.created_at).toLocaleString();
-                im.appendChild(left); im.appendChild(meta); ca.appendChild(im);
+          const hcMessages = document.getElementById('hcMessages');
+          const hcMessageInput = document.getElementById('hcMessageInput');
+          const hcSendBtn = document.getElementById('hcSendBtn');
+          const hcChannelSelect = document.getElementById('hcChannelSelect');
+          const hcAudit = document.getElementById('hcAudit');
+          const hcEmojiBtn = document.getElementById('hcEmojiBtn');
+          const hcMentionBtn = document.getElementById('hcMentionBtn');
+          const hcHashtagBtn = document.getElementById('hcHashtagBtn');
+          
+          let currentChannel = 'local:rhats';
+          
+          // Load messages for current channel
+          async function loadMessages(){
+            if (!hcMessages) return;
+            try {
+              const r = await fetch(`/api/messages?channel=${currentChannel}&limit=20`, { 
+                headers: { 'Authorization': 'Bearer ' + (window.jarvisJwt || '') } 
               });
+              const j = await r.json().catch(()=>null);
+              if (j && Array.isArray(j.messages)) {
+                hcMessages.innerHTML = '';
+                if (j.messages.length === 0) {
+                  hcMessages.innerHTML = '<div class="loading-messages">No messages yet. Start the conversation!</div>';
+                  return;
+                }
+                j.messages.reverse().forEach(m=>{
+                  const group = document.createElement('div');
+                  group.className = 'hc-message-group';
+                  
+                  const avatar = document.createElement('div');
+                  avatar.className = 'hc-message-avatar';
+                  avatar.textContent = (m.username || 'U')[0].toUpperCase();
+                  
+                  const content = document.createElement('div');
+                  content.className = 'hc-message-content';
+                  
+                  const header = document.createElement('div');
+                  header.className = 'hc-message-header';
+                  const author = document.createElement('span');
+                  author.className = 'hc-message-author';
+                  author.textContent = m.username || 'you';
+                  const time = document.createElement('span');
+                  time.className = 'hc-message-time';
+                  time.textContent = new Date(m.created_at).toLocaleTimeString();
+                  header.appendChild(author);
+                  header.appendChild(time);
+                  
+                  const text = document.createElement('div');
+                  text.className = 'hc-message-text';
+                  let msgHtml = (m.message_text || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                  msgHtml = msgHtml.replace(/(#([A-Za-z0-9_\-]+))/g, '<span class="hashtag">$1</span>');
+                  msgHtml = msgHtml.replace(/@([A-Za-z0-9_\-]+)/g, '<span class="mention">$&</span>');
+                  text.innerHTML = msgHtml;
+                  
+                  const actions = document.createElement('div');
+                  actions.className = 'hc-message-actions';
+                  actions.innerHTML = `
+                    <button class="hc-msg-action-btn" data-action="reply">💬 Reply</button>
+                    <button class="hc-msg-action-btn" data-action="react">😊 React</button>
+                  `;
+                  
+                  content.appendChild(header);
+                  content.appendChild(text);
+                  content.appendChild(actions);
+                  
+                  group.appendChild(avatar);
+                  group.appendChild(content);
+                  hcMessages.appendChild(group);
+                });
+                hcMessages.scrollTop = hcMessages.scrollHeight;
+              }
+            } catch(e) {
+              console.error('Failed to load messages:', e);
+              if (hcMessages) hcMessages.innerHTML = '<div class="loading-messages">Failed to load messages</div>';
             }
           }
-        }catch(e){}
+          
+          // Load audit log
+          async function loadAudit(){
+            if (!hcAudit) return;
+            try {
+              const r = await fetch('/api/audit?limit=15', { 
+                headers: { 'Authorization': 'Bearer ' + (window.jarvisJwt || '') } 
+              });
+              const j = await r.json().catch(()=>null);
+              if (j && Array.isArray(j.audit)) {
+                hcAudit.innerHTML = '';
+                j.audit.forEach(a => {
+                  const entry = document.createElement('div');
+                  entry.className = 'muted';
+                  const ts = new Date(a.created_at).toLocaleTimeString();
+                  entry.textContent = `${ts} • ${a.event_type} • ${a.event_subject}`;
+                  hcAudit.appendChild(entry);
+                });
+              }
+            } catch(e) {
+              console.error('Failed to load audit:', e);
+            }
+          }
+          
+          // Send message
+          async function sendMessage(){
+            const msg = hcMessageInput.value.trim();
+            if (!msg) return;
+            try {
+              const r = await fetch('/api/messages', {
+                method: 'POST',
+                headers: { 
+                  'Authorization': 'Bearer ' + (window.jarvisJwt || ''),
+                  'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ message: msg, channel: currentChannel })
+              });
+              if (r.ok) {
+                hcMessageInput.value = '';
+                hcSendBtn.disabled = true;
+                await loadMessages();
+                await loadAudit();
+              }
+            } catch(e) {
+              console.error('Failed to send message:', e);
+            }
+          }
+          
+          // Enable/disable send button
+          if (hcMessageInput) {
+            hcMessageInput.addEventListener('input', ()=>{
+              if (hcSendBtn) hcSendBtn.disabled = !hcMessageInput.value.trim();
+            });
+            hcMessageInput.addEventListener('keydown', (e)=>{
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+              }
+            });
+          }
+          
+          // Send button
+          if (hcSendBtn) {
+            hcSendBtn.addEventListener('click', sendMessage);
+          }
+          
+          // Channel switcher
+          if (hcChannelSelect) {
+            hcChannelSelect.addEventListener('change', ()=>{
+              currentChannel = hcChannelSelect.value;
+              loadMessages();
+            });
+          }
+          
+          // Emoji button
+          if (hcEmojiBtn) {
+            hcEmojiBtn.addEventListener('click', ()=>{
+              if (hcMessageInput) {
+                const emojis = ['😊','👍','❤️','😂','🎉','🚀','💡','✅'];
+                const emoji = emojis[Math.floor(Math.random() * emojis.length)];
+                hcMessageInput.value += emoji;
+                hcMessageInput.focus();
+                if (hcSendBtn) hcSendBtn.disabled = !hcMessageInput.value.trim();
+              }
+              try{ if (window.jarvisApi && window.jarvisApi.auditLog) window.jarvisApi.auditLog('HOME_CHANNEL_EMOJI','home_channel',{ timestamp: new Date().toISOString() }); }catch(e){}
+            });
+          }
+          
+          // Mention button
+          if (hcMentionBtn) {
+            hcMentionBtn.addEventListener('click', ()=>{
+              if (hcMessageInput) {
+                hcMessageInput.value += '@';
+                hcMessageInput.focus();
+              }
+              try{ if (window.jarvisApi && window.jarvisApi.auditLog) window.jarvisApi.auditLog('HOME_CHANNEL_MENTION','home_channel',{ timestamp: new Date().toISOString() }); }catch(e){}
+            });
+          }
+          
+          // Hashtag button
+          if (hcHashtagBtn) {
+            hcHashtagBtn.addEventListener('click', ()=>{
+              if (hcMessageInput) {
+                hcMessageInput.value += '#';
+                hcMessageInput.focus();
+              }
+              try{ if (window.jarvisApi && window.jarvisApi.auditLog) window.jarvisApi.auditLog('HOME_CHANNEL_HASHTAG','home_channel',{ timestamp: new Date().toISOString() }); }catch(e){}
+            });
+          }
+          
+          // Initial load
+          loadMessages();
+          loadAudit();
+          
+          // Refresh periodically
+          setInterval(()=>{ loadMessages(); loadAudit(); }, 15000);
+        }catch(e){
+          console.error('Home channels widget error:', e);
+        }
 
         if (!el || typeof window.jarvisJwt === 'undefined') return;
         try {
@@ -3012,6 +3236,52 @@ Content-Type: application/json
     .status-pill.info { border-color: rgba(0,212,255,.30); background: rgba(0,212,255,.10); color:#b6efff }
     .status-pill.copyable { cursor:pointer }
     .status-pill.copyable.copied { outline: 2px solid rgba(0,212,255,.4) }
+
+    /* Home Channels Widget */
+    .home-channels-widget { background: linear-gradient(180deg, #1a1d21, #121417); }
+    .hc-header { padding:16px 20px; border-bottom:1px solid rgba(255,255,255,.06); background:#1a1d21 }
+    .hc-title { display:flex; align-items:center; justify-content:space-between; gap:12px }
+    .hc-body { display:grid; grid-template-columns:1fr 300px; min-height:400px }
+    @media(max-width:900px){ .hc-body { grid-template-columns:1fr } }
+    .hc-main { display:flex; flex-direction:column; border-right:1px solid rgba(255,255,255,.06) }
+    .hc-channel-bar { padding:10px 16px; border-bottom:1px solid rgba(255,255,255,.06); background:rgba(255,255,255,.02) }
+    .hc-channel-dropdown { width:100%; padding:8px 12px; background:rgba(0,0,0,.3); border:1px solid rgba(255,255,255,.15); border-radius:6px; color:#fff; font-size:14px; font-weight:600 }
+    .hc-channel-dropdown:focus { outline:none; border-color:rgba(29,155,209,.5) }
+    .hc-messages { flex:1; overflow-y:auto; padding:16px; display:flex; flex-direction:column; gap:8px; max-height:280px }
+    .hc-message-group { display:flex; gap:10px; padding:8px; border-radius:6px; transition:background .15s ease }
+    .hc-message-group:hover { background:rgba(255,255,255,.03) }
+    .hc-message-avatar { width:32px; height:32px; border-radius:6px; background:linear-gradient(135deg,#d946ef,#ec4899); display:flex; align-items:center; justify-content:center; font-weight:700; font-size:14px; color:#fff; flex-shrink:0 }
+    .hc-message-content { flex:1; min-width:0 }
+    .hc-message-header { display:flex; align-items:baseline; gap:8px; margin-bottom:2px }
+    .hc-message-author { font-weight:700; font-size:14px; color:#fff }
+    .hc-message-time { font-size:11px; color:rgba(255,255,255,.4) }
+    .hc-message-text { color:rgba(255,255,255,.9); font-size:14px; line-height:1.4; word-wrap:break-word }
+    .hc-message-text .mention { background:rgba(29,155,209,.15); color:#1d9bd1; padding:1px 3px; border-radius:3px; font-weight:500 }
+    .hc-message-text .hashtag { color:#1d9bd1; cursor:pointer; font-weight:500 }
+    .hc-message-actions { margin-top:4px; display:flex; gap:6px }
+    .hc-msg-action-btn { padding:3px 8px; background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.1); border-radius:4px; color:rgba(255,255,255,.6); font-size:11px; cursor:pointer }
+    .hc-msg-action-btn:hover { background:rgba(255,255,255,.1); color:#fff }
+    .hc-input-container { padding:12px 16px; border-top:1px solid rgba(255,255,255,.06); background:#1a1d21 }
+    .hc-input-wrapper { background:#121417; border:2px solid rgba(255,255,255,.1); border-radius:6px }
+    .hc-input-wrapper:focus-within { border-color:rgba(29,155,209,.5) }
+    .hc-message-input { width:100%; min-height:36px; max-height:80px; padding:10px 12px; background:transparent; border:none; color:#fff; font-size:14px; resize:none; outline:none }
+    .hc-message-input::placeholder { color:rgba(255,255,255,.4) }
+    .hc-input-toolbar { display:flex; align-items:center; justify-content:space-between; padding:6px 10px; border-top:1px solid rgba(255,255,255,.06) }
+    .hc-input-actions { display:flex; gap:6px }
+    .hc-input-btn { width:28px; height:28px; border-radius:4px; background:rgba(255,255,255,.05); border:none; color:rgba(255,255,255,.6); cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:16px }
+    .hc-input-btn:hover { background:rgba(255,255,255,.1); color:#fff }
+    .hc-send-btn { padding:5px 14px; background:linear-gradient(135deg,#d946ef,#ec4899); border:none; border-radius:4px; color:#fff; font-weight:600; font-size:13px; cursor:pointer }
+    .hc-send-btn:hover { transform:translateY(-1px); box-shadow:0 4px 12px rgba(217,70,239,.4) }
+    .hc-send-btn:disabled { opacity:.5; cursor:not-allowed; transform:none }
+    .hc-sidebar { background:#0d0f12; border-left:1px solid rgba(255,255,255,.06); display:flex; flex-direction:column }
+    @media(max-width:900px){ .hc-sidebar { display:none } }
+    .hc-sidebar-header { padding:12px 16px; border-bottom:1px solid rgba(255,255,255,.06); background:rgba(255,255,255,.02) }
+    .hc-audit { flex:1; overflow-y:auto; padding:12px; font-size:12px; color:rgba(255,255,255,.7); max-height:360px }
+    .hc-audit .muted { padding:6px 0; border-bottom:1px solid rgba(255,255,255,.02) }
+    .hc-messages::-webkit-scrollbar, .hc-audit::-webkit-scrollbar { width:6px }
+    .hc-messages::-webkit-scrollbar-track, .hc-audit::-webkit-scrollbar-track { background:rgba(0,0,0,.2) }
+    .hc-messages::-webkit-scrollbar-thumb, .hc-audit::-webkit-scrollbar-thumb { background:rgba(255,255,255,.2); border-radius:3px }
+    .loading-messages { text-align:center; padding:40px; color:rgba(255,255,255,.5); font-size:13px }
   </style>
   <div class="modal-content">
     <h4>Add Local Event</h4>
