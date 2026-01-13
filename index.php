@@ -602,7 +602,24 @@ if ($path === '/api/photos') {
   }
 
   if ($method === 'GET') {
-    [$userId, $u] = require_jwt_user();
+    // Support both JWT and session-based authentication
+    $userId = 0; $u = null;
+    $bearer = jarvis_bearer_token();
+    if ($bearer) {
+      $payload = jarvis_jwt_verify($bearer);
+      if ($payload && !empty($payload['sub'])) {
+        $userId = (int)$payload['sub'];
+        $u = jarvis_user_by_id($userId);
+      }
+    }
+    // Fallback to session auth
+    if (!$userId && session_status() === PHP_SESSION_NONE) @session_start();
+    if (!$userId && !empty($_SESSION['user_id'])) {
+      $userId = (int)$_SESSION['user_id'];
+      $u = jarvis_user_by_id($userId);
+    }
+    if (!$userId || !$u) jarvis_respond(401, ['error'=>'Unauthorized']);
+    
     $limit = isset($_GET['limit']) ? min(200, max(1, (int)$_GET['limit'])) : 50;
     $offset = isset($_GET['offset']) ? max(0, (int)$_GET['offset']) : 0;
     $rows = jarvis_list_photos($userId, $limit, $offset);
