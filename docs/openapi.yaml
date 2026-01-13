@@ -5,6 +5,42 @@ info:
 servers:
   - url: http://localhost
 paths:
+  /api/media:
+    get:
+      summary: List photos and videos combined
+      parameters:
+        - in: query
+          name: limit
+          schema: { type: integer }
+        - in: query
+          name: offset
+          schema: { type: integer }
+        - in: query
+          name: type
+          schema: 
+            type: string
+            enum: [photo, video]
+      responses:
+        '200': 
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  count: { type: integer }
+                  media:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        type: { type: string, enum: [photo, video] }
+                        id: { type: integer }
+                        filename: { type: string }
+                        url: { type: string }
+                        thumb_url: { type: string }
+                        created_at: { type: string }
   /api/photos:
     get:
       summary: List photos

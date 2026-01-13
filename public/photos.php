@@ -766,6 +766,15 @@ let allPhotos = [];
 let map = null;
 let markers = null;
 
+// Utility: Format duration
+function formatDuration(ms) {
+  if (!ms) return '';
+  const secs = Math.floor(ms / 1000);
+  const mins = Math.floor(secs / 60);
+  const s = secs % 60;
+  return `${mins}:${s.toString().padStart(2, '0')}`;
+}
+
 // Initialize map
 function initMap() {
   const mapEl = document.getElementById('photosMap');
@@ -774,25 +783,25 @@ function initMap() {
   markers = L.layerGroup().addTo(map);
 }
 
-// Load photos
+// Load photos and videos combined
 async function loadPhotos() {
   try {
-    const resp = await fetch('/api/photos?limit=200', { 
+    const resp = await fetch('/api/media?limit=200', { 
       headers: { 'Authorization': 'Bearer ' + (window.jarvisJwt || '') } 
     });
     const j = await resp.json();
     
     document.getElementById('loadingGrid').style.display = 'none';
     
-    if (!j || !j.photos || !j.photos.length) {
+    if (!j || !j.media || !j.media.length) {
       document.getElementById('emptyMsg').style.display = 'block';
       return;
     }
     
-    allPhotos = j.photos;
+    allPhotos = j.media;
     renderPhotos(allPhotos);
     renderTimeline(allPhotos);
-    renderMapMarkers(allPhotos);
+    renderMapMarkers(allPhotos.filter(m => m.type === 'photo'));
     
   } catch (e) {
     console.error(e);
@@ -801,45 +810,73 @@ async function loadPhotos() {
   }
 }
 
-function renderPhotos(photos) {
+function renderPhotos(items) {
   const grid = document.getElementById('photoGrid');
   grid.innerHTML = '';
   
-  photos.forEach(p => {
+  items.forEach(item => {
     const card = document.createElement('div');
-    card.className = 'photo-card';
-    card.innerHTML = `
-      <img src="/api/photos/${p.id}/download?thumb=1" alt="${p.original_filename || ''}" loading="lazy" />
-      <div class="photo-card-badges">
-        ${p.metadata?.exif_gps ? '<span class="photo-badge">📍</span>' : ''}
-        ${p.metadata?.exif_datetime ? '<span class="photo-badge">📅</span>' : ''}
-      </div>
-      <div class="photo-card-overlay">
-        <div class="photo-card-name">${p.original_filename || 'Photo'}</div>
-        <div class="photo-card-date">${p.metadata?.exif_datetime || new Date(p.created_at).toLocaleDateString()}</div>
-      </div>
-    `;
-    card.addEventListener('click', () => openModal(p));
+    card.className = item.type === 'video' ? 'video-card' : 'photo-card';
+    
+    if (item.type === 'video') {
+      const duration = formatDuration(item.duration_ms);
+      card.innerHTML = `
+        <div class="video-thumb">🎬</div>
+        <div class="play-icon">▶</div>
+        <div class="video-card-overlay">
+          <div class="video-card-name">${item.title || item.filename || 'Video'}</div>
+          <div class="video-card-duration">${duration || new Date(item.created_at).toLocaleDateString()}</div>
+        </div>
+      `;
+      card.addEventListener('click', () => openVideoModal(item));
+    } else {
+      card.innerHTML = `
+        <img src="/api/photos/${item.id}/download?thumb=1" alt="${item.original_filename || ''}" loading="lazy" />
+        <div class="photo-card-badges">
+          ${item.metadata?.exif_gps ? '<span class="photo-badge">📍</span>' : ''}
+          ${item.metadata?.exif_datetime ? '<span class="photo-badge">📅</span>' : ''}
+        </div>
+        <div class="photo-card-overlay">
+          <div class="photo-card-name">${item.original_filename || 'Photo'}</div>
+          <div class="photo-card-date">${item.metadata?.exif_datetime || new Date(item.created_at).toLocaleDateString()}</div>
+        </div>
+      `;
+      card.addEventListener('click', () => openModal(item));
+    }
+    
     grid.appendChild(card);
   });
 }
 
-function renderTimeline(photos) {
+function renderTimeline(items) {
   const timeline = document.getElementById('photosTimeline');
   timeline.innerHTML = '';
   
-  photos.slice(0, 10).forEach(p => {
-    const item = document.createElement('div');
-    item.className = 'timeline-item';
-    item.innerHTML = `
-      <img src="/api/photos/${p.id}/download?thumb=1" class="timeline-thumb" alt="" />
-      <div class="timeline-info">
-        <div class="timeline-name">${p.original_filename || 'Photo'}</div>
-        <div class="timeline-date">${p.metadata?.exif_datetime || new Date(p.created_at).toLocaleString()}</div>
-      </div>
-    `;
-    item.addEventListener('click', () => openModal(p));
-    timeline.appendChild(item);
+  items.slice(0, 10).forEach(item => {
+    const item_el = document.createElement('div');
+    item_el.className = 'timeline-item';
+    
+    if (item.type === 'video') {
+      item_el.innerHTML = `
+        <div class="timeline-thumb" style="display:flex;align-items:center;justify-content:center;background:rgba(200,100,255,0.2);">🎬</div>
+        <div class="timeline-info">
+          <div class="timeline-name">${item.title || item.filename || 'Video'}</div>
+          <div class="timeline-date">${new Date(item.created_at).toLocaleString()}</div>
+        </div>
+      `;
+      item_el.addEventListener('click', () => openVideoModal(item));
+    } else {
+      item_el.innerHTML = `
+        <img src="/api/photos/${item.id}/download?thumb=1" class="timeline-thumb" alt="" />
+        <div class="timeline-info">
+          <div class="timeline-name">${item.original_filename || 'Photo'}</div>
+          <div class="timeline-date">${item.metadata?.exif_datetime || new Date(item.created_at).toLocaleString()}</div>
+        </div>
+      `;
+      item_el.addEventListener('click', () => openModal(item));
+    }
+    
+    timeline.appendChild(item_el);
   });
 }
 
@@ -928,62 +965,7 @@ document.querySelectorAll('.view-tab').forEach(tab => {
   });
 });
 
-// ============= VIDEO FUNCTIONALITY =============
-let allVideos = [];
-
-// Load videos
-async function loadVideos() {
-  try {
-    const resp = await fetch('/api/video?limit=100', { 
-      headers: { 'Authorization': 'Bearer ' + (window.jarvisJwt || '') } 
-    });
-    const j = await resp.json();
-    
-    document.getElementById('videoLoadingGrid')?.remove();
-    
-    if (!j || !j.videos || !j.videos.length) {
-      document.getElementById('videoEmptyMsg').style.display = 'block';
-      return;
-    }
-    
-    allVideos = j.videos;
-    renderVideos(allVideos);
-    
-  } catch (e) {
-    console.error(e);
-    document.getElementById('videoLoadingGrid')?.remove();
-    document.getElementById('videoEmptyMsg').style.display = 'block';
-  }
-}
-
-function formatDuration(ms) {
-  if (!ms) return '';
-  const secs = Math.floor(ms / 1000);
-  const mins = Math.floor(secs / 60);
-  const s = secs % 60;
-  return `${mins}:${s.toString().padStart(2, '0')}`;
-}
-
-function renderVideos(videos) {
-  const grid = document.getElementById('videoGrid');
-  grid.innerHTML = '';
-  
-  videos.forEach(v => {
-    const card = document.createElement('div');
-    card.className = 'video-card';
-    const duration = formatDuration(v.duration_ms);
-    card.innerHTML = `
-      <div class="video-thumb">🎬</div>
-      <div class="play-icon">▶</div>
-      <div class="video-card-overlay">
-        <div class="video-card-name">${v.filename || 'Video'}</div>
-        <div class="video-card-duration">${duration || new Date(v.created_at).toLocaleDateString()}</div>
-      </div>
-    `;
-    card.addEventListener('click', () => openVideoModal(v));
-    grid.appendChild(card);
-  });
-}
+// ============= VIDEO MODAL =============
 
 function openVideoModal(video) {
   let modal = document.getElementById('videoViewModal');
@@ -1031,8 +1013,32 @@ document.getElementById('tabVideos')?.addEventListener('click', () => {
   document.getElementById('tabVideos').classList.add('active');
   document.getElementById('photosSection').style.display = 'none';
   document.getElementById('videosSection').style.display = 'block';
-  // Load videos if not already loaded
-  if (!allVideos.length) loadVideos();
+  
+  // Render videos from combined media
+  const videos = allPhotos.filter(m => m.type === 'video');
+  const grid = document.getElementById('videoGrid');
+  grid.innerHTML = '';
+  
+  if (!videos.length) {
+    document.getElementById('videoEmptyMsg').style.display = 'block';
+    return;
+  }
+  
+  videos.forEach(v => {
+    const card = document.createElement('div');
+    card.className = 'video-card';
+    const duration = formatDuration(v.duration_ms);
+    card.innerHTML = `
+      <div class="video-thumb">🎬</div>
+      <div class="play-icon">▶</div>
+      <div class="video-card-overlay">
+        <div class="video-card-name">${v.title || v.filename || 'Video'}</div>
+        <div class="video-card-duration">${duration || new Date(v.created_at).toLocaleDateString()}</div>
+      </div>
+    `;
+    card.addEventListener('click', () => openVideoModal(v));
+    grid.appendChild(card);
+  });
 });
 
 // Initialize
