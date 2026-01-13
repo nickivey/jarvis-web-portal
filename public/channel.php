@@ -567,6 +567,203 @@ $username = $u['username'] ?? 'user';
       margin-bottom: 8px;
     }
     
+    /* Image Annotation Modal */
+    .annotation-modal {
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      background: rgba(0, 0, 0, 0.95);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    
+    .annotation-modal.active {
+      display: flex;
+    }
+    
+    .annotation-container {
+      background: #1a1d21;
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,0.1);
+      max-width: 90vw;
+      max-height: 90vh;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.8);
+    }
+    
+    .annotation-header {
+      padding: 16px 20px;
+      border-bottom: 1px solid rgba(255,255,255,0.1);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    
+    .annotation-header h3 {
+      margin: 0;
+      font-size: 1.1rem;
+      color: #fff;
+    }
+    
+    .annotation-close {
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.1);
+      color: #fff;
+      width: 32px;
+      height: 32px;
+      border-radius: 6px;
+      font-size: 1.2rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    
+    .annotation-close:hover {
+      background: rgba(255,255,255,0.1);
+    }
+    
+    .annotation-body {
+      padding: 20px;
+      display: flex;
+      gap: 20px;
+      overflow: auto;
+    }
+    
+    .annotation-canvas-wrapper {
+      position: relative;
+      background: #000;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    
+    #annotationCanvas {
+      display: block;
+      max-width: 100%;
+      max-height: calc(90vh - 200px);
+      cursor: crosshair;
+    }
+    
+    .annotation-toolbar {
+      min-width: 200px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    
+    .tool-group {
+      background: rgba(255,255,255,0.03);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 8px;
+      padding: 12px;
+    }
+    
+    .tool-group-title {
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: rgba(255,255,255,0.5);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 8px;
+    }
+    
+    .tool-btn {
+      width: 100%;
+      padding: 8px 12px;
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 6px;
+      color: rgba(255,255,255,0.7);
+      cursor: pointer;
+      font-size: 0.9rem;
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: all 0.15s ease;
+    }
+    
+    .tool-btn:hover {
+      background: rgba(255,255,255,0.1);
+      color: #fff;
+    }
+    
+    .tool-btn.active {
+      background: rgba(29, 155, 209, 0.2);
+      border-color: rgba(29, 155, 209, 0.4);
+      color: #fff;
+    }
+    
+    .color-palette {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 8px;
+    }
+    
+    .color-btn {
+      width: 100%;
+      aspect-ratio: 1;
+      border-radius: 6px;
+      border: 2px solid transparent;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    
+    .color-btn:hover {
+      transform: scale(1.1);
+    }
+    
+    .color-btn.active {
+      border-color: #fff;
+      box-shadow: 0 0 0 2px rgba(255,255,255,0.3);
+    }
+    
+    .brush-size {
+      width: 100%;
+      margin-top: 8px;
+    }
+    
+    .annotation-footer {
+      padding: 16px 20px;
+      border-top: 1px solid rgba(255,255,255,0.1);
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    
+    .annotation-footer .btn {
+      padding: 10px 20px;
+      border-radius: 6px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    
+    .btn-cancel {
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.1);
+      color: rgba(255,255,255,0.7);
+    }
+    
+    .btn-cancel:hover {
+      background: rgba(255,255,255,0.1);
+      color: #fff;
+    }
+    
+    .btn-save {
+      background: linear-gradient(135deg, #d946ef 0%, #ec4899 100%);
+      border: none;
+      color: #fff;
+    }
+    
+    .btn-save:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(217, 70, 239, 0.4);
+    }
+
     /* Responsive */
     @media (max-width: 768px) {
       .slack-sidebar {
@@ -583,6 +780,14 @@ $username = $u['username'] ?? 'user';
       
       .message-input-container {
         padding: 12px 16px;
+      }
+      
+      .annotation-body {
+        flex-direction: column;
+      }
+      
+      .annotation-toolbar {
+        min-width: auto;
       }
     }
   </style>
@@ -715,6 +920,57 @@ $username = $u['username'] ?? 'user';
     </div>
   </div>
 </div>
+
+<!-- Image Annotation Modal -->
+<div class="annotation-modal" id="annotationModal">
+  <div class="annotation-container">
+    <div class="annotation-header">
+      <h3>✏️ Draw on Image</h3>
+      <button class="annotation-close" id="closeAnnotation">×</button>
+    </div>
+    <div class="annotation-body">
+      <div class="annotation-canvas-wrapper">
+        <canvas id="annotationCanvas"></canvas>
+      </div>
+      <div class="annotation-toolbar">
+        <div class="tool-group">
+          <div class="tool-group-title">Tools</div>
+          <button class="tool-btn active" data-tool="draw">✏️ Draw</button>
+          <button class="tool-btn" data-tool="text">📝 Text</button>
+          <button class="tool-btn" data-tool="arrow">➡️ Arrow</button>
+          <button class="tool-btn" data-tool="highlight">🖍️ Highlight</button>
+        </div>
+        <div class="tool-group">
+          <div class="tool-group-title">Colors</div>
+          <div class="color-palette">
+            <button class="color-btn active" style="background: #ef4444" data-color="#ef4444"></button>
+            <button class="color-btn" style="background: #f59e0b" data-color="#f59e0b"></button>
+            <button class="color-btn" style="background: #10b981" data-color="#10b981"></button>
+            <button class="color-btn" style="background: #3b82f6" data-color="#3b82f6"></button>
+            <button class="color-btn" style="background: #8b5cf6" data-color="#8b5cf6"></button>
+            <button class="color-btn" style="background: #ec4899" data-color="#ec4899"></button>
+            <button class="color-btn" style="background: #ffffff" data-color="#ffffff"></button>
+            <button class="color-btn" style="background: #000000" data-color="#000000"></button>
+          </div>
+        </div>
+        <div class="tool-group">
+          <div class="tool-group-title">Brush Size</div>
+          <input type="range" class="brush-size" id="brushSize" min="1" max="20" value="3">
+          <div style="text-align: center; color: rgba(255,255,255,0.5); font-size: 0.8rem; margin-top: 4px;" id="brushSizeLabel">3px</div>
+        </div>
+        <div class="tool-group">
+          <button class="tool-btn" id="clearCanvas">🗑️ Clear All</button>
+          <button class="tool-btn" id="undoCanvas">↶ Undo</button>
+        </div>
+      </div>
+    </div>
+    <div class="annotation-footer">
+      <button class="btn btn-cancel" id="cancelAnnotation">Cancel</button>
+      <button class="btn btn-save" id="saveAnnotation">Use This Image</button>
+    </div>
+  </div>
+</div>
+
 <script>
 // ===== SLACK-LIKE CHANNEL WIDGET =====
 const CURRENT_USER = <?php echo json_encode($username); ?>;
@@ -1102,20 +1358,26 @@ document.getElementById('attachBtn').addEventListener('click', () => {
 document.getElementById('fileInput').addEventListener('change', (e) => {
   const file = e.target.files[0];
   if (file) {
-    selectedFile = file;
-    document.getElementById('fileName').textContent = file.name;
-    document.getElementById('fileSize').textContent = (file.size / 1024 / 1024).toFixed(2) + ' MB';
-    document.getElementById('filePreview').classList.add('active');
-    
-    // Audit log for file attachment
-    if (window.jarvisApi && window.jarvisApi.auditLog) {
-      window.jarvisApi.auditLog('CHANNEL_FILE_ATTACHED', 'channel', {
-        file_name: file.name,
-        file_size: file.size,
-        file_type: file.type,
-        channel: currentChannel,
-        timestamp: new Date().toISOString()
-      });
+    // Check if it's an image - open annotation modal
+    if (file.type.startsWith('image/')) {
+      openImageAnnotation(file);
+    } else {
+      // Non-image files go directly to preview
+      selectedFile = file;
+      document.getElementById('fileName').textContent = file.name;
+      document.getElementById('fileSize').textContent = (file.size / 1024 / 1024).toFixed(2) + ' MB';
+      document.getElementById('filePreview').classList.add('active');
+      
+      // Audit log for file attachment
+      if (window.jarvisApi && window.jarvisApi.auditLog) {
+        window.jarvisApi.auditLog('CHANNEL_FILE_ATTACHED', 'channel', {
+          file_name: file.name,
+          file_size: file.size,
+          file_type: file.type,
+          channel: currentChannel,
+          timestamp: new Date().toISOString()
+        });
+      }
     }
   }
 });
@@ -1223,6 +1485,213 @@ document.getElementById('newChannelBtn').addEventListener('click', () => {
       document.getElementById('newChannelBtn')
     );
   }
+});
+
+// ===== IMAGE ANNOTATION FUNCTIONALITY =====
+let annotationCanvas, annotationCtx;
+let annotationImage = null;
+let originalFile = null;
+let isDrawing = false;
+let currentTool = 'draw';
+let currentColor = '#ef4444';
+let brushSize = 3;
+let drawHistory = [];
+let lastX = 0, lastY = 0;
+
+function openImageAnnotation(file) {
+  originalFile = file;
+  const modal = document.getElementById('annotationModal');
+  annotationCanvas = document.getElementById('annotationCanvas');
+  annotationCtx = annotationCanvas.getContext('2d');
+  
+  // Load image
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const img = new Image();
+    img.onload = () => {
+      annotationImage = img;
+      
+      // Set canvas size to match image
+      const maxWidth = Math.min(window.innerWidth * 0.6, img.width);
+      const maxHeight = Math.min(window.innerHeight * 0.6, img.height);
+      const scale = Math.min(maxWidth / img.width, maxHeight / img.height, 1);
+      
+      annotationCanvas.width = img.width * scale;
+      annotationCanvas.height = img.height * scale;
+      
+      // Draw image
+      annotationCtx.drawImage(img, 0, 0, annotationCanvas.width, annotationCanvas.height);
+      
+      // Save initial state
+      drawHistory = [annotationCanvas.toDataURL()];
+      
+      // Show modal
+      modal.classList.add('active');
+      
+      // Audit
+      if (window.jarvisApi && window.jarvisApi.auditLog) {
+        window.jarvisApi.auditLog('CHANNEL_IMAGE_ANNOTATION_OPENED', 'channel', {
+          file_name: file.name,
+          timestamp: new Date().toISOString()
+        });
+      }
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+// Drawing functionality
+annotationCanvas?.addEventListener('mousedown', (e) => {
+  if (!annotationCanvas) return;
+  isDrawing = true;
+  const rect = annotationCanvas.getBoundingClientRect();
+  lastX = e.clientX - rect.left;
+  lastY = e.clientY - rect.top;
+  
+  if (currentTool === 'text') {
+    const text = prompt('Enter text:');
+    if (text) {
+      annotationCtx.font = `${brushSize * 8}px Arial`;
+      annotationCtx.fillStyle = currentColor;
+      annotationCtx.fillText(text, lastX, lastY);
+      saveState();
+    }
+    isDrawing = false;
+  }
+});
+
+annotationCanvas?.addEventListener('mousemove', (e) => {
+  if (!isDrawing || !annotationCanvas) return;
+  
+  const rect = annotationCanvas.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const y = e.clientY - rect.top;
+  
+  if (currentTool === 'draw') {
+    annotationCtx.beginPath();
+    annotationCtx.moveTo(lastX, lastY);
+    annotationCtx.lineTo(x, y);
+    annotationCtx.strokeStyle = currentColor;
+    annotationCtx.lineWidth = brushSize;
+    annotationCtx.lineCap = 'round';
+    annotationCtx.stroke();
+  } else if (currentTool === 'highlight') {
+    annotationCtx.beginPath();
+    annotationCtx.moveTo(lastX, lastY);
+    annotationCtx.lineTo(x, y);
+    annotationCtx.strokeStyle = currentColor + '80'; // Add transparency
+    annotationCtx.lineWidth = brushSize * 3;
+    annotationCtx.lineCap = 'round';
+    annotationCtx.stroke();
+  }
+  
+  lastX = x;
+  lastY = y;
+});
+
+annotationCanvas?.addEventListener('mouseup', () => {
+  if (isDrawing) {
+    isDrawing = false;
+    saveState();
+  }
+});
+
+annotationCanvas?.addEventListener('mouseleave', () => {
+  isDrawing = false;
+});
+
+function saveState() {
+  if (annotationCanvas) {
+    drawHistory.push(annotationCanvas.toDataURL());
+    if (drawHistory.length > 20) drawHistory.shift();
+  }
+}
+
+// Tool selection
+document.querySelectorAll('[data-tool]').forEach(btn => {
+  btn.addEventListener('click', (e) => {
+    document.querySelectorAll('[data-tool]').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    currentTool = btn.getAttribute('data-tool');
+  });
+});
+
+// Color selection
+document.querySelectorAll('.color-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.color-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    currentColor = btn.getAttribute('data-color');
+  });
+});
+
+// Brush size
+document.getElementById('brushSize')?.addEventListener('input', (e) => {
+  brushSize = parseInt(e.target.value);
+  document.getElementById('brushSizeLabel').textContent = brushSize + 'px';
+});
+
+// Clear canvas
+document.getElementById('clearCanvas')?.addEventListener('click', () => {
+  if (annotationCanvas && annotationImage) {
+    annotationCtx.clearRect(0, 0, annotationCanvas.width, annotationCanvas.height);
+    annotationCtx.drawImage(annotationImage, 0, 0, annotationCanvas.width, annotationCanvas.height);
+    saveState();
+  }
+});
+
+// Undo
+document.getElementById('undoCanvas')?.addEventListener('click', () => {
+  if (drawHistory.length > 1) {
+    drawHistory.pop();
+    const img = new Image();
+    img.onload = () => {
+      annotationCtx.clearRect(0, 0, annotationCanvas.width, annotationCanvas.height);
+      annotationCtx.drawImage(img, 0, 0);
+    };
+    img.src = drawHistory[drawHistory.length - 1];
+  }
+});
+
+// Cancel annotation
+document.getElementById('cancelAnnotation')?.addEventListener('click', () => {
+  document.getElementById('annotationModal').classList.remove('active');
+  document.getElementById('fileInput').value = '';
+});
+
+document.getElementById('closeAnnotation')?.addEventListener('click', () => {
+  document.getElementById('annotationModal').classList.remove('active');
+  document.getElementById('fileInput').value = '';
+});
+
+// Save annotation
+document.getElementById('saveAnnotation')?.addEventListener('click', () => {
+  if (!annotationCanvas || !originalFile) return;
+  
+  // Convert canvas to blob
+  annotationCanvas.toBlob((blob) => {
+    // Create a new file from the blob
+    const annotatedFile = new File([blob], originalFile.name, { type: 'image/png' });
+    
+    // Set as selected file
+    selectedFile = annotatedFile;
+    document.getElementById('fileName').textContent = annotatedFile.name + ' (annotated)';
+    document.getElementById('fileSize').textContent = (annotatedFile.size / 1024 / 1024).toFixed(2) + ' MB';
+    document.getElementById('filePreview').classList.add('active');
+    
+    // Close modal
+    document.getElementById('annotationModal').classList.remove('active');
+    
+    // Audit log
+    if (window.jarvisApi && window.jarvisApi.auditLog) {
+      window.jarvisApi.auditLog('CHANNEL_IMAGE_ANNOTATED', 'channel', {
+        file_name: originalFile.name,
+        tool_used: currentTool,
+        timestamp: new Date().toISOString()
+      });
+    }
+  }, 'image/png');
 });
 
 // Initialize
