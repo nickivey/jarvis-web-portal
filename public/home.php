@@ -731,40 +731,106 @@ Content-Type: application/json
       </div>
 
       <!-- 4 -->
-      <div class="card">
-        <h3>User Settings</h3>
-        <p class="muted">Manage Slack channel in <a href="preferences.php">Preferences</a>.</p>
-        <form method="post" style="margin-top:12px">
-          <label>Phone Number (for SMS)</label>
-          <input name="phone_number" value="<?php echo htmlspecialchars($phone); ?>" placeholder="+1..." />
-          <button type="submit" name="save_phone" value="1">Save Phone</button>
+      <div class="card settings-card">
+        <div class="card-header-row">
+          <h3>⚙️ User Settings</h3>
+          <a href="preferences.php" class="btn btn-sm secondary">Open Preferences</a>
+        </div>
+        <p class="muted">Control contact details and integrations. Preferences includes Slack and other options.</p>
+        <form method="post" class="settings-form">
+          <div class="form-row">
+            <label for="phone_number">Phone Number (for SMS)</label>
+            <div class="form-inline">
+              <input id="phone_number" name="phone_number" value="<?php echo htmlspecialchars($phone); ?>" placeholder="+1..." />
+              <button type="submit" class="btn" name="save_phone" value="1">Save</button>
+            </div>
+          </div>
         </form>
       </div>
 
       <!-- 5 -->
-      <div class="card" id="homeAutoCard">
-        <h3>Smart Home</h3>
-        <p class="muted" style="margin-bottom:10px">Control your connected devices.</p>
-        <div id="homeDevicesList" style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-          <p class="muted">Loading...</p>
+      <div class="card smart-home-card" id="homeAutoCard">
+        <div class="smart-home-header">
+          <h3>🏠 Smart Home</h3>
+          <div class="home-status-pill" id="homeStatusPill">Local • Demo</div>
+        </div>
+        <div id="smartHomeWidget" class="smart-home-widget">
+          <div class="thermostat-panel">
+            <div class="thermostat-dial" id="thermostatDial">
+              <div class="thermo-temp"><span id="thermoTempVal">72</span>°</div>
+              <div class="thermo-controls">
+                <button class="thermo-btn" id="thermoDown" title="Decrease">−</button>
+                <button class="thermo-btn" id="thermoUp" title="Increase">+</button>
+              </div>
+            </div>
+            <div class="thermo-meta">
+              <div>Mode: <span id="thermoMode">Heat</span></div>
+              <div>Inside: <span id="thermoInside">71°</span> • Outside: <span id="thermoOutside">64°</span></div>
+            </div>
+          </div>
+          <div class="home-right">
+            <div class="scenes-row" id="scenesRow"></div>
+            <div class="devices-grid" id="devicesGrid"></div>
+            <div class="energy-row">
+              <div class="energy-donut">
+                <div class="donut" id="energyDonut" data-percent="42"><span id="energyPct">42%</span></div>
+              </div>
+              <div class="energy-meta">
+                <div class="energy-title">Energy Today</div>
+                <div class="energy-detail"><span id="energyKwh">12.4</span> kWh • <span id="energyCost">$1.58</span></div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
-      <div class="card">
-        <h3>Shortcuts</h3>
-        <p class="muted">Add “Hey Siri, JARVIS message” to send text hands-free.</p>
-        <div class="nav-links"><a href="siri.php">Open Siri setup</a></div>
+      <div class="card shortcuts-card">
+        <div class="card-header-row">
+          <h3>⚡ Shortcuts</h3>
+          <a href="siri.php" class="btn btn-sm secondary" data-shortcut="siri_setup">Siri Setup</a>
+        </div>
+        <p class="muted">Quick access to common areas and actions.</p>
+        <div class="shortcut-grid">
+          <a class="shortcut-tile" href="/public/channel.php" data-shortcut="open_channels">
+            <div class="shortcut-icon">#</div>
+            <div class="shortcut-title">Channels</div>
+            <div class="shortcut-sub">Chat with JARVIS</div>
+          </a>
+          <a class="shortcut-tile" href="/public/photos.php" data-shortcut="open_photos">
+            <div class="shortcut-icon">🖼️</div>
+            <div class="shortcut-title">Photos</div>
+            <div class="shortcut-sub">Gallery & timeline</div>
+          </a>
+          <a class="shortcut-tile" href="audit.php" data-shortcut="open_audit">
+            <div class="shortcut-icon">📋</div>
+            <div class="shortcut-title">Audit Log</div>
+            <div class="shortcut-sub">Recent activity</div>
+          </a>
+          <a class="shortcut-tile" href="preferences.php" data-shortcut="open_preferences">
+            <div class="shortcut-icon">⚙️</div>
+            <div class="shortcut-title">Preferences</div>
+            <div class="shortcut-sub">Integrations & more</div>
+          </a>
+        </div>
       </div>
 
       <!-- 6 (BOTTOM RIGHT) -->
-      <div class="card">
+      <div class="card connection-card">
         <h3>Connection Status</h3>
-        <p class="muted">Slack: <?php echo jarvis_setting_get('SLACK_BOT_TOKEN') || jarvis_setting_get('SLACK_APP_TOKEN') || getenv('SLACK_BOT_TOKEN') || getenv('SLACK_APP_TOKEN') ? 'Configured' : 'Not configured'; ?></p>
-        <p class="muted">Instagram (Basic Display): <?php echo $igToken ? 'Connected' : 'Not connected'; ?></p>
-        <p class="muted">MySQL: <?php echo jarvis_pdo() ? 'Connected' : 'Not configured / unavailable'; ?></p>
-        <p class="muted">REST Base: <span class="badge">/api</span></p>
-        <p class="muted">Notifications: <span class="badge"><?php echo (int)$notifCount; ?> unread</span></p>
-        <p class="muted">Weather: <span id="jarvisWeather"><?php if ($lastWeather) { echo htmlspecialchars($lastWeather['desc'] . ' • ' . ($lastWeather['temp_f'] !== null ? round($lastWeather['temp_f']).'°F' : '')); } else { echo ($weatherConfigured ? '(no weather data for current location)' : '(OPENWEATHER_API_KEY not configured; add it in Admin > Settings)'); } ?></span></p>
+        <?php $slackOk = (jarvis_setting_get('SLACK_BOT_TOKEN') || jarvis_setting_get('SLACK_APP_TOKEN') || getenv('SLACK_BOT_TOKEN') || getenv('SLACK_APP_TOKEN'));
+              $instaOk = (bool)$igToken;
+              $mysqlOk = (bool)jarvis_pdo();
+              $restBase = '/api';
+              $notifN = (int)$notifCount;
+              $weatherOk = (bool)$lastWeather; ?>
+        <div class="status-grid">
+          <div class="status-pill <?php echo $slackOk?'ok':'warn'; ?>">Slack: <?php echo $slackOk?'Configured':'Not set'; ?></div>
+          <div class="status-pill <?php echo $instaOk?'ok':'warn'; ?>">Instagram: <?php echo $instaOk?'Connected':'Not connected'; ?></div>
+          <div class="status-pill <?php echo $mysqlOk?'ok':'warn'; ?>">MySQL: <?php echo $mysqlOk?'Connected':'Unavailable'; ?></div>
+          <button type="button" class="status-pill copyable" data-copy="<?php echo htmlspecialchars($restBase); ?>">REST Base: <?php echo htmlspecialchars($restBase); ?></button>
+          <div class="status-pill info">Notifications: <?php echo $notifN; ?> unread</div>
+          <div class="status-pill <?php echo $weatherOk?'ok':'info'; ?>">Weather: <span id="jarvisWeather"><?php if ($lastWeather) { echo htmlspecialchars($lastWeather['desc'] . ' • ' . ($lastWeather['temp_f'] !== null ? round($lastWeather['temp_f']).'°F' : '')); } else { echo ($weatherConfigured ? '(no weather data for current location)' : '(OPENWEATHER_API_KEY not configured; add it in Admin > Settings)'); } ?></span></div>
+        </div>
         <?php if ($wakePrompt): ?>
           <div class="terminal" style="margin-top:12px">
             <div class="term-title">JARVIS Wake Prompt</div>
@@ -906,45 +972,148 @@ Content-Type: application/json
       // Map management and location refreshing
       let _mainMap = null, _miniMap = null; window._sending = window._sending || false;
 
-      // Smart Home Device Management
-      async function refreshHomeDevices(){
-        if (!window.jarvisApi) return;
-        try {
-          const list = document.getElementById('homeDevicesList');
-          const data = await window.jarvisApi.get('/api/home/devices', { ttl:0 });
-          if (data && data.devices && list) {
-            list.innerHTML = '';
-            if (data.devices.length === 0) {
-               list.innerHTML = '<p class="muted" style="grid-column:1/-1">No devices found.</p>';
-            } else {
-               data.devices.forEach(d=>{
-                 const btn = document.createElement('button');
-                 const isOn = (d.status === 'on');
-                 btn.className = 'btn ' + (isOn ? 'active' : 'secondary');
-                 btn.style.textAlign='left';
-                 btn.innerHTML = `<span>${d.name||'Device'}</span> <span style="font-size:11px;opacity:0.7">${ isOn ? 'ON' : 'OFF' }</span>`;
-                 if (isOn) btn.style.background = 'var(--blue)';
-                 btn.addEventListener('click', async ()=>{
-                   btn.disabled = true;
-                   try {
-                     const r = await window.jarvisApi.post('/api/home/devices/'+d.id+'/toggle', {});
-                     refreshHomeDevices();
-                   } catch(e){ btn.disabled=false; }
-                 });
-                 list.appendChild(btn);
-               });
-            }
-          }
-        } catch(e){}
-      }
-      // Poll devices occasionally
-      setInterval(refreshHomeDevices, 15000);
-      // Safely register auth.token.set handler — navbar.js may not have initialized yet
-      if (window.jarvisOn) {
-        window.jarvisOn('auth.token.set', refreshHomeDevices);
-      } else {
-        window.addEventListener('DOMContentLoaded', ()=>{ try { if (window.jarvisOn) window.jarvisOn('auth.token.set', refreshHomeDevices); } catch(e){} });
-      }
+      // Smart Home Widget (Demo data with rich UI)
+      (function(){
+        const storageKey = 'jarvis.demoHome.v1';
+        const initialDemo = {
+          thermostat: { target: 72, mode: 'Heat', inside: 71, outside: 64 },
+          energy: { percent: 42, kwh: 12.4, cost: 1.58 },
+          scenes: [
+            { id:'scene_relax', name:'Relax', icon:'🛋️', color:'#6d28d9' },
+            { id:'scene_focus', name:'Focus', icon:'💡', color:'#0ea5e9' },
+            { id:'scene_movie', name:'Movie', icon:'🎬', color:'#ef4444' },
+            { id:'scene_goodnight', name:'Goodnight', icon:'🌙', color:'#111827' }
+          ],
+          devices: [
+            { id:'d_living_light', name:'Living Room Lights', type:'light', room:'Living', on:true, icon:'💡' },
+            { id:'d_kitchen_light', name:'Kitchen', type:'light', room:'Kitchen', on:false, icon:'🍳' },
+            { id:'d_bedroom_light', name:'Bedroom', type:'light', room:'Bedroom', on:true, icon:'🛏️' },
+            { id:'d_door', name:'Front Door', type:'lock', room:'Entry', locked:true, icon:'🚪' },
+            { id:'d_cam', name:'Driveway Cam', type:'camera', room:'Outdoor', on:true, icon:'📷' }
+          ]
+        };
+
+        function loadDemo(){
+          try { const raw = localStorage.getItem(storageKey); if (!raw) return JSON.parse(JSON.stringify(initialDemo));
+            const data = JSON.parse(raw); return Object.assign({}, initialDemo, data);
+          } catch(e){ return JSON.parse(JSON.stringify(initialDemo)); }
+        }
+        function saveDemo(data){ try{ localStorage.setItem(storageKey, JSON.stringify(data)); }catch(e){} }
+
+        function setDonut(el, pct){
+          const p = Math.max(0, Math.min(100, Math.round(pct)));
+          if (el) el.style.background = `conic-gradient(#00d4ff ${p*3.6}deg, rgba(255,255,255,0.08) 0)`;
+          const label = document.getElementById('energyPct'); if (label) label.textContent = p + '%';
+        }
+
+        function renderThermostat(state){
+          const dial = document.getElementById('thermostatDial');
+          const val = document.getElementById('thermoTempVal');
+          const mode = document.getElementById('thermoMode');
+          const inside = document.getElementById('thermoInside');
+          const outside = document.getElementById('thermoOutside');
+          if (!dial || !val) return;
+          val.textContent = state.thermostat.target;
+          mode.textContent = state.thermostat.mode;
+          inside.textContent = (state.thermostat.inside|0) + '°';
+          outside.textContent = (state.thermostat.outside|0) + '°';
+          const min=55, max=80, t = Math.max(min, Math.min(max, state.thermostat.target));
+          const pct = (t - min) / (max - min);
+          dial.style.setProperty('--dial-angle', (pct*270+135) + 'deg');
+          dial.style.background = `conic-gradient(#00d4ff ${(pct*300+30)}deg, rgba(255,255,255,0.06) 0)`;
+        }
+
+        function renderScenes(state){
+          const row = document.getElementById('scenesRow'); if (!row) return; row.innerHTML='';
+          state.scenes.forEach(s=>{
+            const chip = document.createElement('button');
+            chip.className = 'scene-chip';
+            chip.style.setProperty('--scene-color', s.color);
+            chip.innerHTML = `<span class="scene-icon">${s.icon}</span><span>${s.name}</span>`;
+            chip.addEventListener('click', ()=>{
+              // Pulse animation
+              chip.classList.add('active'); setTimeout(()=>chip.classList.remove('active'), 350);
+              // Audit
+              try{ if (window.jarvisApi && window.jarvisApi.auditLog) window.jarvisApi.auditLog('HOME_SCENE_ACTIVATED','home_scene',{ scene_id: s.id, scene_name: s.name, timestamp: new Date().toISOString() }); }catch(e){}
+            });
+            row.appendChild(chip);
+          });
+        }
+
+        function renderDevices(state){
+          const grid = document.getElementById('devicesGrid'); if (!grid) return; grid.innerHTML='';
+          state.devices.forEach(d=>{
+            const tile = document.createElement('div'); tile.className='device-tile';
+            const isOn = d.type==='lock' ? !d.locked : !!d.on;
+            tile.classList.toggle('on', isOn);
+            const sub = d.type==='lock' ? (d.locked ? 'Locked' : 'Unlocked') : (isOn ? 'On' : 'Off');
+            const toggleLabel = d.type==='lock' ? (d.locked ? 'Unlock' : 'Lock') : (isOn ? 'Turn Off' : 'Turn On');
+            tile.innerHTML = `
+              <div class="device-icon">${d.icon}</div>
+              <div class="device-name">${d.name}</div>
+              <div class="device-sub">${d.room} • ${sub}</div>
+              <button class="device-toggle">${toggleLabel}</button>
+            `;
+            const btn = tile.querySelector('.device-toggle');
+            btn.addEventListener('click', ()=>{
+              // update local state
+              if (d.type==='lock') { d.locked = !d.locked; } else { d.on = !d.on; }
+              saveDemo(state); renderDevices(state);
+              // audit
+              try{ if (window.jarvisApi && window.jarvisApi.auditLog) window.jarvisApi.auditLog('HOME_DEVICE_TOGGLE','home_device',{
+                device_id: d.id, type: d.type, new_state: (d.type==='lock' ? (d.locked?'locked':'unlocked') : (d.on?'on':'off')), timestamp: new Date().toISOString()
+              }); }catch(e){}
+            });
+            grid.appendChild(tile);
+          });
+        }
+
+        function renderEnergy(state){
+          const donut = document.getElementById('energyDonut');
+          const k = document.getElementById('energyKwh');
+          const c = document.getElementById('energyCost');
+          if (donut) setDonut(donut, state.energy.percent);
+          if (k) k.textContent = state.energy.kwh.toFixed(1);
+          if (c) c.textContent = '$' + state.energy.cost.toFixed(2);
+        }
+
+        function wireThermostat(state){
+          const up = document.getElementById('thermoUp');
+          const dn = document.getElementById('thermoDown');
+          up && up.addEventListener('click', ()=>{ state.thermostat.target = Math.min(80, state.thermostat.target+1); saveDemo(state); renderThermostat(state); try{ if (window.jarvisApi && window.jarvisApi.auditLog) window.jarvisApi.auditLog('HOME_THERMOSTAT_ADJUST','home_thermostat',{ target: state.thermostat.target, dir:'+1', timestamp: new Date().toISOString() }); }catch(e){} });
+          dn && dn.addEventListener('click', ()=>{ state.thermostat.target = Math.max(55, state.thermostat.target-1); saveDemo(state); renderThermostat(state); try{ if (window.jarvisApi && window.jarvisApi.auditLog) window.jarvisApi.auditLog('HOME_THERMOSTAT_ADJUST','home_thermostat',{ target: state.thermostat.target, dir:'-1', timestamp: new Date().toISOString() }); }catch(e){} });
+        }
+
+        function init(){
+          const state = loadDemo();
+          renderThermostat(state); renderScenes(state); renderDevices(state); renderEnergy(state); wireThermostat(state);
+          const pill = document.getElementById('homeStatusPill'); if (pill) { pill.textContent = 'Demo Mode'; }
+        }
+
+        if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
+      })();
+
+      // Lightweight audit + helpers for new tiles and status pills
+      (function(){
+        function audit(type, subject, data){ try{ if (window.jarvisApi && window.jarvisApi.auditLog) window.jarvisApi.auditLog(type, subject, data); }catch(e){} }
+        function onReady(fn){ if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', fn); else fn(); }
+        onReady(()=>{
+          document.querySelectorAll('.shortcut-tile,[data-shortcut]').forEach(el=>{
+            el.addEventListener('click', ()=>{
+              const id = el.getAttribute('data-shortcut') || (el.querySelector('.shortcut-title') ? el.querySelector('.shortcut-title').textContent : 'unknown');
+              audit('HOME_SHORTCUT_CLICK','home_shortcut',{ id, timestamp: new Date().toISOString() });
+            });
+          });
+          document.querySelectorAll('.status-pill.copyable').forEach(el=>{
+            el.addEventListener('click', ()=>{
+              const val = el.getAttribute('data-copy') || '';
+              try{ if (navigator.clipboard) navigator.clipboard.writeText(val); }catch(e){}
+              el.classList.add('copied'); setTimeout(()=>el.classList.remove('copied'), 900);
+              audit('HOME_COPY_VALUE','home_copy',{ key: 'REST Base', value: val, timestamp: new Date().toISOString() });
+            });
+          });
+        });
+      })();
 
       // Helper to update weather UI components
       window.jarvisUpdateWeather = function(data){
@@ -2632,6 +2801,49 @@ Content-Type: application/json
   </script>
 
   <style>
+    /* Small utility for compact buttons */
+    .btn.btn-sm { padding:6px 10px; font-size:12px }
+
+    /* Smart Home Widget Styles */
+    .smart-home-card { overflow: hidden; position: relative; }
+    .smart-home-header { display:flex; align-items:center; gap:10px; margin-bottom:8px }
+    .home-status-pill { margin-left:auto; padding:6px 10px; font-size:12px; border-radius:999px; background:rgba(0,212,255,0.12); border:1px solid rgba(0,212,255,0.3); color:#9be8ff }
+
+    .smart-home-widget { display:grid; grid-template-columns: 340px 1fr; gap:16px; align-items:stretch; }
+    @media (max-width: 980px){ .smart-home-widget { grid-template-columns: 1fr; } }
+
+    .thermostat-panel { position:relative; display:flex; flex-direction:column; align-items:center; justify-content:center; background: radial-gradient(1000px 400px at -20% -50%, rgba(0,212,255,0.12), transparent 60%), linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0)); border:1px solid rgba(255,255,255,.06); border-radius:16px; padding:18px }
+    .thermostat-dial { --dial-angle: 180deg; width: 220px; height: 220px; border-radius: 50%; background: conic-gradient(#00d4ff 180deg, rgba(255,255,255,0.08) 0); display:grid; place-items:center; box-shadow: inset 0 0 26px rgba(0, 212, 255, 0.15), 0 0 26px rgba(0, 212, 255, 0.06); position:relative }
+    .thermostat-dial::after { content:''; position:absolute; inset:12px; border-radius:50%; background: radial-gradient(200px 120px at 30% 20%, rgba(255,255,255,0.06), rgba(255,255,255,0.02)); border:1px solid rgba(255,255,255,0.06) }
+    .thermo-temp { font-size: 54px; font-weight:800; color:#e6faff; text-shadow: 0 0 16px rgba(0,212,255,0.25) }
+    .thermo-controls { position:absolute; bottom:16px; display:flex; gap:8px }
+    .thermo-btn { width:40px; height:40px; border-radius:50%; border:1px solid rgba(255,255,255,0.2); background:rgba(255,255,255,0.06); color:#e6faff; font-size:18px; font-weight:700; cursor:pointer }
+    .thermo-btn:hover { background:rgba(0,212,255,0.15); border-color: rgba(0,212,255,0.4) }
+    .thermo-meta { margin-top:12px; font-size:13px; color:#a7c7d8; text-align:center }
+
+    .home-right { display:flex; flex-direction:column; gap:14px }
+    .scenes-row { display:flex; flex-wrap:wrap; gap:10px }
+    .scene-chip { display:flex; align-items:center; gap:8px; padding:8px 12px; border-radius:999px; background:linear-gradient(90deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02)); border:1px solid rgba(255,255,255,0.06); color:#dbeafe; cursor:pointer; transition: transform .12s ease, box-shadow .12s ease }
+    .scene-chip .scene-icon { filter: drop-shadow(0 0 8px rgba(0,212,255,.3)) }
+    .scene-chip:hover { transform: translateY(-1px); box-shadow: 0 6px 28px rgba(0,212,255,.08) }
+    .scene-chip.active { box-shadow: 0 0 0 2px var(--scene-color, #00d4ff) inset }
+
+    .devices-grid { display:grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap:12px }
+    .device-tile { position:relative; padding:14px; border-radius:12px; border:1px solid rgba(255,255,255,0.06); background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02)); transition:transform .14s ease, box-shadow .14s ease }
+    .device-tile:hover { transform: translateY(-2px); box-shadow: 0 10px 32px rgba(0,212,255,.08) }
+    .device-tile.on { border-color: rgba(0,212,255,.35); box-shadow: 0 0 0 1px rgba(0,212,255,.25) inset }
+    .device-icon { font-size:26px; margin-bottom:8px }
+    .device-name { font-weight:700; color:#e6faff }
+    .device-sub { font-size:12px; color:#9fb8c8; margin-top:2px }
+    .device-toggle { margin-top:10px; font-size:12px; padding:6px 10px; border-radius:8px; border:1px solid rgba(255,255,255,0.14); background:rgba(255,255,255,0.06); color:#cfefff; cursor:pointer }
+    .device-tile.on .device-toggle { background: rgba(0,212,255,0.15); border-color: rgba(0,212,255,0.35); color: #00141a }
+
+    .energy-row { display:flex; align-items:center; gap:14px; padding:10px; border-radius:12px; border:1px solid rgba(255,255,255,0.06); background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01)) }
+    .energy-donut .donut { width:80px; height:80px; border-radius:50%; display:grid; place-items:center; background: conic-gradient(#00d4ff 160deg, rgba(255,255,255,0.08) 0) }
+    .energy-donut .donut span { font-size:14px; font-weight:700; color:#e6faff; text-shadow:0 0 10px rgba(0,212,255,0.25) }
+    .energy-meta { line-height:1.3 }
+    .energy-title { font-weight:700; color:#cfefff }
+    .energy-detail { font-size:12px; color:#9fb8c8 }
     /* Welcome Greeting Modal Styles */
     .welcome-greeting-modal {
       position: fixed;
@@ -2780,6 +2992,26 @@ Content-Type: application/json
         transform: scale(1.1);
       }
     }
+
+    /* Settings, Shortcuts, and Connection Status restyle */
+    .card-header-row { display:flex; align-items:center; gap:10px; }
+    .card-header-row h3 { margin:0 }
+    .settings-form .form-row { display:flex; flex-direction:column; gap:6px; margin-top:10px }
+    .settings-form .form-inline { display:flex; gap:8px; align-items:center }
+    .settings-card input { flex:1 }
+    .shortcuts-card .shortcut-grid { display:grid; grid-template-columns: repeat(auto-fill, minmax(160px,1fr)); gap:12px }
+    .shortcut-tile { display:block; padding:12px; border-radius:12px; border:1px solid rgba(255,255,255,.06); background:linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.02)); text-decoration:none; color:inherit; transition:transform .12s ease, box-shadow .12s ease }
+    .shortcut-tile:hover { transform: translateY(-2px); box-shadow: 0 10px 30px rgba(0,212,255,.08) }
+    .shortcut-icon { font-size:22px; margin-bottom:6px }
+    .shortcut-title { font-weight:700 }
+    .shortcut-sub { font-size:12px; color:#97b3c4 }
+    .status-grid { display:grid; grid-template-columns: repeat(auto-fill, minmax(180px,1fr)); gap:8px; margin-top:8px }
+    .status-pill { display:inline-flex; align-items:center; justify-content:center; gap:6px; padding:8px 10px; border-radius:999px; border:1px solid rgba(255,255,255,.08); background: rgba(255,255,255,.04); font-size:12px; color:#d3ebf8 }
+    .status-pill.ok { border-color: rgba(0,200,120,.35); background: rgba(0,200,120,.12); color:#b6f6d9 }
+    .status-pill.warn { border-color: rgba(255,165,0,.35); background: rgba(255,165,0,.10); color:#ffe0b3 }
+    .status-pill.info { border-color: rgba(0,212,255,.30); background: rgba(0,212,255,.10); color:#b6efff }
+    .status-pill.copyable { cursor:pointer }
+    .status-pill.copyable.copied { outline: 2px solid rgba(0,212,255,.4) }
   </style>
   <div class="modal-content">
     <h4>Add Local Event</h4>
