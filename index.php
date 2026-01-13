@@ -480,6 +480,109 @@ if ($path === '/api/voice') {
 }
 
 // ----------------------------
+// Gallery Media (combined photos + videos endpoint)
+// ----------------------------
+if ($path === '/api/media') {
+  if ($method !== 'GET') jarvis_respond(405, ['error' => 'Method not allowed']);
+  
+  // Support both JWT and session-based authentication
+  $userId = 0; $u = null;
+  $bearer = jarvis_bearer_token();
+  if ($bearer) {
+    $payload = jarvis_jwt_verify($bearer);
+    if ($payload && !empty($payload['sub'])) {
+      $userId = (int)$payload['sub'];
+      $u = jarvis_user_by_id($userId);
+    }
+  }
+  // Fallback to session auth
+  if (!$userId && session_status() === PHP_SESSION_NONE) @session_start();
+  if (!$userId && !empty($_SESSION['user_id'])) {
+    $userId = (int)$_SESSION['user_id'];
+    $u = jarvis_user_by_id($userId);
+  }
+  if (!$userId || !$u) jarvis_respond(401, ['error'=>'Unauthorized']);
+  
+  $limit = isset($_GET['limit']) ? min(200, max(1, (int)$_GET['limit'])) : 50;
+  $offset = isset($_GET['offset']) ? max(0, (int)$_GET['offset']) : 0;
+  $typeFilter = isset($_GET['type']) ? trim((string)$_GET['type']) : null; // 'photo', 'video', or null for both
+  
+  $pdo = jarvis_pdo();
+  if (!$pdo) jarvis_respond(500, ['error'=>'DB not configured']);
+  
+  $media = [];
+  
+  // Fetch photos (unless filtering by video only)
+  if ($typeFilter !== 'video') {
+    $photoLimit = $typeFilter === 'photo' ? $limit : (int)ceil($limit / 2);
+    $photoOffset = $typeFilter === 'photo' ? $offset : (int)floor($offset / 2);
+    $stmt = $pdo->prepare('SELECT id, filename, original_filename, thumb_filename, metadata_json, created_at FROM photos WHERE user_id = :u ORDER BY created_at DESC LIMIT :l OFFSET :o');
+    $stmt->bindValue(':u', $userId, PDO::PARAM_INT);
+    $stmt->bindValue(':l', $photoLimit, PDO::PARAM_INT);
+    $stmt->bindValue(':o', $photoOffset, PDO::PARAM_INT);
+    $stmt->execute();
+    $photos = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    foreach ($photos as $p) {
+      $meta = !empty($p['metadata_json']) ? json_decode($p['metadata_json'], true) : [];
+      $media[] = [
+        'type' => 'photo',
+        'id' => (int)$p['id'],
+        'filename' => $p['filename'],
+        'original_filename' => $p['original_filename'],
+        'thumb_filename' => $p['thumb_filename'],
+        'thumb_url' => '/api/photos/' . $p['id'] . '/download?thumb=1',
+        'url' => '/api/photos/' . $p['id'] . '/download',
+        'metadata' => $meta,
+        'created_at' => $p['created_at'],
+      ];
+    }
+  }
+  
+  // Fetch videos (unless filtering by photo only)
+  if ($typeFilter !== 'photo') {
+    try {
+      $videoLimit = $typeFilter === 'video' ? $limit : (int)ceil($limit / 2);
+      $videoOffset = $typeFilter === 'video' ? $offset : (int)floor($offset / 2);
+      $stmt = $pdo->prepare('SELECT id, filename, thumb_filename, transcript, duration_ms, metadata_json, created_at FROM video_inputs WHERE user_id = :u ORDER BY created_at DESC LIMIT :l OFFSET :o');
+      $stmt->bindValue(':u', $userId, PDO::PARAM_INT);
+      $stmt->bindValue(':l', $videoLimit, PDO::PARAM_INT);
+      $stmt->bindValue(':o', $videoOffset, PDO::PARAM_INT);
+      $stmt->execute();
+      $videos = $stmt->fetchAll(PDO::FETCH_ASSOC);
+      foreach ($videos as $v) {
+        $meta = !empty($v['metadata_json']) ? json_decode($v['metadata_json'], true) : [];
+        $media[] = [
+          'type' => 'video',
+          'id' => (int)$v['id'],
+          'filename' => $v['filename'],
+          'thumb_filename' => $v['thumb_filename'],
+          'thumb_url' => $v['thumb_filename'] ? '/api/video/' . $v['id'] . '/thumb' : null,
+          'url' => '/api/video/' . $v['id'] . '/download',
+          'duration_ms' => $v['duration_ms'] ? (int)$v['duration_ms'] : null,
+          'transcript' => $v['transcript'],
+          'title' => $meta['title'] ?? null,
+          'metadata' => $meta,
+          'created_at' => $v['created_at'],
+        ];
+      }
+    } catch (Exception $e) {
+      // video_inputs table might not exist
+    }
+  }
+  
+  // Sort combined media by created_at descending
+  usort($media, function($a, $b) {
+    return strtotime($b['created_at']) - strtotime($a['created_at']);
+  });
+  
+  // Apply overall limit after combining
+  $media = array_slice($media, 0, $limit);
+  
+  jarvis_log_api_request($userId, 'desktop', $path, $method, ['limit'=>$limit,'offset'=>$offset,'type'=>$typeFilter], ['ok'=>true,'count'=>count($media)], 200);
+  jarvis_respond(200, ['ok'=>true,'count'=>count($media),'media'=>$media]);
+}
+
+// ----------------------------
 // Photos (uploads from iOS Shortcuts or other sources)
 // ----------------------------
 if ($path === '/api/photos') {
